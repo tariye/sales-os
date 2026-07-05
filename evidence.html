@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sales OS Evidence Log</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f6f8;
+        --panel: #ffffff;
+        --line: #d4dbe3;
+        --text: #0f1720;
+        --muted: #52606d;
+        --accent: #0f766e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Inter, Arial, Helvetica, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 1.5rem;
+      }
+
+      .hero,
+      .entry {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      .hero {
+        padding: 1.25rem 1.35rem;
+      }
+
+      .hero h1,
+      .entry h2 {
+        margin: 0;
+      }
+
+      .hero p {
+        margin: 0.5rem 0 0;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .entry-list {
+        display: grid;
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+
+      .entry {
+        padding: 1rem 1.1rem;
+      }
+
+      .entry p,
+      .entry li {
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .entry ul {
+        margin: 0.75rem 0 0;
+        padding-left: 1.1rem;
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      .home-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 1rem;
+        padding: 0.7rem 0.95rem;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--text);
+        text-decoration: none;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>Sales OS Evidence Log</h1>
+        <p>
+          These buy-price links document the rationale used for seeded pilot costs.
+          Replace them with real sourcing URLs or screenshots as you validate each route.
+        </p>
+        <a href="./index.html" class="home-link">Home</a>
+      </section>
+
+      <section class="entry-list">
+        <article class="entry" id="imac-2011-buy">
+          <h2>iMac 21.5 2011 Buy Price</h2>
+          <ul>
+            <li>Seed assumption: <strong>$40</strong></li>
+            <li>Rationale: local bulky desktop target price with pickup only.</li>
+            <li>Replace with: Facebook Marketplace or OfferUp listing link for an equivalent working unit.</li>
+          </ul>
+        </article>
+
+        <article class="entry" id="macbook-pro-2012-buy">
+          <h2>2012 MacBook Pro 13 Buy Price</h2>
+          <ul>
+            <li>Seed assumption: <strong>$45</strong></li>
+            <li>Rationale: working base model target that leaves room for shipping and fees.</li>
+            <li>Replace with: actual sourcing listing or purchase receipt for the exact machine.</li>
+          </ul>
+        </article>
+
+        <article class="entry" id="altima-door-handle-buy">
+          <h2>Nissan Altima Driver Door Handle Buy Price</h2>
+          <ul>
+            <li>Seed assumption: <strong>$6</strong></li>
+            <li>Rationale: part-out bin target for a common replacement handle.</li>
+            <li>Replace with: salvage-yard, part-out, or wholesale source link.</li>
+          </ul>
+        </article>
+
+        <article class="entry" id="altima-cluster-buy">
+          <h2>Nissan Altima Instrument Cluster Buy Price</h2>
+          <ul>
+            <li>Seed assumption: <strong>$20</strong></li>
+            <li>Rationale: part-out acquisition target for a working untested cluster.</li>
+            <li>Replace with: exact part-out source URL and mileage note.</li>
+          </ul>
+        </article>
+
+        <article class="entry" id="raspberry-pi-4-4gb-buy">
+          <h2>Raspberry Pi 4 Model B 4GB Buy Price</h2>
+          <ul>
+            <li>Seed assumption: <strong>$30</strong></li>
+            <li>Rationale: used board-only target with no premium accessories.</li>
+            <li>Replace with: exact board source URL and condition details.</li>
+          </ul>
+        </article>
+
+        <article class="entry" id="raspberry-pi-5-8gb-buy">
+          <h2>Raspberry Pi 5 8GB Buy Price</h2>
+          <ul>
+            <li>Seed assumption: <strong>$70</strong></li>
+            <li>Rationale: used board target with enough margin room after fees.</li>
+            <li>Replace with: supplier or secondary-market link for the exact board revision.</li>
+          </ul>
+        </article>
+
+        <article class="entry" id="jetson-nano-buy">
+          <h2>NVIDIA Jetson Nano Developer Kit Buy Price</h2>
+          <ul>
+            <li>Seed assumption: <strong>$110</strong></li>
+            <li>Rationale: used developer kit target price below current sold median.</li>
+            <li>Replace with: exact sourcing link and whether power supply or accessories are included.</li>
+          </ul>
+        </article>
+
+        <article class="entry" id="beaglebone-black-buy">
+          <h2>BeagleBone Black Buy Price</h2>
+          <ul>
+            <li>Seed assumption: <strong>$12</strong></li>
+            <li>Rationale: low-cost used board target with simple packaging.</li>
+            <li>Replace with: real sourcing listing or lot-purchase reference.</li>
+          </ul>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

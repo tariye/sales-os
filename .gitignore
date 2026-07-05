@@ -1,0 +1,5 @@
+.DS_Store
+data/ingest.log
+data/ingest-error.log
+*.swp
+*.tmp

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sales OS Trending Products</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Demand Intel Engine</p>
+          <h1>Trending Products</h1>
+          <p class="subtle">
+            See products outside your fixed list that are already moving volume.
+            Use this page to spot what is getting bought, then promote only the
+            items worth pricing into the ledger.
+          </p>
+          <nav class="view-nav" aria-label="Views">
+            <a href="./index.html" class="view-link">Ledger</a>
+            <a href="./trends.html" class="view-link is-active">Trending Products</a>
+            <a href="./changelog.html" class="view-link">Changelog</a>
+          </nav>
+        </div>
+        <div class="topbar-actions">
+          <a href="./index.html" class="button-link">Home</a>
+          <button id="runFreshPullButton" type="button">
+            Run Fresh Pull
+          </button>
+          <button id="refreshDataButton" type="button" class="secondary">
+            Refresh Data
+          </button>
+          <button id="showHighVolumeButton" type="button">
+            Show Watchlist Trends
+          </button>
+          <button id="captureSnapshotButton" type="button">Capture Snapshot</button>
+          <button id="resetSnapshotsButton" type="button" class="secondary">
+            Reset Snapshots
+          </button>
+        </div>
+      </header>
+
+      <section class="summary-band" aria-label="Trend summary metrics">
+        <div class="metric">
+          <span class="metric-label">Items Trending Up</span>
+          <strong id="trendingUpValue">0</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Fastest Mover</span>
+          <strong id="fastestMoverValue">None</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Largest Volume Gain</span>
+          <strong id="largestGainValue">0</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Average Momentum</span>
+          <strong id="avgMomentumValue">0</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Last Snapshot</span>
+          <strong id="lastSnapshotValue">None</strong>
+        </div>
+      </section>
+
+      <main class="workspace">
+        <section class="primary-panel">
+          <div class="section-header">
+            <div>
+              <p class="eyebrow">Realtime View</p>
+              <h2>Sales Volume Momentum</h2>
+            </div>
+            <div class="inline-controls">
+              <label>
+                Direction
+                <select id="trendFilter">
+                  <option value="ALL">All</option>
+                  <option value="UP">Trending Up</option>
+                  <option value="FLAT">Flat</option>
+                  <option value="DOWN">Trending Down</option>
+                </select>
+              </label>
+              <label>
+                Search
+                <input
+                  id="trendSearchInput"
+                  type="search"
+                  placeholder="item, category, route"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div id="trendActionState" class="action-state" aria-live="polite"></div>
+
+          <section id="discoveryPanel" class="discovery-panel" hidden>
+            <div class="section-header compact">
+              <div>
+                <p class="eyebrow">Product Feed</p>
+                <h2>Discovered Trending Products</h2>
+              </div>
+            </div>
+            <div id="discoveryResultsList" class="stack-list"></div>
+          </section>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Category</th>
+                  <th>Route</th>
+                  <th>Current Volume</th>
+                  <th>Previous Volume</th>
+                  <th>Delta</th>
+                  <th>Delta %</th>
+                  <th>Sell-through</th>
+                  <th>Momentum</th>
+                  <th>Recent Pattern</th>
+                  <th>Last Update</th>
+                </tr>
+              </thead>
+              <tbody id="trendTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside class="side-panel">
+          <section class="panel-block">
+            <div class="section-header compact">
+              <div>
+                <p class="eyebrow">Watchlist Movers</p>
+                <h2>Tracked Trend Queue</h2>
+              </div>
+            </div>
+            <div id="topMoversList" class="stack-list"></div>
+          </section>
+
+          <section class="panel-block">
+            <div class="section-header compact">
+              <div>
+                <p class="eyebrow">Snapshot Logic</p>
+                <h2>How This Works</h2>
+              </div>
+            </div>
+            <ul class="rules-list">
+              <li>Current values come from the latest generated live-data file plus any local row overlays.</li>
+              <li>Trend direction compares the latest snapshot against the prior snapshot.</li>
+              <li>Momentum weights volume change, percent change, and current sell-through.</li>
+              <li>Capture snapshots after each research run to tighten the signal.</li>
+              <li>It refreshes from scheduler-written local files, not a direct marketplace stream.</li>
+            </ul>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script src="./data/live-data.js?v=20260704-salesos-fixes-4"></script>
+    <script src="./trends.js?v=20260704-salesos-fixes-4"></script>
+  </body>
+</html>
