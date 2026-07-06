@@ -49,6 +49,15 @@ data/info_analyzer.db
 
 The live database is intentionally excluded from git. This repository should track code, docs, and UI assets, not runtime state.
 
+## GitHub Migration Boundary
+
+For GitHub, treat this project as:
+
+- code, docs, prompts, and UI assets in git
+- the live SQLite database out of git
+
+The default `.gitignore` excludes the database, journal files, caches, logs, and large workbook artifacts so the repo stays portable and you do not accidentally sync live runtime state as source code.
+
 ## Key endpoints
 
 - `GET /api/health`
@@ -58,15 +67,6 @@ The live database is intentionally excluded from git. This repository should tra
 - `POST /api/context/rewire`
 - `GET /api/patterns`
 - `GET /api/export`
-
-## GitHub boundary
-
-For GitHub, treat this project as:
-
-- code, docs, prompts, and UI assets in git
-- the live SQLite database out of git
-
-The default `.gitignore` excludes the database, journal files, caches, logs, and large workbook artifacts.
 
 ## Notes
 
