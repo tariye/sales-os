@@ -1,362 +1,200 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sales OS</title>
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Demand Intel Engine</p>
-          <h1>Sales OS</h1>
-          <p class="subtle">
-            Find demand, attach evidence, translate buyer value, and route each
-            item into a disciplined buy, watch, pass, or exception decision.
-          </p>
-          <nav class="view-nav" aria-label="Views">
-            <a href="./index.html" class="view-link is-active">Ledger</a>
-            <a href="./trends.html" class="view-link">Trend Monitor</a>
-            <a href="./changelog.html" class="view-link">Changelog</a>
-          </nav>
-        </div>
-        <div class="topbar-actions">
-          <a href="./index.html" class="button-link" aria-current="page">Home</a>
-          <button id="runFreshPullButton" type="button">
-            Run Fresh Pull
-          </button>
-          <button id="refreshDataButton" type="button" class="secondary">
-            Refresh Data
-          </button>
-          <button id="exportCsvButton" type="button">Export CSV</button>
-          <button id="resetButton" type="button" class="secondary">
-            Reset Seed Data
-          </button>
-        </div>
-      </header>
-
-      <section class="summary-band" aria-label="Summary metrics">
-        <div class="metric">
-          <span class="metric-label">Tracked Items</span>
-          <strong id="trackedItemsValue">0</strong>
-        </div>
-        <div class="metric">
-          <span class="metric-label">Buy Candidates</span>
-          <strong id="buyCandidatesValue">0</strong>
-        </div>
-        <div class="metric">
-          <span class="metric-label">Watch Items</span>
-          <strong id="watchCandidatesValue">0</strong>
-        </div>
-        <div class="metric">
-          <span class="metric-label">Needs Price</span>
-          <strong id="needsPriceValue">0</strong>
-        </div>
-        <div class="metric">
-          <span class="metric-label">Avg Net Margin</span>
-          <strong id="avgNetMarginValue">0%</strong>
-        </div>
-        <div class="metric">
-          <span class="metric-label">Expected Net</span>
-          <strong id="expectedNetValue">$0</strong>
-        </div>
-        <div class="metric">
-          <span class="metric-label">Strongest Cluster</span>
-          <strong id="strongestClusterValue">None</strong>
-        </div>
-      </section>
-
-      <main class="workspace">
-        <section class="primary-panel">
-          <div class="section-header">
-            <div>
-              <p class="eyebrow">Research Ledger</p>
-              <h2>Tracked Inventory Ideas</h2>
-            </div>
-            <div class="inline-controls">
-              <label>
-                Filter
-                <select id="decisionFilter">
-                  <option value="ALL">All</option>
-                  <option value="BUY">BUY</option>
-                  <option value="PASS">PASS</option>
-                  <option value="NEEDS_PRICE">NEEDS PRICE</option>
-                  <option value="WATCH">WATCH</option>
-                  <option value="EXCEPTION">EXCEPTION</option>
-                </select>
-              </label>
-              <label>
-                Search
-                <input
-                  id="searchInput"
-                  type="search"
-                  placeholder="item, category, route"
-                />
-              </label>
-            </div>
-          </div>
-
-          <div id="ledgerActionState" class="action-state" aria-live="polite"></div>
-
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Category</th>
-                  <th>Route</th>
-                  <th>Avg Sale</th>
-                  <th>Volume</th>
-                  <th>Sell-through</th>
-                  <th>Google Trends</th>
-                  <th>Local Market</th>
-                  <th>Buy Price</th>
-                  <th>Fees</th>
-                  <th>Ship</th>
-                  <th>Supplies</th>
-                  <th>Net Profit</th>
-                  <th>Net Margin</th>
-                  <th>Score</th>
-                  <th>Buyer Intel</th>
-                  <th>Next Action</th>
-                  <th>Decision</th>
-                </tr>
-              </thead>
-              <tbody id="ledgerTableBody"></tbody>
-            </table>
-          </div>
-        </section>
-
-        <aside class="side-panel">
-          <section class="panel-block">
-            <div class="section-header compact">
-              <div>
-                <p class="eyebrow">Buy Queue</p>
-                <h2>Current Candidates</h2>
-              </div>
-            </div>
-            <div id="buyCandidatesList" class="stack-list"></div>
-          </section>
-
-          <section class="panel-block">
-            <div class="section-header compact">
-              <div>
-                <p class="eyebrow">Add Item</p>
-                <h2>Research Intake</h2>
-              </div>
-            </div>
-
-            <form id="itemForm" class="item-form">
-              <label>
-                Item
-                <input name="item" type="text" required />
-              </label>
-              <label>
-                Category
-                <input name="category" type="text" required />
-              </label>
-              <label>
-                Route
-                <select name="route">
-                  <option>eBay</option>
-                  <option>FB Local</option>
-                  <option>Both</option>
-                </select>
-              </label>
-              <label>
-                Average Sale Price
-                <input name="avgSalePrice" type="number" min="0" step="0.01" />
-              </label>
-              <label>
-                Sale Price Evidence URL
-                <input name="saleEvidenceUrl" type="url" placeholder="https://..." />
-              </label>
-              <label>
-                Sales Volume
-                <input name="salesVolume" type="number" min="0" step="1" />
-              </label>
-              <label>
-                Sell-through %
-                <input name="sellThrough" type="number" min="0" step="0.01" />
-              </label>
-              <label>
-                Google Trends Keyword
-                <input name="trendKeyword" type="text" placeholder="iPhone 13" />
-              </label>
-              <label>
-                Trend Window
-                <select name="trendWindow">
-                  <option value="">Not captured</option>
-                  <option value="7D">7D</option>
-                  <option value="30D">30D</option>
-                  <option value="90D">90D</option>
-                  <option value="12M">12M</option>
-                </select>
-              </label>
-              <label>
-                Trend Direction
-                <select name="trendDirection">
-                  <option value="">Not captured</option>
-                  <option value="UP">Up</option>
-                  <option value="FLAT">Flat</option>
-                  <option value="DOWN">Down</option>
-                </select>
-              </label>
-              <label>
-                Trend Strength 0-100
-                <input name="trendScore" type="number" min="0" max="100" step="1" />
-              </label>
-              <label class="full-span">
-                Google Trends Evidence URL
-                <input name="trendEvidenceUrl" type="url" placeholder="https://trends.google.com/..." />
-              </label>
-              <label>
-                Local Source
-                <select name="localSource">
-                  <option value="">Not captured</option>
-                  <option value="FB Marketplace">FB Marketplace</option>
-                  <option value="OfferUp">OfferUp</option>
-                  <option value="Craigslist">Craigslist</option>
-                  <option value="Mercari">Mercari</option>
-                </select>
-              </label>
-              <label>
-                Local Comp Count
-                <input name="localCompCount" type="number" min="0" step="1" />
-              </label>
-              <label>
-                Local Avg Ask
-                <input name="localAvgPrice" type="number" min="0" step="0.01" />
-              </label>
-              <label class="full-span">
-                Local Market Evidence URL
-                <input name="localEvidenceUrl" type="url" placeholder="https://..." />
-              </label>
-              <label>
-                Buyer
-                <input name="buyerPersona" type="text" placeholder="kids, student, first-time buyer..." />
-              </label>
-              <label>
-                Buyer Problem
-                <input name="buyerProblem" type="text" placeholder="needs a cheap, dependable starter..." />
-              </label>
-              <label class="full-span">
-                Desired Outcome
-                <input name="desiredOutcome" type="text" placeholder="what success looks like for the buyer" />
-              </label>
-              <label class="full-span">
-                Friction / Risk
-                <input name="buyerFriction" type="text" placeholder="what the buyer fears or what could go wrong" />
-              </label>
-              <label class="full-span">
-                Honest Use Case
-                <input name="honestUseCase" type="text" placeholder="the truthful way to position the product" />
-              </label>
-              <label class="full-span">
-                Next Action
-                <input name="nextAction" type="text" placeholder="what should happen next" />
-              </label>
-              <label>
-                Buyer Sales Tax
-                <input name="buyerSalesTax" type="number" min="0" step="0.01" />
-              </label>
-              <label>
-                Buyer Total Paid
-                <input name="buyerTotalPaid" type="number" min="0" step="0.01" />
-              </label>
-              <label>
-                Transaction Fee %
-                <input name="transactionFeeRate" type="number" min="0" step="0.01" />
-              </label>
-              <label>
-                Desired Profit
-                <input name="desiredProfit" type="number" min="0" step="0.01" />
-              </label>
-              <label>
-                Outcome Status
-                <select name="outcomeStatus">
-                  <option value="">Not captured</option>
-                  <option value="WATCHING">Watching</option>
-                  <option value="SOURCING">Sourcing</option>
-                  <option value="LISTED">Listed</option>
-                  <option value="SOLD">Sold</option>
-                  <option value="FAILED">Failed</option>
-                </select>
-              </label>
-              <label>
-                Buying Price
-                <input name="buyingPrice" type="number" min="0" step="0.01" />
-              </label>
-              <label>
-                Buy Price Evidence URL
-                <input name="buyEvidenceUrl" type="url" placeholder="https://..." />
-              </label>
-              <label>
-                Fees
-                <input name="fees" type="number" min="0" step="0.01" />
-              </label>
-              <label>
-                Shipping
-                <input name="shipping" type="number" min="0" step="0.01" />
-              </label>
-              <label>
-                Supplies
-                <input name="supplies" type="number" min="0" step="0.01" />
-              </label>
-              <label>
-                Decision Override
-                <select name="decisionStatus">
-                  <option value="">Auto</option>
-                  <option value="WATCH">WATCH</option>
-                  <option value="EXCEPTION">EXCEPTION</option>
-                </select>
-              </label>
-              <label class="full-span">
-                Exception Reason
-                <input name="exceptionReason" type="text" placeholder="why this should override the normal rule" />
-              </label>
-              <label class="full-span">
-                Notes
-                <textarea name="notes" rows="3"></textarea>
-              </label>
-              <button type="submit">Add Research Row</button>
-            </form>
-          </section>
-
-          <section class="panel-block">
-            <div class="section-header compact">
-              <div>
-                <p class="eyebrow">Margin Model</p>
-                <h2>eBay Selling Math</h2>
-              </div>
-            </div>
-            <div id="marginPreview" class="margin-preview"></div>
-          </section>
-
-          <section class="panel-block">
-            <div class="section-header compact">
-              <div>
-                <p class="eyebrow">Operating Rules</p>
-                <h2>Pilot Guardrails</h2>
-              </div>
-            </div>
-            <ul class="rules-list">
-              <li>Research window stays fixed at last 30 days.</li>
-              <li>Default buy rule: net profit >= $20, margin >= 30%, volume >= 5.</li>
-              <li>Sold demand outranks views, likes, and search hype.</li>
-              <li>Items without buy-side pricing stay on NEEDS PRICE until priced.</li>
-              <li>Buyer experience must be translated honestly before the item is promoted.</li>
-              <li>Local-only routes are preferred for bulky hardware.</li>
-              <li>Unknown fees or shipping means pass until clarified.</li>
-            </ul>
-          </section>
-        </aside>
-      </main>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sales Intelligence OS v0.70</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Unified Intelligence OS</p>
+      <h1>Sales Intelligence <span>v0.70</span></h1>
+      <p class="subtitle">Raw signals become trackable memory, market data flows to decisions, unified command center for action.</p>
     </div>
+    <button id="exportBtn" class="ghost small">Export</button>
+  </header>
 
-    <script src="./data/live-data.js?v=20260704-salesos-fixes-4"></script>
-    <script src="./app.js?v=20260704-salesos-fixes-4"></script>
-  </body>
+  <nav class="tabs">
+    <button class="tab active" data-tab="dump">📊 Dump Input</button>
+    <button class="tab" data-tab="queue">⬦ Queue <span id="queueBadge" class="queue-badge hidden">0</span></button>
+    <button class="tab" data-tab="sales">💼 Market Trends</button>
+    <button class="tab" data-tab="watchlist">👀 Watchlist</button>
+    <button class="tab" data-tab="command">🎯 Command</button>
+    <button class="tab" data-tab="memory">📚 Memory</button>
+    <button class="tab" data-tab="actions">✓ Actions</button>
+    <button class="tab" data-tab="patterns">🔄 Patterns</button>
+    <button class="tab" data-tab="changelog">📝 Changelog</button>
+  </nav>
+
+  <main>
+
+    <!-- DUMP TAB ─────────────────────────────────── -->
+    <section id="dump" class="panel active">
+      <div class="card hero">
+        <div class="card-head">
+          <div><p class="eyebrow">Raw Input</p><h2>Dump</h2></div>
+          <button id="clearBtn" class="ghost small">Clear</button>
+        </div>
+        <textarea id="rawInput" rows="9" placeholder="Paste anything — lab event, market observation, sales opportunity, product research..."></textarea>
+        <div class="grid two hint-grid">
+          <label>Domain
+            <select id="domainInput">
+              <option value="">Auto-detect</option><option>Lab</option><option>Investing</option><option>Business</option><option>Career</option><option>Fitness</option><option>Network+</option><option>Music</option><option>AI Project</option><option>Personal Finance</option><option>Personal Preference</option><option>Other</option>
+            </select>
+          </label>
+          <label>Entity <span class="label-hint">optional</span><input id="entityInput" placeholder="Company, product, system..." /></label>
+          <label>Tags <span class="label-hint">optional</span><input id="tagsInput" placeholder="market, trend, buy, watch..." /></label>
+          <label>Source Type
+            <select id="sourceTypeInput">
+              <option value="">Auto</option><option>Observation</option><option>Document</option><option>Conversation</option><option>Measurement</option><option>Question</option><option>Idea</option><option>Event</option><option>Preference</option><option>Result</option>
+            </select>
+          </label>
+        </div>
+        <p class="workflow-guide"><span>① Paste raw input</span><span class="wf-sep">→</span><span>② Save to queue</span><span class="wf-sep">→</span><span>③ Claude processes</span></p>
+        <div class="buttons">
+          <button id="saveBtn" class="primary">Save to Queue</button>
+        </div>
+        <div id="aiStatusNote" class="ai-status-note hidden"></div>
+      </div>
+
+      <details class="contract-panel" id="contractDetails">
+        <summary class="contract-toggle">
+          Fill manually <span class="contract-toggle-hint">— optional, Claude fills these</span>
+          <span id="draftPill" class="pill muted" style="margin-left:auto">empty</span>
+        </summary>
+        <div class="card contract-card">
+          <p class="field-hint">Pre-fill any fields you know. Leave empty for Claude to analyze.</p>
+          <div class="grid one">
+            <label>Title<input id="titleInput" /></label>
+            <div class="grid two">
+              <label>Signal Type<select id="signalRoleInput"><option>action</option><option>watch</option><option>pattern</option><option>risk</option><option>opportunity</option><option>contradiction</option><option>proof</option></select></label>
+              <label>Confidence<select id="confidenceInput"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
+            </div>
+            <label>Signal<textarea id="signalInput" rows="2" placeholder="Key takeaway"></textarea></label>
+            <label>Interpretation<textarea id="interpretationInput" rows="2" placeholder="What it means for decisions"></textarea></label>
+          </div>
+          <div class="buttons" style="margin-top:14px">
+            <button id="codifyBtn" class="secondary">Translate Signal</button>
+          </div>
+        </div>
+      </details>
+
+      <div class="card">
+        <div class="card-head"><div><p class="eyebrow">After Save</p><h2>Context Packet</h2></div></div>
+        <div id="saveOutput" class="list"></div>
+      </div>
+    </section>
+
+    <!-- QUEUE TAB ────────────────────────────────── -->
+    <section id="queue" class="panel">
+      <div class="card hero">
+        <div class="card-head">
+          <div><p class="eyebrow">Processing Queue</p><h2>Pending Claude</h2></div>
+          <button id="refreshQueue" class="ghost small">Refresh</button>
+        </div>
+        <p class="field-hint">These entries await Claude enrichment. Ask Claude Code to "run the queue" — it reads all entries, analyzes deeply, and writes results back.</p>
+        <div id="queueMeta" class="stats"></div>
+      </div>
+      <div id="queueList" class="list"></div>
+    </section>
+
+    <!-- MARKET TRENDS TAB ─────────────────────────── -->
+    <section id="sales" class="panel">
+      <div class="card hero">
+        <div class="card-head">
+          <div><p class="eyebrow">Market Data</p><h2>Sales Trends</h2></div>
+          <button id="refreshTrends" class="ghost small">Refresh</button>
+        </div>
+        <p class="field-hint">Real-time sales volume and price trends from eBay Seller Hub. Updated every 30 minutes automatically.</p>
+      </div>
+      <div class="card">
+        <div id="trendsChart" style="height: 300px;"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Recent Trend Data</h3></div>
+        <div id="trendsList" class="list"></div>
+      </div>
+    </section>
+
+    <!-- WATCHLIST TAB ────────────────────────────── -->
+    <section id="watchlist" class="panel">
+      <div class="card hero">
+        <div class="card-head">
+          <div><p class="eyebrow">Tracked Items</p><h2>Watchlist Evidence</h2></div>
+          <button id="refreshWatchlist" class="ghost small">Refresh</button>
+        </div>
+        <p class="field-hint">Items under surveillance with margin analysis. Click to view eBay research evidence.</p>
+        <div id="watchlistMeta" class="stats"></div>
+      </div>
+      <div id="watchlistList" class="list"></div>
+    </section>
+
+    <!-- COMMAND CENTER TAB ────────────────────────– -->
+    <section id="command" class="panel">
+      <div class="card hero">
+        <div class="card-head">
+          <div><p class="eyebrow">Glass Cockpit</p><h2>Unified Command Center</h2></div>
+          <button id="refreshCommand" class="ghost small">Refresh</button>
+        </div>
+        <div id="commandStats" class="stats"></div>
+      </div>
+      <div class="grid three cockpit-grid">
+        <div class="card cockpit-card warning"><div class="card-head"><div><p class="eyebrow">Warning</p><h2>Act Now</h2></div></div><div id="warningLane" class="list"></div></div>
+        <div class="card cockpit-card caution"><div class="card-head"><div><p class="eyebrow">Caution</p><h2>Review Next</h2></div></div><div id="cautionLane" class="list"></div></div>
+        <div class="card cockpit-card advisory"><div class="card-head"><div><p class="eyebrow">Advisory</p><h2>Monitor</h2></div></div><div id="advisoryLane" class="list"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><p class="eyebrow">PAM-A</p><h2>Pull Actionable Memory</h2></div></div>
+        <div class="grid two">
+          <input id="pullInput" placeholder="Search: sales, cashflow, opportunity, product..." />
+          <select id="pullDomain"><option value="">Any domain</option><option>Lab</option><option>Investing</option><option>Business</option></select>
+        </div>
+        <div class="buttons"><button id="pullBtn" class="primary">Pull Action List</button></div>
+      </div>
+    </section>
+
+    <!-- MEMORY DB TAB ────────────────────────────── -->
+    <section id="memory" class="panel">
+      <div class="card">
+        <div class="card-head"><div><p class="eyebrow">SQLite Memory</p><h2>Ledger</h2></div><button id="refreshMemory" class="ghost small">Refresh</button></div>
+        <div class="grid two">
+          <input id="searchInput" placeholder="Search signal, lesson, interpretation..." />
+          <select id="filterDomain"><option value="">All domains</option><option>Lab</option><option>Investing</option><option>Business</option><option>Career</option></select>
+        </div>
+        <div id="memoryList" class="list"></div>
+      </div>
+    </section>
+
+    <!-- ACTIONS TAB ──────────────────────────────── -->
+    <section id="actions" class="panel">
+      <div class="card">
+        <div class="card-head"><div><p class="eyebrow">Execution Queue</p><h2>Returned Actions</h2></div><button id="refreshActions" class="ghost small">Refresh</button></div>
+        <div id="actionsList" class="list"></div>
+      </div>
+    </section>
+
+    <!-- PATTERNS TAB ─────────────────────────────── -->
+    <section id="patterns" class="panel">
+      <div class="card"><div class="card-head"><div><p class="eyebrow">Pattern Engine</p><h2>Cross-Database Pattern Scan</h2></div><div class="buttons compact"><button id="scanPatterns" class="primary small">Run Pattern Engine</button><button id="refreshPatterns" class="ghost small">Refresh</button></div></div><div id="patternsList" class="list"></div></div>
+    </section>
+
+    <!-- CHANGELOG TAB ────────────────────────────── -->
+    <section id="changelog" class="panel">
+      <div class="card hero">
+        <div class="card-head">
+          <div><p class="eyebrow">Build Ledger</p><h2>Version History</h2></div>
+          <button id="refreshChangelog" class="ghost small">Refresh</button>
+        </div>
+        <p class="subtitle" id="changelogMeta"></p>
+      </div>
+      <div id="changelogList"></div>
+    </section>
+
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/app.js"></script>
+</body>
 </html>

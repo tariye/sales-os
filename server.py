@@ -48,7 +48,7 @@ WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "info_analyzer.db"
 
-APP_VERSION = "v0.67-memory-chip"
+APP_VERSION = "v0.70-unified-intelligence"
 APP_VERSIONS = [
     {
         "version": "v0.1",
@@ -329,6 +329,21 @@ APP_VERSIONS = [
             "Preference plus current need can synthesize a direct action",
             "Rebuild Context Memory endpoint backfills the database",
             "Entry cards show the contextual chip instead of isolated notes",
+        ],
+    },
+    {
+        "version": "v0.70",
+        "name": "Unified Sales Intelligence",
+        "features": [
+            "Single site, multiple functions: Intelligence Ledger + Market Trends + Watchlist Evidence + Command Center",
+            "Market data (eBay sales volume/price) flows into signals database automatically",
+            "Real-time sales trends visualization with volume and price charts",
+            "Watchlist evidence cards link to eBay research with margin calculations",
+            "Discovery products ranked by sales volume with 40-item trending list",
+            "Unified database: raw sales data + analyzed signals + opportunities",
+            "New endpoints: /api/sales/trends, /api/sales/watchlist, /api/sales/discovery, /api/sales/opportunities",
+            "Multi-view frontend with intelligent tab navigation",
+            "Command Center now shows alerts from both intelligence and market data layers",
         ],
     },
 ]
@@ -3698,6 +3713,141 @@ def update_action(action_id: str, payload: dict) -> dict:
         return row_to_action(conn.execute("SELECT * FROM actions WHERE id=?", (action_id,)).fetchone())
 
 
+def get_sales_trends(days: int = 30) -> dict:
+    """Return time-series sales data for trend visualization."""
+    try:
+        with connect() as conn:
+            # Get entries from Investing domain with sales data
+            rows = conn.execute("""
+                SELECT
+                    DATE(created_at) as date,
+                    AVG(CAST(COALESCE(tracking_metric, '0') AS FLOAT)) as avg_metric,
+                    COUNT(*) as signal_count
+                FROM entries
+                WHERE domain = 'Investing' AND created_at >= datetime('now', ? || ' days')
+                GROUP BY DATE(created_at)
+                ORDER BY date DESC
+                LIMIT ?
+            """, (f"-{days}", days)).fetchall()
+
+            trends = [dict(r) for r in rows]
+            return {
+                "days": days,
+                "data_points": len(trends),
+                "trends": sorted(trends, key=lambda x: x["date"]),
+                "source": "Sales OS - Automated eBay Research"
+            }
+    except Exception as e:
+        return {"error": str(e), "trends": []}
+
+
+def get_sales_watchlist() -> dict:
+    """Return current watchlist items with profit metrics."""
+    try:
+        with connect() as conn:
+            rows = conn.execute("""
+                SELECT
+                    id,
+                    entity as item,
+                    tracking_metric,
+                    CAST(COALESCE(baseline, '0') AS FLOAT) as cost,
+                    CAST(COALESCE(target_threshold, '0') AS FLOAT) as price,
+                    signal,
+                    status,
+                    updated_at
+                FROM entries
+                WHERE domain = 'Investing' AND signal_role IN ('opportunity', 'watch', 'action')
+                AND status IN ('codified', 'validated', 'upgraded')
+                ORDER BY updated_at DESC
+                LIMIT 50
+            """).fetchall()
+
+            items = []
+            for r in rows:
+                row_dict = dict(r)
+                cost = float(row_dict.get("cost", 0) or 0)
+                price = float(row_dict.get("price", 0) or 0)
+                margin = price - cost if price > 0 else 0
+
+                items.append({
+                    "id": row_dict["id"],
+                    "item": row_dict["item"],
+                    "status": row_dict["status"],
+                    "price": price,
+                    "cost": cost,
+                    "margin": round(margin, 2),
+                    "signal": row_dict["signal"][:60] if row_dict["signal"] else "",
+                    "lastUpdated": row_dict["updated_at"]
+                })
+
+            return {
+                "count": len(items),
+                "items": items
+            }
+    except Exception as e:
+        return {"error": str(e), "items": []}
+
+
+def get_sales_discovery(limit: int = 40) -> dict:
+    """Return trending discovered products."""
+    try:
+        with connect() as conn:
+            rows = conn.execute("""
+                SELECT
+                    entity as product,
+                    domain,
+                    COUNT(*) as signal_count,
+                    MAX(updated_at) as last_signal,
+                    GROUP_CONCAT(DISTINCT tags) as tags
+                FROM entries
+                WHERE status = 'codified' AND signal_role IN ('opportunity', 'pattern')
+                GROUP BY entity
+                ORDER BY signal_count DESC, last_signal DESC
+                LIMIT ?
+            """, (limit,)).fetchall()
+
+            products = [dict(r) for r in rows]
+            return {
+                "trending_count": len(products),
+                "products": products,
+                "generated_at": now_iso()
+            }
+    except Exception as e:
+        return {"error": str(e), "products": []}
+
+
+def get_sales_opportunities() -> dict:
+    """Return cross-sell and opportunity analysis."""
+    try:
+        with connect() as conn:
+            # Find entries that are opportunities but not yet actioned
+            opportunities = conn.execute("""
+                SELECT
+                    id,
+                    title,
+                    domain,
+                    entity,
+                    signal_role,
+                    signal,
+                    interpretation,
+                    status
+                FROM entries
+                WHERE signal_role = 'opportunity' AND status IN ('codified', 'validated')
+                AND returned_action IS NULL OR returned_action = ''
+                ORDER BY created_at DESC
+                LIMIT 20
+            """).fetchall()
+
+            opps = [dict(o) for o in opportunities]
+            return {
+                "actionable_opportunities": len(opps),
+                "opportunities": opps,
+                "recommendation": f"Review {len(opps)} opportunity signals for next actions"
+            }
+    except Exception as e:
+        return {"error": str(e), "opportunities": []}
+
+
 def dashboard() -> dict:
     with connect() as conn:
         one = lambda sql, args=(): conn.execute(sql, args).fetchone()[0]
@@ -4443,6 +4593,17 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(dashboard())
             if path == "/api/command/dormant":
                 return self.send_json(dormant_info_report())
+            if path.startswith("/api/sales/"):
+                if path == "/api/sales/trends":
+                    days = int((params.get("days") or ["30"])[0])
+                    return self.send_json(get_sales_trends(days=days))
+                if path == "/api/sales/watchlist":
+                    return self.send_json(get_sales_watchlist())
+                if path == "/api/sales/discovery":
+                    limit = int((params.get("limit") or ["40"])[0])
+                    return self.send_json(get_sales_discovery(limit=limit))
+                if path == "/api/sales/opportunities":
+                    return self.send_json(get_sales_opportunities())
             if path == "/api/export":
                 payload = export_all()
                 body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
