@@ -310,9 +310,21 @@ if($("searchInput")) $("searchInput").addEventListener("input", () => { clearTim
 if($("filterDomain")) $("filterDomain").addEventListener("change", loadMemory);
 if($("exportBtn")) $("exportBtn").addEventListener("click", ()=>{ window.location.href="/api/export"; });
 
-loadCommand();
-checkAiStatus();
-updateQueueBadge();
+// Initial load on page startup
+async function initializeApp(){
+  try {
+    await Promise.all([
+      loadCommand(),
+      loadQueue(),
+      loadWatchlist(),
+      loadChangelog()
+    ]);
+  } catch(e){
+    console.error("Init error:", e);
+  }
+  checkAiStatus();
+  updateQueueBadge();
+}
 
 async function checkAiStatus(){
   try {
@@ -328,3 +340,5 @@ async function checkAiStatus(){
     }
   } catch(e) {}
 }
+
+initializeApp();
