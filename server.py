@@ -48,7 +48,7 @@ WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "info_analyzer.db"
 
-APP_VERSION = "v0.70-unified-intelligence"
+APP_VERSION = "v0.71-sales-pull-priority"
 APP_VERSIONS = [
     {
         "version": "v0.1",
@@ -344,6 +344,17 @@ APP_VERSIONS = [
             "New endpoints: /api/sales/trends, /api/sales/watchlist, /api/sales/discovery, /api/sales/opportunities",
             "Multi-view frontend with intelligent tab navigation",
             "Command Center now shows alerts from both intelligence and market data layers",
+        ],
+    },
+    {
+        "version": "v0.71",
+        "name": "Sales Pull Priority",
+        "features": [
+            "Sales queries prioritize fresh market-snapshot entries over older generic sales memory",
+            "Freshness weighting boosts new source data in the pull engine",
+            "Market snapshot terms like trending, demand, sell-through, margin, and sourcing get explicit priority",
+            "Sales cockpit now surfaces the newest actionable trend entry first",
+            "Version label makes backend freshness visible after restart",
         ],
     },
 ]
@@ -3051,6 +3062,27 @@ def pama_score(entry: dict, query: str, terms: set[str]) -> tuple[int, list[str]
     if weak_hits:
         score += min(8, len(weak_hits) * 2)
         reasons.append("supporting context: " + ", ".join(weak_hits[:4]))
+    if any(t in terms for t in {"sale", "sales"}):
+        market_terms = [term for term in ("snapshot", "trending", "demand", "sell-through", "margin", "sourcing", "resale", "volume") if term in strong_hay]
+        if market_terms:
+            score += 24
+            reasons.append("market snapshot: " + ", ".join(market_terms[:5]))
+    updated_at = clean_text(entry.get("updated_at") or entry.get("created_at"))
+    if updated_at:
+        try:
+            dt = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+            age_seconds = max(0.0, (datetime.now(timezone.utc) - dt).total_seconds())
+            if age_seconds <= 24 * 3600:
+                score += 30
+                reasons.append("fresh entry")
+            elif age_seconds <= 3 * 24 * 3600:
+                score += 18
+                reasons.append("recent entry")
+            elif age_seconds <= 7 * 24 * 3600:
+                score += 8
+                reasons.append("newer context")
+        except Exception:
+            pass
     if entry.get("actionability") in {"now", "next"}:
         score += 7
         reasons.append("actionable")
