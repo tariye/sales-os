@@ -53,7 +53,7 @@ WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "info_analyzer.db"
 
-APP_VERSION = "v0.74-listening-lab-projects"
+APP_VERSION = "v0.75-asset-lab-cockpit-links"
 APP_VERSIONS = [
     {
         "version": "v0.1",
@@ -393,6 +393,17 @@ APP_VERSIONS = [
             "Open project workspace with Continue Extraction and Save Extraction controls",
             "System-generated section map, glossary, and sound example fields",
             "Extraction Library stores every breakdown with a reusable user label",
+        ],
+    },
+    {
+        "version": "v0.75",
+        "name": "Asset Lab + Cockpit Links",
+        "features": [
+            "Listening Lab rebuilt as Asset Lab for general signal breakdowns",
+            "Asset breakdowns include clear summary, core signal, mechanism, breakdown map, key terms, concrete example, tracking metric, and action path",
+            "Command Center data planes are clickable and reveal their signals and active routes",
+            "Pattern cards headline the actual pattern/signal and can be recontextualized into action queue items",
+            "Action cards expose clickable source memory plus similar-signal context for deeper recontextualization",
         ],
     },
 ]
@@ -1290,6 +1301,9 @@ def row_to_listening_extraction(row) -> dict:
     d["glossary"] = json_loads(d.get("glossary"), [])
     d["tags"] = json_loads(d.get("tags"), [])
     d["metadata"] = json_loads(d.get("metadata"), {})
+    d["breakdown_map"] = d["section_map"]
+    d["key_terms"] = d["glossary"]
+    d["concrete_example"] = d.get("sound_example") or ""
     return d
 
 
@@ -1313,6 +1327,7 @@ def action_execution_card(action: dict) -> dict:
     return {
         "action_name": action_name,
         "source": source_title,
+        "source_entry_id": action.get("entry_id"),
         "source_domain": source_domain,
         "source_signal": source_signal,
         "card_type": source_card_type,
@@ -1322,6 +1337,42 @@ def action_execution_card(action: dict) -> dict:
         "done_prompt": "What result or proof did this produce?",
         "pattern_prompt": "What reusable pattern does this action reveal?",
         "abort_prompt": "Why is this action no longer worth doing?",
+    }
+
+
+def action_source_context(conn, action: dict) -> dict:
+    entry_id = clean_text(action.get("entry_id"))
+    row = conn.execute("SELECT * FROM entries WHERE id=?", (entry_id,)).fetchone()
+    if not row:
+        return {"similar_signal_count": 0, "similar_signals": [], "context_prompt": "Source memory is missing."}
+    entry = row_to_entry(row)
+    clauses = ["id != ?", "status NOT IN ('archived','superseded')"]
+    args = [entry_id]
+    if entry.get("entity"):
+        clauses.append("LOWER(entity) = ?")
+        args.append(normalize_text(entry.get("entity")))
+    elif entry.get("pattern"):
+        clauses.append("LOWER(pattern) = ?")
+        args.append(normalize_text(entry.get("pattern")))
+    else:
+        clauses.append("domain = ?")
+        args.append(entry.get("domain") or "Other")
+    rows = conn.execute(
+        f"SELECT id, title, domain, signal, signal_role, actionability FROM entries WHERE {' AND '.join(clauses)} ORDER BY updated_at DESC LIMIT 12",
+        args,
+    ).fetchall()
+    similar = [dict(r) for r in rows]
+    return {
+        "source_entry_id": entry_id,
+        "source_title": entry.get("title"),
+        "source_signal": entry.get("signal"),
+        "source_domain": entry.get("domain"),
+        "similar_signal_count": len(similar),
+        "similar_signals": similar[:5],
+        "context_prompt": (
+            f"This action is backed by {len(similar)} similar signal(s). "
+            "Open the source or recontextualize if the similar signals suggest a stronger action."
+        ),
     }
 
 
@@ -3464,156 +3515,175 @@ def create_entry(payload: dict) -> dict:
     return {"entry": entry, "action": action, "pull_rules": rules, "context_packet": pull}
 
 
-SECTION_KEYWORDS = [
-    ("intro", "Intro"),
-    ("verse", "Verse"),
-    ("pre chorus", "Pre-Chorus"),
-    ("pre-chorus", "Pre-Chorus"),
+ASSET_KEYWORDS = [
+    ("problem", "Problem"),
+    ("bottleneck", "Bottleneck"),
+    ("risk", "Risk"),
+    ("opportunity", "Opportunity"),
+    ("signal", "Signal"),
+    ("metric", "Metric"),
+    ("customer", "Customer"),
+    ("cash", "Cash"),
+    ("margin", "Margin"),
+    ("training", "Training"),
+    ("sales", "Sales"),
+    ("inventory", "Inventory"),
     ("hook", "Hook"),
-    ("chorus", "Chorus"),
-    ("bridge", "Bridge"),
-    ("breakdown", "Breakdown"),
-    ("outro", "Outro"),
-    ("drop", "Drop"),
-    ("solo", "Solo"),
+    ("groove", "Groove"),
+    ("sop", "SOP"),
+    ("pattern", "Pattern"),
 ]
 
-GLOSSARY_DEFS = {
-    "hook": "The repeatable idea that carries memory value and replay value.",
-    "groove": "The rhythmic pocket created by drums, bass, timing, and feel.",
-    "pocket": "The timing relationship that makes parts feel locked together.",
-    "bassline": "The low-end melodic/rhythmic anchor that routes movement.",
-    "melody": "The singable pitch pattern that creates recall.",
-    "chorus": "The high-repetition section that usually states the core emotional offer.",
-    "verse": "The narrative or setup section that gives the hook context.",
-    "bridge": "A contrast section that resets attention before the return.",
-    "sample": "A reused audio fragment that carries texture, reference, or identity.",
-    "sync": "Licensing fit for film, games, ads, creator content, or brand placement.",
-    "tension": "Energy created by unresolved rhythm, harmony, lyric, or arrangement.",
-    "release": "The moment tension resolves into payoff.",
+ASSET_TERM_DEFS = {
+    "signal": "The meaningful observable that may change a decision.",
+    "asset": "A reusable piece of intelligence, proof, process, or opportunity that can compound.",
+    "trackable": "Can be measured, checked, observed, reviewed, or triggered later.",
+    "action": "The next concrete move the signal returns.",
+    "trigger": "The condition that should resurface this memory.",
+    "metric": "The number or observable used to prove movement.",
+    "risk": "A condition that can break the thesis, process, or expected result.",
+    "opportunity": "A hidden upside or underused resource that can be tested.",
+    "pattern": "A recurring structure across entries that should become a rule or playbook.",
+    "proof": "Evidence that an action, skill, process, or thesis produced a result.",
+    "cash": "The economic reality that validates or disproves the story.",
+    "margin": "The spread that shows whether demand can become profit.",
+    "customer": "The demand source whose behavior proves or weakens the thesis.",
+    "inventory": "Stored supply that can signal demand quality, working capital pressure, or opportunity.",
+    "sop": "A repeatable procedure that reduces errors and preserves knowledge.",
 }
 
 
-def listening_tag_terms(text: str) -> list[str]:
+def asset_tag_terms(text: str) -> list[str]:
     terms = []
     hay = normalize_text(text)
-    for term in GLOSSARY_DEFS:
+    for term in ASSET_TERM_DEFS:
         if term in hay:
             terms.append(term)
-    for term in ["music", "song", "listening lab", "extraction"]:
+    for term in ["asset-lab", "signal-breakdown", "extraction"]:
         if term not in terms:
             terms.append(term)
     return terms[:12]
 
 
+def listening_tag_terms(text: str) -> list[str]:
+    return asset_tag_terms(text)
+
+
 def generate_listening_breakdown(project: dict, prompt: str = "") -> dict:
-    title = clean_text(project.get("title")) or "Untitled song"
-    artist = clean_text(project.get("artist"))
+    title = clean_text(project.get("title")) or "Untitled signal"
+    source = clean_text(project.get("artist"))
+    metadata = project.get("metadata") or {}
+    domain = clean_text(metadata.get("domain")) or "Other"
     evidence = clean_text("\n".join([project.get("notes") or "", prompt or ""]))
     hay = normalize_text(evidence)
-    section_map = []
+    signal = clean_text(project.get("title")) or "Signal"
+    summary = evidence[:220] if evidence else "No raw evidence was supplied; treat this as a blank signal that needs more source context."
+    section_map = [
+        {
+            "section": "Plain-English Summary",
+            "system_read": summary,
+            "trackable_use": "Use this as the shortest explanation of what the signal says.",
+        },
+        {
+            "section": "Core Signal",
+            "system_read": f"{signal} may matter because it points to a decision, risk, opportunity, pattern, or reusable asset.",
+            "trackable_use": "Rewrite this as one sentence before saving or acting.",
+        },
+        {
+            "section": "Mechanism",
+            "system_read": "Identify the cause-and-effect path underneath the signal: what produces it, what it changes, and what it may become.",
+            "trackable_use": "Track whether future evidence confirms the mechanism.",
+        },
+    ]
     seen = set()
-    for key, label in SECTION_KEYWORDS:
+    for key, label in ASSET_KEYWORDS:
         if key in hay and label not in seen:
             section_map.append({
                 "section": label,
-                "system_read": f"{label} is explicitly referenced in the notes; inspect how it changes energy, repetition, or narrative function.",
-                "trackable_use": f"Label future clips where the {label.lower()} drives replay, contrast, or transition value.",
+                "system_read": f"{label} appears in the source evidence; clarify what it changes economically, operationally, or behaviorally.",
+                "trackable_use": f"Track future entries where {label.lower()} repeats, strengthens, weakens, or triggers action.",
             })
             seen.add(label)
-    if not section_map:
-        section_map = [
-            {
-                "section": "Opening signal",
-                "system_read": "Map the first 10-20 seconds for the sound or phrase that tells the listener what world they are entering.",
-                "trackable_use": "Track whether the opening contains a reusable texture, groove, vocal tag, or emotional cue.",
-            },
-            {
-                "section": "Core loop",
-                "system_read": "Identify the repeated musical or lyrical loop that carries memory value.",
-                "trackable_use": "Track hook strength, repetition count, and whether the loop can be reused in sync, remix, or content routing.",
-            },
-            {
-                "section": "Payoff / exit",
-                "system_read": "Look for the moment where tension resolves or the track leaves a final identity mark.",
-                "trackable_use": "Track whether the exit creates replay demand or a clean clip ending.",
-            },
+    key_terms = []
+    for term in asset_tag_terms(evidence + " " + domain):
+        if term in ASSET_TERM_DEFS:
+            key_terms.append({"term": term, "meaning": ASSET_TERM_DEFS[term]})
+    if not key_terms:
+        key_terms = [
+            {"term": "signal", "meaning": ASSET_TERM_DEFS["signal"]},
+            {"term": "trackable", "meaning": ASSET_TERM_DEFS["trackable"]},
+            {"term": "trigger", "meaning": ASSET_TERM_DEFS["trigger"]},
         ]
-    glossary_terms = []
-    for term in listening_tag_terms(evidence):
-        if term in GLOSSARY_DEFS:
-            glossary_terms.append({"term": term, "meaning": GLOSSARY_DEFS[term]})
-    if not glossary_terms:
-        glossary_terms = [
-            {"term": "hook", "meaning": GLOSSARY_DEFS["hook"]},
-            {"term": "groove", "meaning": GLOSSARY_DEFS["groove"]},
-            {"term": "sync", "meaning": GLOSSARY_DEFS["sync"]},
-        ]
-    sound_focus = []
-    for token in ["bass", "drum", "vocal", "sample", "guitar", "piano", "synth", "808", "melody", "harmony"]:
+    focus_terms = []
+    for token in ["cash", "margin", "customer", "inventory", "sales", "training", "sop", "risk", "opportunity", "metric", "hook", "groove"]:
         if token in hay:
-            sound_focus.append(token)
-    sound_phrase = ", ".join(sound_focus[:4]) if sound_focus else "the most repeatable sound, rhythm, or vocal moment"
-    sound_example = (
-        f"Clip and label a 5-12 second example around {sound_phrase}. "
-        "Use it as proof of the song's reusable emotional, groove, or sync value."
+            focus_terms.append(token)
+    focus_phrase = ", ".join(focus_terms[:4]) if focus_terms else "the most concrete observable in the source"
+    concrete_example = (
+        f"Pull one concrete example around {focus_phrase}. "
+        "Use it as proof that the signal is real instead of just an idea."
     )
     breakdown = (
-        f"System breakdown for {title}{' by ' + artist if artist else ''}: "
-        "treat the song as an asset made of sections, repeatable sounds, emotional cues, and routing opportunities. "
-        "The extraction should identify which moments are reusable, what context they fit, and what metric proves value."
+        f"Asset Lab breakdown for {title}{' from ' + source if source else ''}: "
+        "turn the raw input into a clear intelligence asset by naming the core signal, mechanism, metric, trigger, and next action. "
+        "If it cannot be acted on now, convert it into a watch signal with a defined resurfacing condition."
     )
     reuse_context = (
-        "Use this extraction later for playlist routing, sync prep, remix/stem library labels, content clips, "
-        "artist feedback, or pattern comparison against other songs."
+        "Use this asset later for command-center pulls, pattern comparison, action creation, proof artifacts, watch triggers, or deeper recontextualization."
     )
     return {
-        "label": f"{title} breakdown",
-        "extraction_type": "song_breakdown",
+        "label": f"{title} asset breakdown",
+        "extraction_type": "signal_breakdown",
         "raw_evidence": evidence,
         "section_map": section_map,
-        "glossary": glossary_terms[:8],
-        "sound_example": sound_example,
+        "breakdown_map": section_map,
+        "glossary": key_terms[:8],
+        "key_terms": key_terms[:8],
+        "sound_example": concrete_example,
+        "concrete_example": concrete_example,
         "breakdown": breakdown,
         "reuse_context": reuse_context,
-        "tags": listening_tag_terms(evidence),
+        "tags": asset_tag_terms(evidence),
+        "domain": domain,
     }
 
 
 def create_listening_memory_entry(conn, project: dict, extraction: dict) -> str:
+    metadata = project.get("metadata") or {}
+    domain = clean_text(metadata.get("domain")) or "Other"
     raw_input = "\n".join([
-        f"Listening Lab project: {project.get('title') or ''}",
-        f"Artist: {project.get('artist') or ''}",
+        f"Asset Lab project: {project.get('title') or ''}",
+        f"Source/entity: {project.get('artist') or ''}",
         f"User label: {extraction.get('label') or ''}",
         f"Breakdown: {extraction.get('breakdown') or ''}",
-        f"Sound example: {extraction.get('sound_example') or ''}",
+        f"Concrete example: {extraction.get('concrete_example') or extraction.get('sound_example') or ''}",
         f"Reuse context: {extraction.get('reuse_context') or ''}",
     ])
     entry = codify_payload({
         "raw_input": raw_input,
-        "domain": "Music",
-        "entity": project.get("title") or "Listening Lab",
+        "domain": domain,
+        "entity": project.get("artist") or project.get("title") or "Asset Lab",
         "source_type": "Document",
-        "tags": ["music", "listening-lab", "song-breakdown"] + (extraction.get("tags") or []),
-        "title": f"Listening Lab: {extraction.get('label') or project.get('title') or 'Song breakdown'}",
-        "signal": f"{project.get('title') or 'Song'} has reusable music-asset signals that can be labeled, compared, and routed.",
+        "tags": ["asset-lab", "signal-breakdown"] + (extraction.get("tags") or []),
+        "title": f"Asset Lab: {extraction.get('label') or project.get('title') or 'Signal breakdown'}",
+        "signal": f"{project.get('title') or 'Signal'} has been broken into a reusable intelligence asset.",
         "signal_role": "opportunity",
         "actionability": "watch",
         "card_type": "Opportunity Card",
-        "trackable_as": "reuse context + accepted labels",
-        "tracking_metric": "number of labeled sections, reusable sound examples, and future routing decisions",
-        "returned_action": "Label the extraction and reuse it in future music routing or pattern comparison.",
-        "pull_trigger": "Resurface during music analysis, sync prep, stem library setup, playlist routing, or song comparison.",
-        "pattern": "Songs become more valuable when reusable sections, glossary terms, and sound examples are labeled for later routing.",
-        "lesson": "Music memory compounds when each listening rep becomes a labeled reusable asset.",
+        "trackable_as": "asset label + future reuse",
+        "tracking_metric": "number of times this labeled asset resurfaces, informs an action, or connects to similar signals",
+        "returned_action": "Use this labeled asset during future pulls, pattern comparison, or action creation.",
+        "pull_trigger": "Resurface when a future entry matches this asset label, entity, domain, key terms, or trigger language.",
+        "pattern": "Signals become more powerful when they are broken into labeled assets with metrics, examples, and resurfacing triggers.",
+        "lesson": "Intelligence compounds when each signal becomes a reusable asset rather than a dormant note.",
     })
-    metadata = entry.get("metadata") or {}
-    metadata.update({
-        "source": "listening_lab",
+    entry_metadata = entry.get("metadata") or {}
+    entry_metadata.update({
+        "source": "asset_lab",
         "project_id": project.get("id"),
         "extraction_id": extraction.get("id"),
     })
-    entry["metadata"] = metadata
+    entry["metadata"] = entry_metadata
     entry = insert_entry(conn, entry)
     contextualize_entry(conn, entry)
     update_pattern_stats(conn, entry)
@@ -3645,20 +3715,23 @@ def list_listening_projects() -> dict:
 
 
 def create_listening_project(payload: dict) -> dict:
-    title = clean_text(payload.get("title") or payload.get("song") or payload.get("name"))
+    title = clean_text(payload.get("title") or payload.get("signal_name") or payload.get("song") or payload.get("name"))
     if not title:
         raise ValueError("project title is required")
     now = now_iso()
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    metadata["domain"] = clean_text(payload.get("domain")) or metadata.get("domain") or "Other"
+    metadata["asset_lab"] = True
     project = {
         "id": make_id("LP"),
         "created_at": now,
         "updated_at": now,
         "title": title[:240],
-        "artist": clean_text(payload.get("artist"))[:180],
+        "artist": clean_text(payload.get("entity") or payload.get("artist") or payload.get("source"))[:180],
         "source_url": clean_text(payload.get("source_url") or payload.get("url"))[:500],
         "notes": clean_text(payload.get("notes") or payload.get("raw_input")),
         "status": "active",
-        "metadata": payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+        "metadata": metadata,
     }
     with connect() as conn:
         conn.execute(
@@ -3716,8 +3789,12 @@ def save_listening_extraction(project_id: str, payload: dict) -> dict:
             "extraction_type": clean_text(payload.get("extraction_type")) or generated["extraction_type"],
             "raw_evidence": clean_text(payload.get("raw_evidence")) or generated["raw_evidence"],
             "section_map": payload.get("section_map") if isinstance(payload.get("section_map"), list) else generated["section_map"],
-            "glossary": payload.get("glossary") if isinstance(payload.get("glossary"), list) else generated["glossary"],
-            "sound_example": clean_text(payload.get("sound_example")) or generated["sound_example"],
+            "glossary": (
+                payload.get("key_terms") if isinstance(payload.get("key_terms"), list)
+                else payload.get("glossary") if isinstance(payload.get("glossary"), list)
+                else generated["glossary"]
+            ),
+            "sound_example": clean_text(payload.get("concrete_example") or payload.get("sound_example")) or generated["sound_example"],
             "breakdown": clean_text(payload.get("breakdown")) or generated["breakdown"],
             "reuse_context": clean_text(payload.get("reuse_context")) or generated["reuse_context"],
             "tags": normalize_tags(payload.get("tags")) or generated["tags"],
@@ -3820,6 +3897,47 @@ def listening_library(params: dict | None = None) -> dict:
             extraction["project_artist"] = row["project_artist"]
             extractions.append(extraction)
     return {"extractions": extractions}
+
+
+def create_action_from_pattern(payload: dict) -> dict:
+    pattern = clean_text(payload.get("pattern") or payload.get("name") or payload.get("signal"))
+    if not pattern:
+        raise ValueError("pattern is required")
+    action_text = clean_text(payload.get("action") or payload.get("recommended_action")) or "Turn this pattern into a concrete next action and track the result."
+    first_step = clean_text(payload.get("first_step")) or "Open the related signals and define the first executable step."
+    metric = clean_text(payload.get("tracking_metric") or payload.get("metric")) or "Result logged, repeat count, and action completion."
+    domain = clean_text(payload.get("domain")) or "AI Project"
+    if domain not in DOMAINS:
+        domain = "AI Project"
+    entry_payload = {
+        "title": f"Action from pattern: {pattern[:140]}",
+        "raw_input": "\n".join([
+            f"Pattern recontextualized to action: {pattern}",
+            f"Why it matters: {clean_text(payload.get('why_it_matters') or payload.get('interpretation'))}",
+            f"Returned action: {action_text}",
+            f"First step: {first_step}",
+            f"Tracking metric: {metric}",
+        ]),
+        "domain": domain,
+        "entity": clean_text(payload.get("entity") or payload.get("type") or "Pattern Engine"),
+        "source_type": "Result",
+        "signal": pattern,
+        "signal_role": "action",
+        "actionability": "next",
+        "card_type": "Action Card",
+        "trackable_as": "action completion + repeat validation",
+        "tracking_metric": metric,
+        "pattern": pattern,
+        "returned_action": action_text,
+        "first_step": first_step,
+        "impact_metric": clean_text(payload.get("impact_metric")) or "Decision clarity improved and action backlog converted into result/proof.",
+        "feedback_to_capture": "What happened after this pattern became an action.",
+        "pull_trigger": f"Resurface when future entries match pattern: {pattern[:160]}",
+        "trigger_condition": f"New signal repeats or contradicts pattern: {pattern[:160]}",
+        "tags": ["pattern-action", "recontextualized", "asset-lab"] + normalize_tags(payload.get("tags")),
+    }
+    result = create_entry(entry_payload)
+    return {"entry": result["entry"], "action": result.get("action"), "entry_id": result["entry"]["id"]}
 
 
 def translation_contract(payload: dict) -> dict:
@@ -4175,12 +4293,16 @@ def create_relationship(payload: dict) -> dict:
 
 def list_actions(params: dict) -> list[dict]:
     status = clean_text((params.get("status") or [""])[0]).lower()
+    domain = clean_text((params.get("domain") or [""])[0])
     limit = int(clean_text((params.get("limit") or ["100"])[0]) or 100)
     where = []
     args = []
     if status:
         where.append("status = ?")
         args.append(status)
+    if domain:
+        where.append("e.domain = ?")
+        args.append(domain)
     where_sql = "WHERE " + " AND ".join([f"a.{w}" if w.startswith("status") else w for w in where]) if where else ""
     sql = f"""
         SELECT a.*, e.title AS source_title, e.domain AS source_domain, e.signal AS source_signal,
@@ -4198,6 +4320,7 @@ def list_actions(params: dict) -> list[dict]:
         for r in conn.execute(sql, args).fetchall():
             action = row_to_action(r)
             action["execution_card"] = action_execution_card(action)
+            action["source_context"] = action_source_context(conn, action)
             out.append(action)
         return out
 
@@ -5236,6 +5359,13 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(list_import_batches(limit=limit))
             if path.startswith("/api/imports/"):
                 return self.send_json(get_import_batch(unquote(path.split("/api/imports/", 1)[1])))
+            if path == "/api/assets/projects":
+                return self.send_json(list_listening_projects())
+            if path == "/api/assets/library":
+                return self.send_json(listening_library(params))
+            if path.startswith("/api/assets/projects/"):
+                project_id = unquote(path.split("/api/assets/projects/", 1)[1])
+                return self.send_json(get_listening_project(project_id))
             if path == "/api/listening/projects":
                 return self.send_json(list_listening_projects())
             if path == "/api/listening/library":
@@ -5357,6 +5487,14 @@ class Handler(SimpleHTTPRequestHandler):
                 ), 201)
             if path == "/api/listening/projects":
                 return self.send_json(create_listening_project(payload), 201)
+            if path == "/api/assets/projects":
+                return self.send_json(create_listening_project(payload), 201)
+            if path.startswith("/api/assets/projects/") and path.endswith("/breakdown"):
+                project_id = unquote(path.split("/api/assets/projects/", 1)[1].rsplit("/breakdown", 1)[0])
+                return self.send_json(draft_listening_extraction(project_id, payload), 201)
+            if path.startswith("/api/assets/projects/") and path.endswith("/extractions"):
+                project_id = unquote(path.split("/api/assets/projects/", 1)[1].rsplit("/extractions", 1)[0])
+                return self.send_json(save_listening_extraction(project_id, payload), 201)
             if path.startswith("/api/listening/projects/") and path.endswith("/breakdown"):
                 project_id = unquote(path.split("/api/listening/projects/", 1)[1].rsplit("/breakdown", 1)[0])
                 return self.send_json(draft_listening_extraction(project_id, payload), 201)
@@ -5401,6 +5539,8 @@ class Handler(SimpleHTTPRequestHandler):
                 ), 201)
             if path == "/api/pattern-engine/scan":
                 return self.send_json(pattern_engine_scan(save=bool(payload.get("save")), scan_type=payload.get("scan_type") or "manual"), 201)
+            if path == "/api/patterns/action":
+                return self.send_json(create_action_from_pattern(payload), 201)
             if path == "/api/import":
                 result = import_all(payload)
                 return self.send_json({"success": True, **result})
@@ -5417,6 +5557,9 @@ class Handler(SimpleHTTPRequestHandler):
         path = parsed.path
         try:
             payload = self.read_json()
+            if path.startswith("/api/assets/breakdowns/"):
+                extraction = update_listening_extraction(unquote(path.split("/api/assets/breakdowns/", 1)[1]), payload)
+                return self.send_json({"success": True, **extraction})
             if path.startswith("/api/listening/extractions/"):
                 extraction = update_listening_extraction(unquote(path.split("/api/listening/extractions/", 1)[1]), payload)
                 return self.send_json({"success": True, **extraction})
@@ -5438,6 +5581,9 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path.startswith("/api/assets/projects/"):
+                result = delete_listening_project(unquote(path.split("/api/assets/projects/", 1)[1]))
+                return self.send_json({"success": True, **result})
             if path.startswith("/api/listening/projects/"):
                 result = delete_listening_project(unquote(path.split("/api/listening/projects/", 1)[1]))
                 return self.send_json({"success": True, **result})

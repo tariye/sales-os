@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Info Analyzer OS v0.74</title>
+  <title>Info Analyzer OS v0.75</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <header class="app-header">
     <div>
       <p class="eyebrow">Intelligence OS</p>
-      <h1>Info Analyzer OS <span>v0.74</span></h1>
+      <h1>Info Analyzer OS <span>v0.75</span></h1>
       <p class="subtitle">Capture raw input, contextualize it into memory, and resurface only what changes a decision.</p>
     </div>
     <button id="exportBtn" class="ghost small">Export</button>
@@ -20,7 +20,7 @@
     <button class="tab active" data-tab="dump">New Entry</button>
     <button class="tab" data-tab="queue">Queue <span id="queueBadge" class="queue-badge hidden">0</span></button>
     <button class="tab" data-tab="command">Command Center</button>
-    <button class="tab" data-tab="listening">Listening Lab</button>
+    <button class="tab" data-tab="asset">Asset Lab</button>
     <button class="tab" data-tab="stock">Stock Intel</button>
     <button class="tab" data-tab="memory">Memory DB</button>
     <button class="tab" data-tab="actions">Actions</button>
@@ -160,6 +160,10 @@
         <div id="innbankDataPlanes" class="plane-grid"></div>
       </div>
       <div class="card">
+        <div class="card-head"><div><p class="eyebrow">Plane Drilldown</p><h2 id="dataPlaneTitle">Select A Data Plane</h2></div></div>
+        <div id="dataPlaneDrilldown" class="list"><div class="item"><h3>No plane selected</h3><p class="muted">Click a data plane to view its signals and active routes.</p></div></div>
+      </div>
+      <div class="card">
         <div class="card-head"><div><p class="eyebrow">Sub-Control Planes</p><h2>Systems That Convert Signal Into Results</h2></div></div>
         <div id="innbankSubplanes" class="plane-grid"></div>
       </div>
@@ -200,45 +204,50 @@
       </div>
     </section>
 
-    <!-- ④ LISTENING LAB ─────────────────────────────────────────── -->
-    <section id="listening" class="panel">
+    <!-- ④ ASSET LAB ─────────────────────────────────────────────── -->
+    <section id="asset" class="panel">
       <div class="card hero">
         <div class="card-head">
           <div>
-            <p class="eyebrow">Listening Lab</p>
-            <h2>Song Breakdown Projects</h2>
-            <p class="subtitle">Create a project, open it, let the system break down the song, then save reusable extractions into the library.</p>
+            <p class="eyebrow">Asset Lab</p>
+            <h2>Signal Breakdown Workbench</h2>
+            <p class="subtitle">Drop any signal, break it down to the clearest understanding, then save it as a reusable intelligence asset.</p>
           </div>
-          <button id="refreshListening" class="ghost small">Refresh</button>
+          <button id="refreshAssetLab" class="ghost small">Refresh</button>
         </div>
         <div class="grid two">
-          <label>Song / Project Title<input id="listeningTitle" placeholder="Song, beat, catalog asset, reference track..." /></label>
-          <label>Artist / Source<input id="listeningArtist" placeholder="Artist, producer, catalog, source..." /></label>
+          <label>Signal / Asset Name<input id="assetTitle" placeholder="Sales pattern, company signal, lab issue, idea, asset..." /></label>
+          <label>Entity / Source<input id="assetEntity" placeholder="Company, product, system, person, source..." /></label>
         </div>
-        <label>Source URL<input id="listeningUrl" placeholder="YouTube, Spotify, file note, reference URL..." /></label>
-        <label>Raw Notes For The System<textarea id="listeningNotes" rows="4" placeholder="Paste lyrics summary, sonic notes, arrangement notes, timestamps, mood, instruments, hook ideas, sync context..."></textarea></label>
+        <div class="grid two">
+          <label>Domain
+            <select id="assetDomain"><option>Business</option><option>Investing</option><option>Lab</option><option>Career</option><option>Fitness</option><option>Network+</option><option>Music</option><option>AI Project</option><option>Personal Finance</option><option>Personal Preference</option><option>Other</option></select>
+          </label>
+          <label>Source URL<input id="assetUrl" placeholder="Article, filing, product page, note source..." /></label>
+        </div>
+        <label>Raw Signal<textarea id="assetNotes" rows="4" placeholder="Paste the signal, observation, excerpt, idea, issue, trend, quote, or question you want broken down clearly..."></textarea></label>
         <div class="buttons">
-          <button id="createListeningProject" class="primary">Create Project</button>
+          <button id="createAssetProject" class="primary">Create Asset</button>
         </div>
       </div>
 
       <div class="grid two">
         <div class="card">
-          <div class="card-head"><div><p class="eyebrow">Projects</p><h2>Open Or Delete</h2></div></div>
-          <div id="listeningProjects" class="list"></div>
+          <div class="card-head"><div><p class="eyebrow">Assets</p><h2>Open Or Delete</h2></div></div>
+          <div id="assetProjects" class="list"></div>
         </div>
         <div class="card">
-          <div class="card-head"><div><p class="eyebrow">Open Project</p><h2 id="openListeningTitle">No Project Open</h2></div></div>
-          <div id="openListeningProject" class="list"></div>
+          <div class="card-head"><div><p class="eyebrow">Open Asset</p><h2 id="openAssetTitle">No Asset Open</h2></div></div>
+          <div id="openAssetProject" class="list"></div>
         </div>
       </div>
 
       <div class="card">
         <div class="card-head">
-          <div><p class="eyebrow">Extraction Library</p><h2>Reusable Song Intelligence</h2></div>
-          <input id="listeningLibrarySearch" class="inline-search" placeholder="Search labels, songs, tags..." />
+          <div><p class="eyebrow">Asset Library</p><h2>Reusable Signal Intelligence</h2></div>
+          <input id="assetLibrarySearch" class="inline-search" placeholder="Search labels, entities, tags..." />
         </div>
-        <div id="listeningLibrary" class="list"></div>
+        <div id="assetLibrary" class="list"></div>
       </div>
     </section>
 

@@ -4,8 +4,8 @@ const esc = v => String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").
 const tagsFrom = s => String(s||"").split(/[#,]/).map(x=>x.trim().toLowerCase()).filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i);
 let lastDraft = null;
 let lastStockIntel = null;
-let currentListeningProject = null;
-let currentListeningExtractionDraft = null;
+let currentAssetProject = null;
+let currentAssetBreakdownDraft = null;
 const INNBANK_QUESTIONS = [
   "What value is being created?",
   "Where is money flowing?",
@@ -95,7 +95,8 @@ function renderPlaneCards(targetId, items, domainCounts, actionCounts){
   el.innerHTML = items.map(item => {
     const signals = sumDomains(domainCounts, item.domains);
     const actions = sumDomains(actionCounts, item.domains);
-    return `<div class="item plane-card">
+    const encoded = encodeURIComponent(item.domains.join("|"));
+    return `<div class="item plane-card clickable-plane" onclick="openDataPlane('${esc(encoded)}','${esc(item.name)}')">
       <div class="plane-head">
         <div>
           <h3>${esc(item.name)}</h3>
@@ -107,8 +108,31 @@ function renderPlaneCards(targetId, items, domainCounts, actionCounts){
         ${innbankMetric(signals, "signals")}
         ${innbankMetric(actions, "active routes")}
       </div>
+      <div class="buttons compact"><button class="ghost small" onclick="event.stopPropagation(); openDataPlane('${esc(encoded)}','${esc(item.name)}')">View Signals + Routes</button></div>
       </div>`;
   }).join("");
+}
+async function openDataPlane(encodedDomains, name){
+  const domains = decodeURIComponent(encodedDomains).split("|").filter(Boolean);
+  $("dataPlaneTitle").textContent = name;
+  const entryResults = await Promise.all(domains.map(domain => api(`/entries?domain=${encodeURIComponent(domain)}&limit=8`)));
+  const actionResults = await Promise.all(domains.map(domain => api(`/actions?status=open&domain=${encodeURIComponent(domain)}&limit=8`)));
+  const entries = entryResults.flatMap(r => r.entries || []).slice(0,12);
+  const actions = actionResults.flatMap(r => r.actions || []).slice(0,12);
+  const signalHTML = entries.length ? entries.map(e=>`<div class="item">
+    <h3>${esc(e.title || e.signal || e.id)}</h3>
+    <div class="meta"><span class="tag">${esc(e.domain || "")}</span><span class="tag">${esc(e.signal_role || "")}</span><span class="tag">${esc(e.actionability || "")}</span></div>
+    <p class="muted">${esc(e.signal || e.interpretation || e.raw_input || "").slice(0,220)}</p>
+    <div class="buttons compact"><button class="ghost small" onclick="openSourceEntry('${esc(e.id)}')">Open Source</button></div>
+  </div>`).join("") : `<div class="item"><h3>No signals</h3><p class="muted">No recent signals found for ${esc(domains.join(", "))}.</p></div>`;
+  const routeHTML = actions.length ? actions.map(a=>`<div class="item action-card">
+    <h3>${esc(a.action_title)}</h3>
+    <div class="meta"><span class="tag">${esc(a.priority || "")}</span><span class="tag">${esc(a.status || "")}</span></div>
+    <p class="muted">${esc(a.execution_card?.why_it_matters || a.why || "")}</p>
+    <div class="buttons compact"><button class="ghost small" onclick="openSourceEntry('${esc(a.entry_id)}')">Open Source</button><button class="ghost small" onclick="switchTab('actions')">Go To Actions</button></div>
+  </div>`).join("") : `<div class="item"><h3>No open routes</h3><p class="muted">No open actions for ${esc(domains.join(", "))}.</p></div>`;
+  $("dataPlaneDrilldown").innerHTML = `<div class="grid two"><div><div class="item"><h3>Signals</h3><p class="muted">${esc(entries.length)} recent signal(s)</p></div>${signalHTML}</div><div><div class="item"><h3>Routes</h3><p class="muted">${esc(actions.length)} open route(s)</p></div>${routeHTML}</div></div>`;
+  $("dataPlaneDrilldown").scrollIntoView({behavior:"smooth", block:"start"});
 }
 function renderImportPlanes(imports){
   const el = $("importPlanes");
@@ -230,7 +254,7 @@ function switchTab(tab){
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
   document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active", p.id===tab));
   if(tab==="command") loadCommand();
-  if(tab==="listening") loadListeningLab();
+  if(tab==="asset") loadAssetLab();
   if(tab==="queue") loadQueue();
   if(tab==="stock") loadStockIntel();
   if(tab==="memory") loadMemory();
@@ -441,22 +465,32 @@ async function updateQueueBadge(count){
 }
 function actionHTML(a){
   const card = a.execution_card || {};
+  const sourceContext = a.source_context || {};
   const steps = (card.exact_actions || []).map(s=>`<li>${esc(s)}</li>`).join("");
   const why = meaningfulWhy(card.why_it_matters || a.why || "");
   const track = meaningfulMetricText(card.track || a.track_metric || "");
   const doneBtn = a.status !== "done" ? `<button class="ghost small" onclick="markDone('${esc(a.id)}')">Mark Done</button>` : "";
   const recatBtn = `<button class="ghost small" onclick="extractPatternFromAction('${esc(a.id)}','${esc(a.entry_id)}')">Recategorize</button>`;
   const abortBtn = a.status !== "cancelled" ? `<button class="ghost small danger-btn" onclick="abortAction('${esc(a.id)}')">Abort</button>` : "";
+  const sourceBtn = a.entry_id ? `<button class="ghost small" onclick="openSourceEntry('${esc(a.entry_id)}')">${esc(card.source || a.source_title || a.entry_id)}</button>` : esc(card.source || a.source_title || "");
+  const similar = sourceContext.similar_signal_count || 0;
+  const similarList = (sourceContext.similar_signals || []).slice(0,3).map(s=>esc(s.title || s.signal || s.id)).join(" • ");
   return `<div class="item action-card">
     <h3>${esc(card.action_name || a.action_title)}</h3>
     <div class="meta"><span class="tag">${esc(card.card_type || "Action Card")}</span><span class="tag">${esc(a.priority)}</span><span class="tag">${esc(a.status)}</span>${a.due_date?`<span class="tag">due ${esc(a.due_date)}</span>`:""}</div>
-    <div class="kv"><b>Source</b><span>${esc(card.source || a.source_title || a.entry_id)}</span></div>
+    <div class="kv"><b>Source</b><span>${sourceBtn}</span></div>
+    <div class="kv"><b>Action Context</b><span>${esc(sourceContext.context_prompt || `This action has ${similar} similar signal(s) available for deeper recontextualization.`)}${similarList ? `<br><span class="muted">${similarList}</span>` : ""}</span></div>
     ${kvHTML("Why it matters", why)}
     <div class="kv"><b>Exact actions</b><span><ol class="steps">${steps}</ol></span></div>
     ${kvHTML("Track", track)}
     <div class="kv"><b>Abort rule</b><span>${esc(card.abort_prompt || "Abort if the action no longer changes a decision or result.")}</span></div>
     <div class="buttons">${doneBtn}${recatBtn}${abortBtn}</div>
   </div>`;
+}
+function openSourceEntry(entryId){
+  switchTab("memory");
+  if($("searchInput")) $("searchInput").value = entryId;
+  loadMemory();
 }
 function dormantEntryHTML(e){
   return `<div class="item">
@@ -662,66 +696,66 @@ async function pullMemory(){
   toast(`Pulled ${quick.length + big.length} action signals`);
 }
 
-function sectionMapHTML(sections){
+function breakdownMapHTML(sections){
   const rows = sections || [];
   return rows.length ? rows.map(s=>`<div class="item mini-item">
     <h3>${esc(s.section || "Section")}</h3>
     <p class="muted">${esc(s.system_read || "")}</p>
     ${kvHTML("Trackable Use", s.trackable_use || "")}
-  </div>`).join("") : `<div class="item"><h3>No section map</h3><p class="muted">Continue extraction to generate a section map.</p></div>`;
+  </div>`).join("") : `<div class="item"><h3>No breakdown map</h3><p class="muted">Continue breakdown to generate a clear map.</p></div>`;
 }
-function glossaryHTML(items){
+function keyTermsHTML(items){
   const rows = items || [];
-  return rows.length ? rows.map(g=>`<div class="kv compact-kv"><b>${esc(g.term || "")}</b><span>${esc(g.meaning || "")}</span></div>`).join("") : `<p class="muted">No glossary terms yet.</p>`;
+  return rows.length ? rows.map(g=>`<div class="kv compact-kv"><b>${esc(g.term || "")}</b><span>${esc(g.meaning || "")}</span></div>`).join("") : `<p class="muted">No key terms yet.</p>`;
 }
-function listeningProjectHTML(p){
-  return `<div class="item listening-project-card">
+function assetProjectHTML(p){
+  return `<div class="item asset-project-card">
     <h3>${esc(p.title)}</h3>
     <div class="meta">
       ${p.artist ? `<span class="tag">${esc(p.artist)}</span>` : ""}
-      <span class="tag">${esc(p.extraction_count || 0)} extractions</span>
+      <span class="tag">${esc(p.extraction_count || 0)} breakdowns</span>
       <span class="tag">${esc(p.status || "active")}</span>
     </div>
     <p class="muted">${esc((p.notes || p.source_url || "No notes yet").slice(0,180))}</p>
     <div class="buttons compact">
-      <button class="primary small" onclick="openListeningProject('${esc(p.id)}')">Open Project</button>
-      <button class="ghost small danger-btn" onclick="deleteListeningProject('${esc(p.id)}')">Delete</button>
+      <button class="primary small" onclick="openAssetProject('${esc(p.id)}')">Open Asset</button>
+      <button class="ghost small danger-btn" onclick="deleteAssetProject('${esc(p.id)}')">Delete</button>
     </div>
   </div>`;
 }
-function listeningExtractionDraftHTML(extraction, saved=false){
-  if(!extraction) return `<div class="item"><h3>No extraction yet</h3><p class="muted">Open a project and press Continue Extraction.</p></div>`;
+function assetBreakdownDraftHTML(extraction, saved=false){
+  if(!extraction) return `<div class="item"><h3>No breakdown yet</h3><p class="muted">Open an asset and press Break Down Signal.</p></div>`;
   return `<div class="item extraction-card">
     <div class="card-head">
       <div>
-        <p class="eyebrow">${saved ? "Saved Extraction" : "System Breakdown Draft"}</p>
-        <h3>${esc(extraction.label || "Song breakdown")}</h3>
+        <p class="eyebrow">${saved ? "Saved Asset" : "System Breakdown Draft"}</p>
+        <h3>${esc(extraction.label || "Signal breakdown")}</h3>
       </div>
-      <span class="pill">${esc(extraction.extraction_type || "song_breakdown")}</span>
+      <span class="pill">${esc(extraction.extraction_type || "signal_breakdown")}</span>
     </div>
     ${saved
       ? kvHTML("User Label", extraction.label || "")
-      : `<label>User Label<input id="listeningDraftLabel" value="${esc(extraction.label || "")}" placeholder="Label for later reuse: hook map, sync texture, groove idea..." /></label>`}
+      : `<label>User Label<input id="assetDraftLabel" value="${esc(extraction.label || "")}" placeholder="Label for later reuse: cash quality signal, SOP risk, product demand pattern..." /></label>`}
     ${kvHTML("Breakdown", extraction.breakdown || "")}
     <div class="grid two lab-breakdown-grid">
       <div>
-        <h3>Section Map</h3>
-        <div class="list">${sectionMapHTML(extraction.section_map || [])}</div>
+        <h3>Breakdown Map</h3>
+        <div class="list">${breakdownMapHTML(extraction.breakdown_map || extraction.section_map || [])}</div>
       </div>
       <div>
-        <h3>Glossary</h3>
-        ${glossaryHTML(extraction.glossary || [])}
+        <h3>Key Terms</h3>
+        ${keyTermsHTML(extraction.key_terms || extraction.glossary || [])}
       </div>
     </div>
-    ${kvHTML("Sound Example", extraction.sound_example || "")}
+    ${kvHTML("Concrete Example", extraction.concrete_example || extraction.sound_example || "")}
     ${kvHTML("Reuse Context", extraction.reuse_context || "")}
     <div class="meta">${(extraction.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
     ${!saved ? `<div class="buttons">
-      <button class="primary small" onclick="saveListeningExtraction()">Save Extraction</button>
+      <button class="primary small" onclick="saveAssetBreakdown()">Save As Asset</button>
     </div>` : ""}
   </div>`;
 }
-function listeningLibraryHTML(e){
+function assetLibraryHTML(e){
   return `<div class="item extraction-library-card">
     <h3>${esc(e.label || "Unlabeled extraction")}</h3>
     <div class="meta">
@@ -730,101 +764,102 @@ function listeningLibraryHTML(e){
       ${(e.tags||[]).slice(0,5).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}
     </div>
     ${kvHTML("Breakdown", e.breakdown || "")}
-    ${kvHTML("Sound Example", e.sound_example || "")}
+    ${kvHTML("Concrete Example", e.concrete_example || e.sound_example || "")}
     ${kvHTML("Reuse", e.reuse_context || "")}
-    <label>Label For Later Use<input value="${esc(e.label || "")}" onchange="updateListeningExtractionLabel('${esc(e.id)}', this.value)" /></label>
+    <label>Label For Later Use<input value="${esc(e.label || "")}" onchange="updateAssetBreakdownLabel('${esc(e.id)}', this.value)" /></label>
   </div>`;
 }
-async function loadListeningLab(){
+async function loadAssetLab(){
   const [projects, library] = await Promise.all([
-    api("/listening/projects"),
-    api(`/listening/library?q=${encodeURIComponent($("listeningLibrarySearch")?.value || "")}`),
+    api("/assets/projects"),
+    api(`/assets/library?q=${encodeURIComponent($("assetLibrarySearch")?.value || "")}`),
   ]);
-  $("listeningProjects").innerHTML = (projects.projects || []).length
-    ? projects.projects.map(listeningProjectHTML).join("")
-    : `<div class="item"><h3>No projects yet</h3><p class="muted">Create a Listening Lab project from song notes, a reference URL, or arrangement observations.</p></div>`;
-  $("listeningLibrary").innerHTML = (library.extractions || []).length
-    ? library.extractions.map(listeningLibraryHTML).join("")
-    : `<div class="item"><h3>Library empty</h3><p class="muted">Saved extractions appear here with labels for later reuse.</p></div>`;
-  if(!currentListeningProject){
-    $("openListeningTitle").textContent = "No Project Open";
-    $("openListeningProject").innerHTML = `<div class="item"><h3>Open a project</h3><p class="muted">Open Project loads the workspace where the system can continue extracting and save breakdowns.</p></div>`;
+  $("assetProjects").innerHTML = (projects.projects || []).length
+    ? projects.projects.map(assetProjectHTML).join("")
+    : `<div class="item"><h3>No assets yet</h3><p class="muted">Create an Asset Lab signal from any note, trend, article, issue, idea, or observation.</p></div>`;
+  $("assetLibrary").innerHTML = (library.extractions || []).length
+    ? library.extractions.map(assetLibraryHTML).join("")
+    : `<div class="item"><h3>Library empty</h3><p class="muted">Saved breakdowns appear here with labels for later reuse.</p></div>`;
+  if(!currentAssetProject){
+    $("openAssetTitle").textContent = "No Asset Open";
+    $("openAssetProject").innerHTML = `<div class="item"><h3>Open an asset</h3><p class="muted">Open Asset loads the workspace where the system can keep clarifying and save breakdowns.</p></div>`;
   }
 }
-async function createListeningProject(){
+async function createAssetProject(){
   const payload = {
-    title: $("listeningTitle").value.trim(),
-    artist: $("listeningArtist").value.trim(),
-    source_url: $("listeningUrl").value.trim(),
-    notes: $("listeningNotes").value.trim(),
+    title: $("assetTitle").value.trim(),
+    entity: $("assetEntity").value.trim(),
+    domain: $("assetDomain").value,
+    source_url: $("assetUrl").value.trim(),
+    notes: $("assetNotes").value.trim(),
   };
   if(!payload.title){ toast("Add a project title"); return; }
-  const res = await api("/listening/projects", {method:"POST", body:JSON.stringify(payload)});
-  toast("Listening project created");
-  $("listeningTitle").value = "";
-  $("listeningArtist").value = "";
-  $("listeningUrl").value = "";
-  $("listeningNotes").value = "";
-  await loadListeningLab();
-  await openListeningProject(res.project.id);
+  const res = await api("/assets/projects", {method:"POST", body:JSON.stringify(payload)});
+  toast("Asset created");
+  $("assetTitle").value = "";
+  $("assetEntity").value = "";
+  $("assetUrl").value = "";
+  $("assetNotes").value = "";
+  await loadAssetLab();
+  await openAssetProject(res.project.id);
 }
-async function openListeningProject(id){
-  const res = await api(`/listening/projects/${encodeURIComponent(id)}`);
-  currentListeningProject = res.project;
-  currentListeningExtractionDraft = null;
-  $("openListeningTitle").textContent = currentListeningProject.title;
-  const saved = (res.extractions || []).map(e=>listeningExtractionDraftHTML(e, true)).join("");
-  $("openListeningProject").innerHTML = `<div class="item">
-    <h3>${esc(currentListeningProject.title)}</h3>
+async function openAssetProject(id){
+  const res = await api(`/assets/projects/${encodeURIComponent(id)}`);
+  currentAssetProject = res.project;
+  currentAssetBreakdownDraft = null;
+  $("openAssetTitle").textContent = currentAssetProject.title;
+  const saved = (res.extractions || []).map(e=>assetBreakdownDraftHTML(e, true)).join("");
+  $("openAssetProject").innerHTML = `<div class="item">
+    <h3>${esc(currentAssetProject.title)}</h3>
     <div class="meta">
-      ${currentListeningProject.artist ? `<span class="tag">${esc(currentListeningProject.artist)}</span>` : ""}
-      ${currentListeningProject.source_url ? `<span class="tag">source attached</span>` : ""}
+      ${currentAssetProject.artist ? `<span class="tag">${esc(currentAssetProject.artist)}</span>` : ""}
+      ${currentAssetProject.source_url ? `<span class="tag">source attached</span>` : ""}
       <span class="tag">${esc(res.extractions.length)} saved</span>
     </div>
-    <p class="muted">${esc(currentListeningProject.notes || "No project notes yet.")}</p>
-    <label>Continue Extraction Prompt<textarea id="listeningExtractionPrompt" rows="3" placeholder="Ask the system what to break down next: section map, glossary, sound example, sync fit, hook map, groove analysis..."></textarea></label>
+    <p class="muted">${esc(currentAssetProject.notes || "No project notes yet.")}</p>
+    <label>Breakdown Prompt<textarea id="assetBreakdownPrompt" rows="3" placeholder="Ask the system what to clarify: mechanism, metric, risk, opportunity, first step, trigger, related memories..."></textarea></label>
     <div class="buttons">
-      <button class="primary small" onclick="continueListeningExtraction()">Continue Extraction</button>
-      <button class="ghost small" onclick="loadListeningLab()">Close Project</button>
+      <button class="primary small" onclick="continueAssetBreakdown()">Break Down Signal</button>
+      <button class="ghost small" onclick="loadAssetLab()">Close Project</button>
     </div>
   </div>
-  <div id="listeningDraftHost">${listeningExtractionDraftHTML(null)}</div>
+  <div id="assetDraftHost">${assetBreakdownDraftHTML(null)}</div>
   ${saved ? `<div class="item"><h3>Saved Project Extractions</h3><p class="muted">These are already in the library and memory ledger.</p></div>${saved}` : ""}`;
 }
-async function continueListeningExtraction(){
-  if(!currentListeningProject){ toast("Open a project first"); return; }
-  const prompt = document.getElementById("listeningExtractionPrompt")?.value || "";
-  const res = await api(`/listening/projects/${encodeURIComponent(currentListeningProject.id)}/breakdown`, {
+async function continueAssetBreakdown(){
+  if(!currentAssetProject){ toast("Open a project first"); return; }
+  const prompt = document.getElementById("assetBreakdownPrompt")?.value || "";
+  const res = await api(`/assets/projects/${encodeURIComponent(currentAssetProject.id)}/breakdown`, {
     method:"POST",
-    body:JSON.stringify({prompt, label:`${currentListeningProject.title} extraction`})
+    body:JSON.stringify({prompt, label:`${currentAssetProject.title} extraction`})
   });
-  currentListeningExtractionDraft = res.draft;
-  document.getElementById("listeningDraftHost").innerHTML = listeningExtractionDraftHTML(currentListeningExtractionDraft);
+  currentAssetBreakdownDraft = res.draft;
+  document.getElementById("assetDraftHost").innerHTML = assetBreakdownDraftHTML(currentAssetBreakdownDraft);
   toast("System breakdown draft generated");
 }
-async function saveListeningExtraction(){
-  if(!currentListeningExtractionDraft){ toast("No extraction draft"); return; }
-  const label = document.getElementById("listeningDraftLabel")?.value.trim();
-  const res = await api(`/listening/projects/${encodeURIComponent(currentListeningProject.id)}/extractions`, {
+async function saveAssetBreakdown(){
+  if(!currentAssetBreakdownDraft){ toast("No extraction draft"); return; }
+  const label = document.getElementById("assetDraftLabel")?.value.trim();
+  const res = await api(`/assets/projects/${encodeURIComponent(currentAssetProject.id)}/extractions`, {
     method:"POST",
-    body:JSON.stringify({...currentListeningExtractionDraft, label: label || currentListeningExtractionDraft.label})
+    body:JSON.stringify({...currentAssetBreakdownDraft, label: label || currentAssetBreakdownDraft.label})
   });
-  currentListeningExtractionDraft = res.extraction;
-  toast("Extraction saved to library");
-  await openListeningProject(currentListeningProject.id);
-  await loadListeningLab();
+  currentAssetBreakdownDraft = res.extraction;
+  toast("Asset saved to library");
+  await openAssetProject(currentAssetProject.id);
+  await loadAssetLab();
 }
-async function updateListeningExtractionLabel(id, label){
-  await api(`/listening/extractions/${encodeURIComponent(id)}`, {method:"PATCH", body:JSON.stringify({label})});
+async function updateAssetBreakdownLabel(id, label){
+  await api(`/assets/breakdowns/${encodeURIComponent(id)}`, {method:"PATCH", body:JSON.stringify({label})});
   toast("Label updated");
-  await loadListeningLab();
+  await loadAssetLab();
 }
-async function deleteListeningProject(id){
+async function deleteAssetProject(id){
   if(!confirm("Permanently delete this project and all of its extractions?")) return;
-  await api(`/listening/projects/${encodeURIComponent(id)}`, {method:"DELETE"});
-  if(currentListeningProject?.id === id) currentListeningProject = null;
+  await api(`/assets/projects/${encodeURIComponent(id)}`, {method:"DELETE"});
+  if(currentAssetProject?.id === id) currentAssetProject = null;
   toast("Project deleted");
-  await loadListeningLab();
+  await loadAssetLab();
 }
 
 function stockMetricHTML(label, item){
@@ -1069,6 +1104,7 @@ async function loadVersions(){
 }
 async function loadPatterns(){
   const res = await api("/patterns");
+  window.__patternPayloads = {};
   const insights = res.insights || [];
   const engine = res.engine || {};
   const engineCards = engine.cards || [];
@@ -1077,29 +1113,47 @@ async function loadPatterns(){
     const firstStep = meaningfulStepText(c.first_step || "");
     const metric = meaningfulMetricText(c.tracking_metric || "");
     return `<div class="item pattern-engine-card ${esc(c.severity)}">
-    <h3>${esc(c.name)}</h3>
+    <h3>${esc(c.name || c.signal || "Pattern signal")}</h3>
     <div class="meta"><span class="tag">${esc(c.type)}</span><span class="tag">${esc(c.severity)}</span><span class="tag">score ${esc(c.score)}</span></div>
     <div class="kv"><b>Interpretation</b><span>${esc(c.interpretation)}</span></div>
     ${kvHTML("Action", action)}
     ${kvHTML("First Step", firstStep)}
     ${kvHTML("Metric", metric)}
     <div class="kv"><b>Trigger</b><span>${esc(c.resurfacing_trigger)}</span></div>
+    <div class="buttons compact">${patternActionButton({pattern:c.name, type:c.type, action:c.action, first_step:c.first_step, tracking_metric:c.tracking_metric, why_it_matters:c.interpretation, domain:c.evidence?.domain || ""})}</div>
   </div>`;
   }).join("");
   const insightHTML = insights.map(i=>{
     const action = meaningfulActionText(i.action || "");
     const track = meaningfulMetricText(i.track || "");
     return `<div class="item insight-card">
-    <h3>${esc(i.name)}</h3>
+    <h3>${esc(i.name || "Pattern signal")}</h3>
     <div class="meta"><span class="tag">${esc(i.type)}</span></div>
     <div class="kv"><b>Insight</b><span>${esc(i.why_it_matters)}</span></div>
     ${kvHTML("Action", action)}
     ${kvHTML("Track", track)}
+    <div class="buttons compact">${patternActionButton({pattern:i.name, type:i.type, action:i.action, tracking_metric:i.track, why_it_matters:i.why_it_matters, domain:i.evidence?.domain || ""})}</div>
   </div>`;
   }).join("");
-  const patternHTML = res.patterns.length ? res.patterns.map(p=>`<div class="item"><h3>${esc(p.pattern)}</h3><div class="meta"><span class="tag">${esc(p.entry_count)} reps</span><span class="tag">${esc(p.confidence)}</span>${(p.domains||[]).map(d=>`<span class="tag">${esc(d)}</span>`).join("")}</div></div>`).join("") : `<div class="item"><h3>No patterns yet</h3><p class="muted">Patterns build as repeated lessons enter memory.</p></div>`;
+  const patternHTML = res.patterns.length ? res.patterns.map(p=>`<div class="item"><h3>${esc(p.pattern)}</h3><div class="meta"><span class="tag">${esc(p.entry_count)} reps</span><span class="tag">${esc(p.confidence)}</span>${(p.domains||[]).map(d=>`<span class="tag">${esc(d)}</span>`).join("")}</div><div class="buttons compact">${patternActionButton({pattern:p.pattern, type:"Stored Pattern", action:"Turn this repeated pattern into a concrete next action.", tracking_metric:"Future validations, contradictions, and actions produced by this pattern.", domain:(p.domains||[])[0] || ""})}</div></div>`).join("") : `<div class="item"><h3>No patterns yet</h3><p class="muted">Patterns build as repeated lessons enter memory.</p></div>`;
   const summary = engine.summary || {};
-  $("patternsList").innerHTML = `<div class="item"><h3>Cross-Database Insights</h3><p class="muted">Synthesized from repeated patterns, action backlog, risk clusters, domains, and signal mix.</p></div>${insightHTML}<div class="item"><h3>Pattern Engine Cards</h3><p class="muted">Scanned ${esc(summary.entries_scanned || 0)} entries and ${esc(summary.actions_scanned || 0)} actions. Warnings: ${esc(summary.warnings || 0)}. Cautions: ${esc(summary.cautions || 0)}.</p></div>${engineHTML}<div class="item"><h3>Pattern Records</h3><p class="muted">Underlying repeated lessons stored in the database.</p></div>${patternHTML}`;
+  $("patternsList").innerHTML = `<div class="item"><h3>Pattern Signals</h3><p class="muted">Headlines below are the actual repeated signal or pattern. Use Recontextualize To Action when the pattern should become execution work.</p></div>${insightHTML}<div class="item"><h3>Pattern Engine Cards</h3><p class="muted">Scanned ${esc(summary.entries_scanned || 0)} entries and ${esc(summary.actions_scanned || 0)} actions. Warnings: ${esc(summary.warnings || 0)}. Cautions: ${esc(summary.cautions || 0)}.</p></div>${engineHTML}<div class="item"><h3>Pattern Records</h3><p class="muted">Underlying repeated lessons stored in the database.</p></div>${patternHTML}`;
+}
+function patternActionButton(payload){
+  const id = "pattern_" + Math.random().toString(36).slice(2);
+  window.__patternPayloads = window.__patternPayloads || {};
+  window.__patternPayloads[id] = payload;
+  return `<button class="primary small" onclick="recontextualizePatternToAction('${id}')">Recontextualize To Action</button>`;
+}
+async function recontextualizePatternToAction(id){
+  const payload = window.__patternPayloads?.[id];
+  if(!payload){ toast("Pattern payload expired"); return; }
+  const firstStep = prompt("First executable step for this action?", payload.first_step || "Review related signals and choose the next move.");
+  if(!firstStep) return;
+  const res = await api("/patterns/action", {method:"POST", body:JSON.stringify({...payload, first_step:firstStep})});
+  toast("Pattern sent to action queue");
+  switchTab("actions");
+  await loadActions();
 }
 async function runPatternEngine(){
   const res = await api("/pattern-engine/scan", {method:"POST", body:JSON.stringify({save:true, scan_type:"manual"})});
@@ -1137,9 +1191,9 @@ $("refreshChangelog").addEventListener("click", loadChangelog);
 $("refreshQueue").addEventListener("click", loadQueue);
 $("analyzeStockBtn").addEventListener("click", analyzeStock);
 $("saveStockIntel").addEventListener("click", saveStockIntel);
-$("refreshListening").addEventListener("click", loadListeningLab);
-$("createListeningProject").addEventListener("click", createListeningProject);
-$("listeningLibrarySearch").addEventListener("input", ()=>{ clearTimeout(window.__listeningSearchTimer); window.__listeningSearchTimer=setTimeout(loadListeningLab,250); });
+$("refreshAssetLab").addEventListener("click", loadAssetLab);
+$("createAssetProject").addEventListener("click", createAssetProject);
+$("assetLibrarySearch").addEventListener("input", ()=>{ clearTimeout(window.__assetSearchTimer); window.__assetSearchTimer=setTimeout(loadAssetLab,250); });
 $("searchInput").addEventListener("input", ()=>{ clearTimeout(window.__searchTimer); window.__searchTimer=setTimeout(loadMemory,250); });
 $("filterDomain").addEventListener("change", loadMemory);
 $("clearBtn").addEventListener("click", ()=>{ document.querySelectorAll("textarea,input").forEach(el=>{ if(!["searchInput"].includes(el.id)) el.value=""; }); $("sourceTypeInput").value=""; $("draftPill").textContent="empty"; $("draftPill").className="pill muted"; $("saveOutput").innerHTML=""; });

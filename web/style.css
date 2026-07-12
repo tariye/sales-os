@@ -243,9 +243,11 @@ input:focus,textarea:focus,select:focus{
 .pattern-engine-card.warning{border-left:4px solid var(--bad)}
 .pattern-engine-card.caution{border-left:4px solid var(--warn)}
 .pattern-engine-card.advisory{border-left:4px solid var(--accent)}
-.listening-project-card{border-left:4px solid var(--accent)}
+.asset-project-card{border-left:4px solid var(--accent)}
 .extraction-card{border-left:4px solid var(--warn)}
 .extraction-library-card{border-left:4px solid var(--good)}
+.clickable-plane{cursor:pointer}
+.clickable-plane:hover{border-color:rgba(24,79,67,.34);transform:translateY(-1px)}
 .mini-item{box-shadow:none;background:rgba(255,253,248,.72)}
 .compact-kv{grid-template-columns:110px 1fr}
 .inline-search{max-width:320px;margin-top:0}

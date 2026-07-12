@@ -1,0 +1,20 @@
+{
+  "version": "v0.75-asset-lab-cockpit-links",
+  "generated_at": "2026-07-12T05:16:46+00:00",
+  "principle": "No feature ships until it survives the live user loop.",
+  "features_verified": [
+    "Listening Lab has been rebuilt as Asset Lab in the active UI.",
+    "Asset Lab creates a signal asset with domain, entity, source, and raw signal.",
+    "Break Down Signal returns a map, key terms, concrete example, reuse context, and action-ready breakdown.",
+    "Saved Asset enters the asset library and linked memory ledger.",
+    "Command Center data planes expose clickable signal/route drilldowns.",
+    "Patterns headline the actual repeated signal/pattern.",
+    "Pattern cards can be recontextualized into action queue items.",
+    "Actions expose clickable source memory and similar-signal context."
+  ],
+  "loop_check_summary": {
+    "passed": 8,
+    "failed": 0,
+    "total": 8
+  }
+}

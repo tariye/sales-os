@@ -10,7 +10,7 @@ The script uses the live local site the way a user would:
 - checks Command Center resolver controls
 - pulls actionable memory
 - runs Stock Intel
-- runs Listening Lab project/extraction/library/delete flow
+- runs Asset Lab project/extraction/library/delete flow
 - creates a temporary memory entry
 - pulls that entry back contextually
 - logs a result
@@ -103,6 +103,18 @@ def check_command_center(api: ApiClient) -> dict:
     )
 
 
+def check_actions_context(api: ApiClient) -> dict:
+    actions = api.get("/api/actions?status=open&domain=Business&limit=8").get("actions") or []
+    # Empty Business action queues are allowed; the endpoint and shape still need to work.
+    has_context = not actions or all("source_context" in action for action in actions)
+    return assert_condition(
+        has_context,
+        "actions_source_context",
+        "Actions endpoint supports domain filtering and source context.",
+        {"actions_checked": len(actions)},
+    )
+
+
 def check_pull(api: ApiClient) -> dict:
     data = api.post("/api/pull", {"query": "sales", "domain": "Business"})
     cards = (data.get("quick_actions") or []) + (data.get("big_picture_actions") or [])
@@ -117,6 +129,42 @@ def check_pull(api: ApiClient) -> dict:
             "top_metric": top.get("tracking_metric"),
         },
     )
+
+
+def check_pattern_to_action(api: ApiClient) -> dict:
+    stamp = str(int(time.time()))
+    entry_id = None
+    try:
+        created = api.post("/api/patterns/action", {
+            "pattern": f"Loop QA pattern action {stamp}",
+            "type": "Loop Test Pattern",
+            "domain": "AI Project",
+            "action": "Convert the repeated loop QA pattern into a tracked action.",
+            "first_step": "Verify the pattern-to-action endpoint creates an open returned action.",
+            "tracking_metric": "Action exists, source context exists, cleanup succeeds.",
+        })
+        entry_id = created.get("entry_id")
+        action = created.get("action") or {}
+        if not (entry_id and action.get("id")):
+            raise AssertionError(json.dumps(fail_check(
+                "pattern_to_action",
+                "Pattern-to-action did not create an entry and action.",
+                created,
+            ), ensure_ascii=False))
+        actions = api.get("/api/actions?status=open&domain=AI%20Project&limit=20").get("actions") or []
+        found = next((item for item in actions if item.get("entry_id") == entry_id), None)
+        return assert_condition(
+            bool(found and found.get("source_context")),
+            "pattern_to_action",
+            "Pattern was recontextualized into an action queue item with source context.",
+            {"entry_id": entry_id, "action_id": action.get("id")},
+        )
+    finally:
+        if entry_id:
+            try:
+                api.delete(f"/api/entries/{urllib.parse.quote(entry_id)}")
+            except Exception:
+                pass
 
 
 def check_stock(api: ApiClient, symbol: str) -> dict:
@@ -138,64 +186,65 @@ def check_stock(api: ApiClient, symbol: str) -> dict:
     )
 
 
-def check_listening_lab(api: ApiClient) -> dict:
+def check_asset_lab(api: ApiClient) -> dict:
     stamp = str(int(time.time()))
     project_id = None
     linked_entry_id = None
     try:
-        created = api.post("/api/listening/projects", {
-            "title": f"Loop QA Listening Project {stamp}",
-            "artist": "Loop QA",
-            "source_url": "https://example.com/listening-loop",
-            "notes": "Intro sample, verse pocket, hook bassline and vocal chant, bridge release, sync-ready sound example.",
+        created = api.post("/api/assets/projects", {
+            "title": f"Loop QA Asset Signal {stamp}",
+            "entity": "Loop QA",
+            "domain": "AI Project",
+            "source_url": "https://example.com/asset-loop",
+            "notes": "Sales signal: repeated customer questions reveal an unclear offer. Track conversion rate, repeated objections, and first action.",
         })
         project = created.get("project") or {}
         project_id = project.get("id")
-        opened = api.get(f"/api/listening/projects/{urllib.parse.quote(project_id)}")
+        opened = api.get(f"/api/assets/projects/{urllib.parse.quote(project_id)}")
         if (opened.get("project") or {}).get("id") != project_id:
             raise AssertionError(json.dumps(fail_check(
-                "listening_lab",
-                "Project was created but could not be opened.",
+                "asset_lab",
+                "Asset was created but could not be opened.",
                 {"project_id": project_id},
             ), ensure_ascii=False))
-        draft = api.post(f"/api/listening/projects/{urllib.parse.quote(project_id)}/breakdown", {
-            "prompt": "Generate a section map, glossary, and sound example for later reuse.",
+        draft = api.post(f"/api/assets/projects/{urllib.parse.quote(project_id)}/breakdown", {
+            "prompt": "Generate a breakdown map, key terms, concrete example, tracking metric, and action path for later reuse.",
             "label": f"Loop QA extraction {stamp}",
         }).get("draft") or {}
-        if not (draft.get("section_map") and draft.get("glossary") and draft.get("sound_example")):
+        if not (draft.get("breakdown_map") and draft.get("key_terms") and draft.get("concrete_example")):
             raise AssertionError(json.dumps(fail_check(
-                "listening_lab",
-                "Breakdown draft missed section map, glossary, or sound example.",
+                "asset_lab",
+                "Breakdown draft missed map, key terms, or concrete example.",
                 {"draft_keys": sorted(draft.keys())},
             ), ensure_ascii=False))
-        saved = api.post(f"/api/listening/projects/{urllib.parse.quote(project_id)}/extractions", {
+        saved = api.post(f"/api/assets/projects/{urllib.parse.quote(project_id)}/extractions", {
             **draft,
             "label": f"Loop QA labeled extraction {stamp}",
         })
         extraction = saved.get("extraction") or {}
         linked_entry_id = saved.get("linked_entry_id")
-        api.patch(f"/api/listening/extractions/{urllib.parse.quote(extraction.get('id'))}", {
+        api.patch(f"/api/assets/breakdowns/{urllib.parse.quote(extraction.get('id'))}", {
             "label": f"Loop QA reusable label {stamp}",
         })
-        library = api.get(f"/api/listening/library?q={urllib.parse.quote('reusable label ' + stamp)}")
+        library = api.get(f"/api/assets/library?q={urllib.parse.quote('reusable label ' + stamp)}")
         found = any(item.get("id") == extraction.get("id") for item in library.get("extractions") or [])
         if not found:
             raise AssertionError(json.dumps(fail_check(
-                "listening_lab",
+                "asset_lab",
                 "Saved extraction did not appear in the searchable library.",
                 {"extraction_id": extraction.get("id"), "matches": len(library.get("extractions") or [])},
             ), ensure_ascii=False))
-        deleted = api.delete(f"/api/listening/projects/{urllib.parse.quote(project_id)}")
+        deleted = api.delete(f"/api/assets/projects/{urllib.parse.quote(project_id)}")
         if deleted.get("linked_entries_deleted") != 1:
             raise AssertionError(json.dumps(fail_check(
-                "listening_lab",
+                "asset_lab",
                 "Project delete did not remove linked memory entries.",
                 deleted,
             ), ensure_ascii=False))
         try:
             api.get(f"/api/entries/{urllib.parse.quote(linked_entry_id)}")
             raise AssertionError(json.dumps(fail_check(
-                "listening_lab",
+                "asset_lab",
                 "Linked memory entry survived project deletion.",
                 {"linked_entry_id": linked_entry_id},
             ), ensure_ascii=False))
@@ -204,14 +253,14 @@ def check_listening_lab(api: ApiClient) -> dict:
                 raise
         project_id = None
         return pass_check(
-            "listening_lab",
-            "Temporary project was opened, broken down, saved to library, labeled, and fully deleted.",
+            "asset_lab",
+            "Temporary asset was opened, broken down, saved to library, labeled, and fully deleted.",
             {"extraction_id": extraction.get("id"), "linked_entry_id": linked_entry_id},
         )
     finally:
         if project_id:
             try:
-                api.delete(f"/api/listening/projects/{urllib.parse.quote(project_id)}")
+                api.delete(f"/api/assets/projects/{urllib.parse.quote(project_id)}")
             except Exception:
                 pass
         if linked_entry_id:
@@ -279,9 +328,11 @@ def run_loop(base_url: str, stock_symbol: str) -> dict:
     for fn in (
         check_health,
         check_command_center,
+        check_actions_context,
         check_pull,
+        check_pattern_to_action,
         lambda client: check_stock(client, stock_symbol),
-        check_listening_lab,
+        check_asset_lab,
         check_memory_loop,
     ):
         try:
