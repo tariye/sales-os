@@ -1,0 +1,55 @@
+{
+  "id": "PROOF-v0.72-command-resolver",
+  "date": "2026-07-11",
+  "version": "v0.72-command-resolver",
+  "commit": "7ff5801",
+  "system": "Info Analyzer OS / Sales OS",
+  "claim": "Command Center moved from passive dashboard callouts to resolver cards that expose next controls, while sales pull metrics were corrected for resale/trending-item decisions.",
+  "changes": [
+    "Added resolver button metadata to cockpit warnings, cautions, and advisories.",
+    "Added frontend cockpit action handlers for actions, queue, dormant detection, pattern scans, pull focus, memory search, memory rewire, and surfaced-card cleanup.",
+    "Added API endpoint to archive open surfaced cards.",
+    "Separated market/resale sales context from CRM pipeline sales context.",
+    "Corrected trending-item metrics to use sell-through, acquisition cost, gross margin, days-to-sale, inventory turns, and result logging.",
+    "Removed automatic contextual-memory rebuild from startup and kept rewiring user-triggered."
+  ],
+  "verification": [
+    {
+      "check": "Python syntax",
+      "command": "python3 -m py_compile server.py",
+      "result": "passed"
+    },
+    {
+      "check": "Frontend element references",
+      "command": "scan web/app.js $() references against web/index.html ids",
+      "result": "passed; no missing refs"
+    },
+    {
+      "check": "Health endpoint",
+      "endpoint": "GET /api/health",
+      "result": "returned v0.72-command-resolver"
+    },
+    {
+      "check": "Command Center resolver buttons",
+      "endpoint": "GET /api/command",
+      "result": "warnings, cautions, and advisories returned button arrays"
+    },
+    {
+      "check": "Sales pull metric",
+      "endpoint": "POST /api/pull",
+      "payload": {
+        "query": "sales",
+        "domain": "Business"
+      },
+      "result": "top card was Sales OS latest trending items; metric used sell-through, acquisition cost, gross margin, days-to-sale, inventory turns, and result logging"
+    },
+    {
+      "check": "Startup performance",
+      "command": "server.init_db() timing check",
+      "result": "completed in about 0.21 seconds after removing automatic contextual rewiring"
+    }
+  ],
+  "user_value": "A user can now see a cockpit warning and press the next operational control immediately, instead of interpreting the warning and manually hunting for the right tab or endpoint.",
+  "next_risk": "Documentation and proof artifacts must be updated every version so implementation remains legible outside the live chat."
+}
+

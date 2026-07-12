@@ -16,9 +16,20 @@ Info Analyzer OS is not a note warehouse. It is a resurfacing engine:
 - keeps raw input attached as evidence
 - adds trackability fields and pull rules
 - resurfaces actionable memory in the Command Center
+- turns cockpit callouts into resolver cards with buttons
 - exposes returned actions, dormant info, and pattern insights
 - supports contextual memory chips and database rewiring
 - runs on a local web UI
+
+## Current build
+
+Current version: `v0.72-command-resolver`
+
+Proof artifacts:
+
+- [CHANGELOG.md](CHANGELOG.md)
+- [ADR 0001: Command Center Resolver](docs/adr/0001-command-center-resolver.md)
+- [v0.72 proof entry](docs/proof/v0.72-command-resolver.json)
 
 ## Run locally
 
@@ -65,6 +76,7 @@ The default `.gitignore` excludes the database, journal files, caches, logs, and
 - `POST /api/entries`
 - `POST /api/pull`
 - `POST /api/context/rewire`
+- `POST /api/surfaced-cards/clear`
 - `GET /api/patterns`
 - `GET /api/export`
 
