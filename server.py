@@ -48,7 +48,7 @@ WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "info_analyzer.db"
 
-APP_VERSION = "v0.71-sales-pull-priority"
+APP_VERSION = "v0.72-command-resolver"
 APP_VERSIONS = [
     {
         "version": "v0.1",
@@ -355,6 +355,17 @@ APP_VERSIONS = [
             "Market snapshot terms like trending, demand, sell-through, margin, and sourcing get explicit priority",
             "Sales cockpit now surfaces the newest actionable trend entry first",
             "Version label makes backend freshness visible after restart",
+        ],
+    },
+    {
+        "version": "v0.72",
+        "name": "Command Resolver",
+        "features": [
+            "Cockpit warnings, cautions, and advisories now carry resolver button metadata",
+            "Command Center can route directly to actions, dormant triage, queue, pattern scan, memory rewire, and surfaced-card cleanup",
+            "Open surfaced memory cards can be bulk archived from the cockpit",
+            "Sales pull cards distinguish market/resale signals from CRM pipeline signals",
+            "Trending-item sales cards track sell-through, acquisition cost, gross margin, days-to-sale, and inventory turns",
         ],
     },
 ]
@@ -1180,7 +1191,9 @@ def init_db() -> None:
                 conn.execute("UPDATE surfaced_cards SET status='archived', updated_at=? WHERE id=?", (_now, row["id"]))
                 continue
             seen_sources.add(source_id)
-        rebuild_contextual_memory(conn)
+        # Full contextual rewiring is intentionally user-triggered from the
+        # Command Center. Running it on every startup can block the server
+        # from binding while the memory graph is recomputed.
         conn.commit()
 
 
@@ -3215,18 +3228,51 @@ def sales_context(entry: dict, query: str = "") -> bool:
     return bool(re.search(r"\bsales?\b|sales pipeline|outreach|follow[- ]?up|crm", blob))
 
 
+def market_sales_context(entry: dict, query: str = "") -> bool:
+    blob = normalize_text(" ".join([
+        query,
+        entry.get("title") or "",
+        entry.get("entity") or "",
+        entry.get("signal") or "",
+        entry.get("returned_action") or "",
+        entry.get("first_step") or "",
+        entry.get("tracking_metric") or "",
+        " ".join(entry.get("tags") or []),
+    ]))
+    return bool(re.search(
+        r"trending|snapshot|sell[- ]?through|gross margin|acquisition cost|sourcing|resale|inventory turn|days[- ]?to[- ]?sale|iphone|galaxy|phone model|market demand",
+        blob,
+    ))
+
+
 def pama_card(entry: dict, query: str, score: int, reasons: list[str], tier: str) -> dict:
     title = clean_action_title(entry)
     is_sales = sales_context(entry, query)
+    is_market_sales = is_sales and market_sales_context(entry, query)
     first_step = entry.get("first_step") or entry.get("next_step") or ""
     tracking_metric = entry.get("tracking_metric") or entry.get("result_to_track") or ""
     feedback = entry.get("feedback_to_capture") or ""
-    if is_sales and weak_execution_text(first_step):
-        first_step = "Create one sales pipeline row with Lead, Stage, Next Follow-Up, Reply Rate, Booked Call, Result, and Review Date."
-    if is_sales and (weak_execution_text(tracking_metric) or not re.search(r"follow|reply|book|conversion|pipeline|stage|lead|crm|sales", normalize_text(tracking_metric))):
-        tracking_metric = "Follow-ups completed, reply rate, booked calls, conversion stage movement, and result logged."
-    if is_sales and weak_execution_text(feedback):
-        feedback = "Log whether the follow-up was sent, whether the prospect replied, next stage, and what changed in the sales process."
+    if is_market_sales:
+        if weak_execution_text(first_step) or re.search(r"pipeline|follow|reply|booked call|crm", normalize_text(first_step)):
+            first_step = "Open the buy sheet and compare acquisition cost, sell-through, gross margin, days-to-sale, and inventory risk for the top sourcing candidates."
+        if (
+            weak_execution_text(tracking_metric)
+            or re.search(r"follow|reply|book|conversion|pipeline|stage|lead|crm", normalize_text(tracking_metric))
+            or not re.search(r"sell[- ]?through|units sold", normalize_text(tracking_metric))
+            or not re.search(r"acquisition|buy cost|cost", normalize_text(tracking_metric))
+            or not re.search(r"gross margin|margin", normalize_text(tracking_metric))
+            or not re.search(r"days[- ]?to[- ]?sale|inventory", normalize_text(tracking_metric))
+        ):
+            tracking_metric = "Sell-through rate, acquisition cost, gross margin, days-to-sale, inventory turns, and result logged."
+        if weak_execution_text(feedback) or re.search(r"prospect|follow|reply|stage|crm", normalize_text(feedback)):
+            feedback = "Log the sourced item, buy cost, expected resale price, actual sale price, days held, gross margin, and whether to repeat the buy."
+    elif is_sales:
+        if weak_execution_text(first_step):
+            first_step = "Create one sales pipeline row with Lead, Stage, Next Follow-Up, Reply Rate, Booked Call, Result, and Review Date."
+        if weak_execution_text(tracking_metric) or not re.search(r"follow|reply|book|conversion|pipeline|stage|lead|crm|sales", normalize_text(tracking_metric)):
+            tracking_metric = "Follow-ups completed, reply rate, booked calls, conversion stage movement, and result logged."
+        if weak_execution_text(feedback):
+            feedback = "Log whether the follow-up was sent, whether the prospect replied, next stage, and what changed in the sales process."
     return {
         "id": "PAMA-" + uuid.uuid5(uuid.NAMESPACE_URL, f"{entry.get('id')}|{query}|{tier}").hex[:12].upper(),
         "entry_id": entry.get("id"),
@@ -3880,6 +3926,22 @@ def get_sales_opportunities() -> dict:
         return {"error": str(e), "opportunities": []}
 
 
+def cockpit_button(label: str, action: str, value: str = "") -> dict:
+    return {"label": label, "action": action, "value": value}
+
+
+def archive_open_surfaced_cards() -> dict:
+    with connect() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM surfaced_cards WHERE status='open'").fetchone()[0]
+        conn.execute(
+            "UPDATE surfaced_cards SET status='archived', updated_at=? WHERE status='open'",
+            (now_iso(),),
+        )
+        audit(conn, "archive_open", "surfaced_cards", None, {"count": count})
+        conn.commit()
+    return {"archived": count}
+
+
 def dashboard() -> dict:
     with connect() as conn:
         one = lambda sql, args=(): conn.execute(sql, args).fetchone()[0]
@@ -3965,26 +4027,125 @@ def dashboard() -> dict:
     cautions = []
     advisories = []
     if weak_translation:
-        warnings.append({"level": "warning", "callout": "Weak translation detected", "action": "Recategorize or delete dormant info.", "count": weak_translation})
+        warnings.append({
+            "level": "warning",
+            "callout": "Weak translation detected",
+            "action": "Recategorize or delete dormant info.",
+            "count": weak_translation,
+            "buttons": [
+                cockpit_button("Detect Gaps", "detect_dormant"),
+                cockpit_button("Rewire Memory", "rewire_memory"),
+            ],
+        })
     if open_actions >= 25:
-        warnings.append({"level": "warning", "callout": "Action backlog saturation", "action": "Close, cancel, or extract patterns before creating more work.", "count": open_actions})
+        warnings.append({
+            "level": "warning",
+            "callout": "Action backlog saturation",
+            "action": "Close, cancel, or extract patterns before creating more work.",
+            "count": open_actions,
+            "buttons": [
+                cockpit_button("Review Actions", "show_actions"),
+                cockpit_button("Detect Bottlenecks", "detect_dormant"),
+                cockpit_button("Extract Patterns", "run_patterns"),
+            ],
+        })
     if stale:
-        warnings.append({"level": "warning", "callout": "Action overdue", "action": "Abort, recategorize, or close with result.", "count": stale})
+        warnings.append({
+            "level": "warning",
+            "callout": "Action overdue",
+            "action": "Abort, recategorize, or close with result.",
+            "count": stale,
+            "buttons": [
+                cockpit_button("Review Actions", "show_actions"),
+                cockpit_button("Detect Stale", "detect_dormant"),
+            ],
+        })
     for item in risk_entries[:3]:
-        warnings.append({"level": "warning", "callout": item.get("signal") or item.get("title"), "action": item.get("returned_action") or "Review risk signal.", "entry_id": item.get("id")})
+        warnings.append({
+            "level": "warning",
+            "callout": item.get("signal") or item.get("title"),
+            "action": item.get("returned_action") or "Review risk signal.",
+            "entry_id": item.get("id"),
+            "buttons": [
+                cockpit_button("Pull Context", "pull_query", item.get("entity") or item.get("title") or ""),
+                cockpit_button("Find In Memory", "show_memory", item.get("id") or ""),
+            ],
+        })
     if surfaced_open:
-        cautions.append({"level": "caution", "callout": "Memory pull cards open", "action": "Review surfaced context before adding new work.", "count": surfaced_open})
+        cautions.append({
+            "level": "caution",
+            "callout": "Memory pull cards open",
+            "action": "Review surfaced context before adding new work.",
+            "count": surfaced_open,
+            "buttons": [
+                cockpit_button("Route Query", "focus_pull"),
+                cockpit_button("Clear Cards", "clear_surfaced"),
+            ],
+        })
     if surfaced_open >= 40:
-        cautions.append({"level": "caution", "callout": "Surfaced card backlog", "action": "Let newer context replace old cards; keep only cards that still change a decision.", "count": surfaced_open})
+        cautions.append({
+            "level": "caution",
+            "callout": "Surfaced card backlog",
+            "action": "Let newer context replace old cards; keep only cards that still change a decision.",
+            "count": surfaced_open,
+            "buttons": [
+                cockpit_button("Clear Cards", "clear_surfaced"),
+                cockpit_button("Run Pattern Scan", "run_patterns"),
+            ],
+        })
     if result_backlog >= 10:
-        cautions.append({"level": "caution", "callout": "Result backlog", "action": "Log proof on completed work so the loop can learn.", "count": result_backlog})
+        cautions.append({
+            "level": "caution",
+            "callout": "Result backlog",
+            "action": "Log proof on completed work so the loop can learn.",
+            "count": result_backlog,
+            "buttons": [
+                cockpit_button("Log Results", "show_actions"),
+                cockpit_button("Detect Bottlenecks", "detect_dormant"),
+            ],
+        })
     for item in due_reviews[:3]:
-        cautions.append({"level": "caution", "callout": item.get("title") or item.get("signal"), "action": "Review due signal and update result/trigger.", "entry_id": item.get("id")})
+        cautions.append({
+            "level": "caution",
+            "callout": item.get("title") or item.get("signal"),
+            "action": "Review due signal and update result/trigger.",
+            "entry_id": item.get("id"),
+            "buttons": [
+                cockpit_button("Find In Memory", "show_memory", item.get("id") or ""),
+                cockpit_button("Review Actions", "show_actions"),
+            ],
+        })
     if claude_queue:
-        advisories.append({"level": "advisory", "callout": "Claude processing queue", "action": "Ask Claude Code to run the translation queue to enrich these entries.", "count": claude_queue})
+        advisories.append({
+            "level": "advisory",
+            "callout": "Claude processing queue",
+            "action": "Ask Claude Code to run the translation queue to enrich these entries.",
+            "count": claude_queue,
+            "buttons": [
+                cockpit_button("Open Queue", "show_queue"),
+                cockpit_button("Rewire Memory", "rewire_memory"),
+            ],
+        })
     if not warnings and not cautions:
-        advisories.append({"level": "advisory", "callout": "Cockpit quiet", "action": "No high-priority callouts. Continue dumping or executing open actions."})
-    advisories.append({"level": "advisory", "callout": "Open action queue", "action": "Execute, recategorize, or abort returned actions.", "count": open_actions})
+        advisories.append({
+            "level": "advisory",
+            "callout": "Cockpit quiet",
+            "action": "No high-priority callouts. Continue dumping or executing open actions.",
+            "buttons": [
+                cockpit_button("New Entry", "show_dump"),
+                cockpit_button("Review Actions", "show_actions"),
+            ],
+        })
+    advisories.append({
+        "level": "advisory",
+        "callout": "Open action queue",
+        "action": "Execute, recategorize, or abort returned actions.",
+        "count": open_actions,
+        "buttons": [
+            cockpit_button("Review Actions", "show_actions"),
+            cockpit_button("Detect Bottlenecks", "detect_dormant"),
+        ],
+    })
     summary = {
         "total_entries": total_entries,
         "open_actions": open_actions,
@@ -4015,6 +4176,9 @@ def dashboard() -> dict:
             "callout": "Manifest-only binary workbook imports",
             "action": "Libre parser workbook structure is stored, but row-level .xlsb decoding still needs a dedicated reader.",
             "count": imports["partial_batches"],
+            "buttons": [
+                cockpit_button("Review Source Data", "show_memory", "import"),
+            ],
         })
     return {
         **summary,
@@ -4518,6 +4682,8 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
         self.end_headers()
         self.wfile.write(body)
 
@@ -4700,6 +4866,8 @@ class Handler(SimpleHTTPRequestHandler):
                     limit = None
                 with connect() as conn:
                     return self.send_json(rebuild_contextual_memory(conn, limit=limit), 201)
+            if path == "/api/surfaced-cards/clear":
+                return self.send_json(archive_open_surfaced_cards(), 201)
             if path == "/api/pull":
                 return self.send_json(pull_actionable_memory(
                     query=payload.get("q") or payload.get("query") or "",

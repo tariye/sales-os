@@ -236,6 +236,7 @@ input:focus,textarea:focus,select:focus{
 .callout.warning{background:var(--bad-soft);border-color:rgba(159,62,47,.14)}
 .callout.caution{background:var(--warn-soft);border-color:rgba(179,106,31,.18)}
 .callout.advisory{background:var(--accent-soft);border-color:rgba(24,79,67,.18)}
+.callout-actions{border-top:1px solid var(--line);padding-top:10px}
 
 .action-card{border-left:4px solid var(--accent)}
 .insight-card{border-left:4px solid var(--warn)}
