@@ -1,0 +1,76 @@
+{
+  "id": "PROOF-v0.73-stock-intel-pilot",
+  "date": "2026-07-11",
+  "version": "v0.73-stock-intel-pilot",
+  "system": "Info Analyzer OS / Sales OS",
+  "claim": "A separate stock pattern recognition engine can analyze a ticker, pull live market/news/filing context, connect it to local memory, and save the result as a normal Investing ledger entry.",
+  "changes": [
+    "Created stock_pattern_engine.py as a standalone engine.",
+    "Added SEC companyfacts extraction for latest reported quarter and latest annual financials.",
+    "Added Yahoo chart quote adapter and Yahoo Finance RSS headline adapter.",
+    "Added local SQLite memory context search for company and ticker matches.",
+    "Added /api/stock/analyze GET and POST routes.",
+    "Added Stock Intel tab with Analyze Stock and Save To Memory controls.",
+    "Added conversion from stock analysis output to a standard Info Analyzer Investing entry."
+  ],
+  "apple_validation": {
+    "symbol": "AAPL",
+    "company": "Apple Inc.",
+    "latest_reported_quarter_revenue": "$111.18B",
+    "latest_reported_quarter_period_end": "2026-03-28",
+    "latest_annual_revenue": "$416.16B",
+    "latest_annual_fiscal_year": 2025,
+    "signal_types": [
+      "demand",
+      "profit",
+      "earnings",
+      "cash",
+      "market",
+      "news",
+      "memory"
+    ],
+    "local_memory_matches": 8,
+    "source_errors": []
+  },
+  "verification": [
+    {
+      "check": "Python syntax",
+      "command": "python3 -m py_compile server.py stock_pattern_engine.py",
+      "result": "passed"
+    },
+    {
+      "check": "Frontend element references",
+      "command": "scan web/app.js $() references against web/index.html ids",
+      "result": "passed; no missing refs"
+    },
+    {
+      "check": "Health endpoint",
+      "endpoint": "GET /api/health",
+      "result": "returned v0.73-stock-intel-pilot"
+    },
+    {
+      "check": "Apple stock analysis",
+      "endpoint": "POST /api/stock/analyze",
+      "payload": {
+        "symbol": "AAPL"
+      },
+      "result": "returned quote, SEC financials, news, local memory, signals, and decision frame with no source errors"
+    },
+    {
+      "check": "Save-to-memory path",
+      "endpoint": "POST /api/stock/analyze",
+      "payload": {
+        "symbol": "AAPL",
+        "save": true
+      },
+      "result": "temporary stock entry saved, then deleted successfully"
+    }
+  ],
+  "source_links": {
+    "sec_companyfacts_example": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json",
+    "yahoo_chart_example": "https://query1.finance.yahoo.com/v8/finance/chart/AAPL?range=1y&interval=1d",
+    "yahoo_news_example": "https://feeds.finance.yahoo.com/rss/2.0/headline?s=AAPL&region=US&lang=en-US"
+  },
+  "next_risk": "Foreign stocks like SK Hynix need a provider path for financials beyond SEC companyfacts; first version can support quote/news and local memory, but not full foreign statements."
+}
+

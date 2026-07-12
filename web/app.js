@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 const esc = v => String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
 const tagsFrom = s => String(s||"").split(/[#,]/).map(x=>x.trim().toLowerCase()).filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i);
 let lastDraft = null;
+let lastStockIntel = null;
 const INNBANK_QUESTIONS = [
   "What value is being created?",
   "Where is money flowing?",
@@ -228,6 +229,7 @@ function switchTab(tab){
   document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active", p.id===tab));
   if(tab==="command") loadCommand();
   if(tab==="queue") loadQueue();
+  if(tab==="stock") loadStockIntel();
   if(tab==="memory") loadMemory();
   if(tab==="actions") loadActions();
   if(tab==="patterns") loadPatterns();
@@ -656,6 +658,99 @@ async function pullMemory(){
   $("bigActionsList").innerHTML = big.length ? big.map(pamaCardHTML).join("") : `<div class="item"><h3>No big-picture actions</h3><p class="muted">No macro pattern matched this query.</p></div>`;
   toast(`Pulled ${quick.length + big.length} action signals`);
 }
+
+function stockMetricHTML(label, item){
+  if(!item) return `<div class="stat"><strong>n/a</strong><span class="muted">${esc(label)}</span></div>`;
+  return `<div class="stat"><strong>${esc(item.display || item.value || "n/a")}</strong><span class="muted">${esc(label)}${item.end ? " · " + esc(item.end) : ""}</span></div>`;
+}
+function stockAnalysisHTML(res){
+  const a = res.analysis || {};
+  const company = a.company || {};
+  const quote = a.quote || {};
+  const financials = a.financials || {};
+  const q = financials.latest_quarter || {};
+  const y = financials.latest_annual || {};
+  const decision = a.decision_frame || {};
+  const signals = a.signals || [];
+  const news = a.news || [];
+  const memory = a.memory_context || [];
+  const errors = a.errors || [];
+  const signalHTML = signals.length ? signals.map(s=>`<div class="item">
+    <h3>${esc(s.type || "signal")}: ${esc(s.direction || "watch")}</h3>
+    <p class="muted">${esc(s.signal || "")}</p>
+    <div class="kv"><b>Track</b><span>${esc(s.track || "")}</span></div>
+  </div>`).join("") : `<div class="item"><h3>No signals</h3><p class="muted">Source data did not return enough signal yet.</p></div>`;
+  const newsHTML = news.length ? news.slice(0,6).map(n=>`<div class="item">
+    <h3>${esc(n.title || "Headline")}</h3>
+    <p class="muted">${esc(n.published || "")}</p>
+    ${n.link ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">Open source</a>` : ""}
+  </div>`).join("") : `<div class="item"><h3>No fresh headlines</h3><p class="muted">News source did not return headlines.</p></div>`;
+  const memoryHTML = memory.length ? memory.slice(0,6).map(m=>`<div class="item">
+    <h3>${esc(m.title || m.id)}</h3>
+    <div class="meta"><span class="tag">${esc(m.domain || "")}</span><span class="tag">${esc(m.updated_at || "")}</span></div>
+    <p class="muted">${esc(m.signal || m.interpretation || "")}</p>
+  </div>`).join("") : `<div class="item"><h3>No local memory</h3><p class="muted">No prior ledger entries matched this company.</p></div>`;
+  return `
+    <div class="card">
+      <div class="card-head">
+        <div><p class="eyebrow">Decision Frame</p><h2>${esc(company.symbol || "")} · ${esc(company.name || "")}</h2></div>
+        <span class="pill">${esc(decision.action || "watch")}</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><strong>${quote.price ? esc(fmtMoney(quote.price)) : "n/a"}</strong><span class="muted">Price</span></div>
+        <div class="stat"><strong>${quote.one_year_return !== undefined && quote.one_year_return !== null ? esc(fmtPct(quote.one_year_return * 100)) : "n/a"}</strong><span class="muted">1Y move</span></div>
+        ${stockMetricHTML("Last quarter revenue", q.revenue)}
+        ${stockMetricHTML("Latest annual revenue", y.revenue)}
+      </div>
+      <div class="kv"><b>Reason</b><span>${esc(decision.reason || "")}</span></div>
+      <div class="kv"><b>Next Step</b><span>${esc(decision.next_step || "")}</span></div>
+      <div class="kv"><b>Track</b><span>${esc(decision.tracking_metric || "")}</span></div>
+      ${errors.length ? `<div class="kv"><b>Source Errors</b><span>${esc(errors.join(" | "))}</span></div>` : ""}
+    </div>
+    <div class="grid two">
+      <div class="card"><div class="card-head"><div><p class="eyebrow">Extracted Signals</p><h2>Pattern Read</h2></div></div><div class="list">${signalHTML}</div></div>
+      <div class="card"><div class="card-head"><div><p class="eyebrow">Memory Context</p><h2>Prior Ledger</h2></div></div><div class="list">${memoryHTML}</div></div>
+    </div>
+    <div class="card"><div class="card-head"><div><p class="eyebrow">Current Headlines</p><h2>News Layer</h2></div></div><div class="list">${newsHTML}</div></div>
+  `;
+}
+function loadStockIntel(){
+  if(!$("stockOutput").innerHTML.trim()){
+    $("stockOutput").innerHTML = `<div class="item"><h3>Ready</h3><p class="muted">Enter a ticker to generate a stock intelligence card from live market data, filings, news, and local memory.</p></div>`;
+  }
+}
+async function analyzeStock(){
+  const symbol = $("stockSymbolInput").value.trim();
+  if(!symbol){ toast("Enter a ticker"); return; }
+  const btn = $("analyzeStockBtn");
+  const original = btn.textContent;
+  btn.textContent = "Analyzing...";
+  btn.disabled = true;
+  $("saveStockIntel").disabled = true;
+  try {
+    const res = await api("/stock/analyze", {method:"POST", body:JSON.stringify({symbol, company:$("stockCompanyInput").value.trim()})});
+    lastStockIntel = res;
+    $("stockOutput").innerHTML = stockAnalysisHTML(res);
+    $("saveStockIntel").disabled = false;
+    toast("Stock intel generated");
+  } catch(err) {
+    $("stockOutput").innerHTML = `<div class="item"><h3>Stock analysis failed</h3><p class="muted">${esc(err.message)}</p></div>`;
+    toast("Error: " + err.message);
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+}
+async function saveStockIntel(){
+  const symbol = $("stockSymbolInput").value.trim();
+  if(!symbol){ toast("Enter a ticker"); return; }
+  const res = await api("/stock/analyze", {method:"POST", body:JSON.stringify({symbol, company:$("stockCompanyInput").value.trim(), save:true})});
+  lastStockIntel = res;
+  $("stockOutput").innerHTML = stockAnalysisHTML(res) + `<div class="item"><h3>Saved to memory</h3><p class="muted">${esc(res.entry_id || "")}</p></div>`;
+  $("saveStockIntel").disabled = true;
+  updateQueueBadge();
+  toast("Stock intel saved");
+}
 async function dismissSignal(entryId){
   const reason = prompt("Why dismiss this signal?");
   if(!reason) return;
@@ -872,6 +967,8 @@ $("refreshPatterns").addEventListener("click", loadPatterns);
 $("scanPatterns").addEventListener("click", runPatternEngine);
 $("refreshChangelog").addEventListener("click", loadChangelog);
 $("refreshQueue").addEventListener("click", loadQueue);
+$("analyzeStockBtn").addEventListener("click", analyzeStock);
+$("saveStockIntel").addEventListener("click", saveStockIntel);
 $("searchInput").addEventListener("input", ()=>{ clearTimeout(window.__searchTimer); window.__searchTimer=setTimeout(loadMemory,250); });
 $("filterDomain").addEventListener("change", loadMemory);
 $("clearBtn").addEventListener("click", ()=>{ document.querySelectorAll("textarea,input").forEach(el=>{ if(!["searchInput"].includes(el.id)) el.value=""; }); $("sourceTypeInput").value=""; $("draftPill").textContent="empty"; $("draftPill").className="pill muted"; $("saveOutput").innerHTML=""; });

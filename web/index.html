@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Info Analyzer OS v0.72</title>
+  <title>Info Analyzer OS v0.73</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <header class="app-header">
     <div>
       <p class="eyebrow">Intelligence OS</p>
-      <h1>Info Analyzer OS <span>v0.72</span></h1>
+      <h1>Info Analyzer OS <span>v0.73</span></h1>
       <p class="subtitle">Capture raw input, contextualize it into memory, and resurface only what changes a decision.</p>
     </div>
     <button id="exportBtn" class="ghost small">Export</button>
@@ -20,6 +20,7 @@
     <button class="tab active" data-tab="dump">New Entry</button>
     <button class="tab" data-tab="queue">Queue <span id="queueBadge" class="queue-badge hidden">0</span></button>
     <button class="tab" data-tab="command">Command Center</button>
+    <button class="tab" data-tab="stock">Stock Intel</button>
     <button class="tab" data-tab="memory">Memory DB</button>
     <button class="tab" data-tab="actions">Actions</button>
     <button class="tab" data-tab="patterns">Patterns</button>
@@ -198,7 +199,25 @@
       </div>
     </section>
 
-    <!-- ④ MEMORY DB ─────────────────────────────────────────────── -->
+    <!-- ④ STOCK INTEL ───────────────────────────────────────────── -->
+    <section id="stock" class="panel">
+      <div class="card hero">
+        <div class="card-head">
+          <div><p class="eyebrow">Stock Pattern Recognition</p><h2>Company Intelligence Card</h2></div>
+          <button id="saveStockIntel" class="ghost small" disabled>Save To Memory</button>
+        </div>
+        <div class="grid two">
+          <input id="stockSymbolInput" placeholder="AAPL, NVDA, SK Hynix, 000660.KS..." />
+          <input id="stockCompanyInput" placeholder="Optional company name hint" />
+        </div>
+        <div class="buttons">
+          <button id="analyzeStockBtn" class="primary">Analyze Stock</button>
+        </div>
+      </div>
+      <div id="stockOutput" class="list"></div>
+    </section>
+
+    <!-- ⑤ MEMORY DB ─────────────────────────────────────────────── -->
     <section id="memory" class="panel">
       <div class="card">
         <div class="card-head"><div><p class="eyebrow">SQLite Memory</p><h2>Ledger</h2></div><button id="refreshMemory" class="ghost small">Refresh</button></div>
@@ -210,7 +229,7 @@
       </div>
     </section>
 
-    <!-- ⑤ ACTIONS ───────────────────────────────────────────────── -->
+    <!-- ⑥ ACTIONS ───────────────────────────────────────────────── -->
     <section id="actions" class="panel">
       <div class="card">
         <div class="card-head"><div><p class="eyebrow">Execution Queue</p><h2>Returned Actions</h2></div><button id="refreshActions" class="ghost small">Refresh</button></div>
@@ -218,12 +237,12 @@
       </div>
     </section>
 
-    <!-- ⑥ PATTERNS ──────────────────────────────────────────────── -->
+    <!-- ⑦ PATTERNS ──────────────────────────────────────────────── -->
     <section id="patterns" class="panel">
       <div class="card"><div class="card-head"><div><p class="eyebrow">Pattern Engine</p><h2>Cross-Database Pattern Scan</h2></div><div class="buttons compact"><button id="scanPatterns" class="primary small">Run Pattern Engine</button><button id="refreshPatterns" class="ghost small">Refresh</button></div></div><div id="patternsList" class="list"></div></div>
     </section>
 
-    <!-- ⑦ CHANGELOG ─────────────────────────────────────────────── -->
+    <!-- ⑧ CHANGELOG ─────────────────────────────────────────────── -->
     <section id="changelog" class="panel">
       <div class="card hero">
         <div class="card-head">

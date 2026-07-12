@@ -23,13 +23,15 @@ Info Analyzer OS is not a note warehouse. It is a resurfacing engine:
 
 ## Current build
 
-Current version: `v0.72-command-resolver`
+Current version: `v0.73-stock-intel-pilot`
 
 Proof artifacts:
 
 - [CHANGELOG.md](CHANGELOG.md)
 - [ADR 0001: Command Center Resolver](docs/adr/0001-command-center-resolver.md)
 - [v0.72 proof entry](docs/proof/v0.72-command-resolver.json)
+- [ADR 0002: Stock Intel Pilot](docs/adr/0002-stock-intel-pilot.md)
+- [v0.73 proof entry](docs/proof/v0.73-stock-intel-pilot.json)
 
 ## Run locally
 
@@ -77,6 +79,7 @@ The default `.gitignore` excludes the database, journal files, caches, logs, and
 - `POST /api/pull`
 - `POST /api/context/rewire`
 - `POST /api/surfaced-cards/clear`
+- `POST /api/stock/analyze`
 - `GET /api/patterns`
 - `GET /api/export`
 

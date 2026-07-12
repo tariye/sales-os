@@ -31,6 +31,11 @@ try:
 except Exception:
     _anthropic = None  # type: ignore
 
+try:
+    from stock_pattern_engine import analyze_stock as _analyze_stock
+except Exception:
+    _analyze_stock = None  # type: ignore
+
 
 def _get_anthropic_client():
     if _anthropic is None:
@@ -48,7 +53,7 @@ WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "info_analyzer.db"
 
-APP_VERSION = "v0.72-command-resolver"
+APP_VERSION = "v0.73-stock-intel-pilot"
 APP_VERSIONS = [
     {
         "version": "v0.1",
@@ -366,6 +371,17 @@ APP_VERSIONS = [
             "Open surfaced memory cards can be bulk archived from the cockpit",
             "Sales pull cards distinguish market/resale signals from CRM pipeline signals",
             "Trending-item sales cards track sell-through, acquisition cost, gross margin, days-to-sale, and inventory turns",
+        ],
+    },
+    {
+        "version": "v0.73",
+        "name": "Stock Intel Pilot",
+        "features": [
+            "Standalone Stock Pattern Recognition Engine for ticker-level intelligence cards",
+            "SEC companyfacts ingestion for last reported quarter and latest annual financials",
+            "Yahoo quote and headline adapters for live market/news context",
+            "Local memory context is pulled into stock analysis so old thesis records resurface",
+            "Stock Intel tab can analyze a ticker and save the result into the main memory ledger",
         ],
     },
 ]
@@ -4614,6 +4630,70 @@ def export_all() -> dict:
         }
 
 
+def stock_analysis_entry_payload(analysis: dict) -> dict:
+    company = analysis.get("company") or {}
+    decision = analysis.get("decision_frame") or {}
+    signals = analysis.get("signals") or []
+    symbol = company.get("symbol") or ""
+    name = company.get("name") or symbol or "Stock"
+    top_signals = "; ".join([clean_text(s.get("signal")) for s in signals[:5] if clean_text(s.get("signal"))])
+    raw = {
+        "company": company,
+        "quote": analysis.get("quote"),
+        "financials": analysis.get("financials"),
+        "news": analysis.get("news"),
+        "memory_context": analysis.get("memory_context"),
+        "signals": signals,
+        "decision_frame": decision,
+        "source_links": analysis.get("source_links"),
+        "errors": analysis.get("errors"),
+    }
+    return {
+        "title": f"{symbol}: Stock Intel analysis",
+        "raw_input": json.dumps(raw, ensure_ascii=False),
+        "domain": "Investing",
+        "entity": name,
+        "source_type": "Document",
+        "signal": top_signals or f"Stock intelligence card generated for {name}.",
+        "signal_role": "watch" if decision.get("action") == "watch" else "opportunity",
+        "interpretation": decision.get("reason") or "Use the stock card to underwrite financial quality, market context, and memory contradictions.",
+        "trackable_as": "financial metrics + headline catalyst + memory contradiction",
+        "tracking_metric": decision.get("tracking_metric") or "Revenue growth, margin, FCF, debt, guidance, valuation, and catalyst changes.",
+        "returned_action": decision.get("next_step") or f"Review latest filing and news for {name}.",
+        "first_step": decision.get("next_step") or f"Open the latest filing and compare {symbol} revenue, margin, FCF, and valuation.",
+        "actionability": "review",
+        "pull_trigger_type": "entity",
+        "pull_trigger": decision.get("resurfacing_trigger") or f"{symbol}, {name}, earnings, filing, guidance, margin, cash flow",
+        "trigger_condition": decision.get("resurfacing_trigger") or f"Resurface when new {symbol} filings, earnings, guidance, or major headlines appear.",
+        "result_to_track": decision.get("tracking_metric") or "Decision changed, watch metric updated, or thesis confidence changed.",
+        "feedback_to_capture": "Log whether this became buy research, watchlist update, avoid decision, or contradiction to prior memory.",
+        "pattern": "Stock pattern recognition card",
+        "lesson": "A stock signal becomes useful when live market/news data is compared against financial statements and stored memory.",
+        "tags": ["stock-intel", "investing", symbol.lower(), name.lower()],
+        "confidence": "Medium",
+        "metadata": {"stock_analysis": analysis, "engine": analysis.get("engine")},
+    }
+
+
+def stock_intel(symbol: str, company: str = "", save: bool = False) -> dict:
+    if _analyze_stock is None:
+        raise RuntimeError("stock_pattern_engine.py is unavailable")
+    symbol = clean_text(symbol)
+    if not symbol:
+        raise ValueError("symbol is required")
+    analysis = _analyze_stock(symbol, company_hint=company)
+    payload = stock_analysis_entry_payload(analysis)
+    result = {"analysis": analysis, "entry_payload": payload}
+    if save:
+        created = create_entry(payload)
+        result["saved"] = True
+        result["entry_id"] = created["entry"]["id"]
+        result["entry"] = created["entry"]
+    else:
+        result["saved"] = False
+    return result
+
+
 def import_all(payload: dict) -> dict:
     saved = {"entries": 0, "relationships": 0}
     with connect() as conn:
@@ -4727,6 +4807,12 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(version_history())
             if path == "/api/import/capabilities":
                 return self.send_json(workbook_import_capabilities())
+            if path == "/api/stock/analyze":
+                return self.send_json(stock_intel(
+                    symbol=(params.get("symbol") or params.get("ticker") or [""])[0],
+                    company=(params.get("company") or [""])[0],
+                    save=False,
+                ))
             if path == "/api/imports":
                 limit = int(clean_text((params.get("limit") or ["25"])[0]) or 25)
                 return self.send_json(list_import_batches(limit=limit))
@@ -4838,6 +4924,12 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(translation_contract(payload))
             if path == "/api/import/workbook":
                 return self.send_json(import_workbook_path(payload.get("path") or payload.get("source_path") or ""), 201)
+            if path == "/api/stock/analyze":
+                return self.send_json(stock_intel(
+                    symbol=payload.get("symbol") or payload.get("ticker") or "",
+                    company=payload.get("company") or "",
+                    save=bool(payload.get("save")),
+                ), 201)
             if path.startswith("/api/entries/") and path.endswith("/recategorize"):
                 entry_id = unquote(path.split("/api/entries/", 1)[1].rsplit("/recategorize", 1)[0])
                 entry = recategorize_entry(entry_id, payload)
