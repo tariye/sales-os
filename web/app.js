@@ -6,6 +6,56 @@ let lastDraft = null;
 let lastStockIntel = null;
 let currentAssetProject = null;
 let currentAssetBreakdownDraft = null;
+
+// WELCOME MODAL HANDLING
+function showWelcome() {
+  const hasVisited = localStorage.getItem("signal-tracker-visited");
+  const modal = $("welcomeModal");
+  if (!hasVisited && modal) {
+    modal.style.display = "flex";
+  } else if (modal) {
+    modal.style.display = "none";
+  }
+}
+
+function closeWelcome() {
+  const modal = $("welcomeModal");
+  if (modal) modal.style.display = "none";
+  localStorage.setItem("signal-tracker-visited", "true");
+}
+
+async function loadDemoData() {
+  try {
+    const items = [
+      { entity: "iPhone 15 Pro", signal: "Demand up 23%, strong sell-through", domain: "Investing", role: "opportunity", price: 899, cost: 650 },
+      { entity: "MacBook Pro M4", signal: "High-margin, inventory tight", domain: "Investing", role: "opportunity", price: 2499, cost: 1800 },
+      { entity: "Samsung Galaxy S24", signal: "Competing with iPhone", domain: "Investing", role: "watch", price: 999, cost: 700 },
+      { entity: "AI Market Growth", signal: "Industry shifting toward AI chips", domain: "Investing", role: "pattern", price: null, cost: null },
+      { entity: "Customer Retention", signal: "Repeat purchases declining 15%", domain: "Business", role: "risk", price: null, cost: null }
+    ];
+
+    for (const item of items) {
+      await fetch("/api/entries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          raw_input: `Market observation: ${item.signal}`,
+          domain: item.domain,
+          entity: item.entity,
+          signal_role: item.role,
+          signal: item.signal,
+          status: "codified",
+          baseline: item.cost ? String(item.cost) : null,
+          target_threshold: item.price ? String(item.price) : null
+        })
+      });
+    }
+    closeWelcome();
+    location.reload();
+  } catch(e) {
+    console.error("Demo data load failed:", e);
+  }
+}
 const INNBANK_QUESTIONS = [
   "What value is being created?",
   "Where is money flowing?",
@@ -472,10 +522,19 @@ async function queueForClaude(id, btn){
 }
 function queueEntryHTML(e){
   const age = e.created_at ? e.created_at.slice(0,10) : "";
-  const badge = e.status === "needs_enrichment" ? "◈ Needs Enrichment" : "⬦ Queued";
-  const buttonLabel = e.status === "needs_enrichment" ? "Needs Enrichment" : "In Queue";
+  const badge = e.status === "needs_enrichment" ? "◈ Needs Enrichment" : "⏳ Processing";
+  const progressMsg = e.status === "needs_enrichment"
+    ? "Waiting for better signal definition"
+    : "AI is analyzing this. Usually 5 minutes.";
+  const buttonLabel = e.status === "needs_enrichment" ? "Needs Enrichment" : "Queued";
   return `<div class="item item-queued">
-    <div class="entry-top"><span class="enrich-badge ${e.status === "needs_enrichment" ? "eb-needs" : "eb-queued"}">${badge}</span><h3>${esc(e.title || e.id)}</h3></div>
+    <div class="entry-top">
+      <span class="enrich-badge ${e.status === "needs_enrichment" ? "eb-needs" : "eb-queued"}">${badge}</span>
+      <h3>${esc(e.title || e.id)}</h3>
+    </div>
+    <p style="font-size: 0.85rem; color: var(--accent); margin-top: 0.5rem; margin-bottom: 0.5rem;">
+      ⏳ ${progressMsg}
+    </p>
     <div class="meta">
       <span class="tag">${esc(e.domain)}</span>
       ${e.entity ? `<span class="tag">${esc(e.entity)}</span>` : ""}
@@ -717,14 +776,34 @@ async function save(){
   const res = await api("/entries", {method:"POST", body:JSON.stringify(payload)});
   const cards = res.context_packet?.cards || [];
   if(res.entry?.status === "pending_claude"){
-    $("saveOutput").innerHTML = `<div class="item"><h3>Queued: ${esc(res.entry_id)}</h3><p class="muted">Saved to memory and added to the Claude processing queue. Ask Claude to run the queue to enrich this entry.</p></div>`;
-    toast("Saved — queued for Claude");
+    $("saveOutput").innerHTML = `<div class="item success-feedback">
+      <h3>✓ Queued for AI Analysis</h3>
+      <p class="muted">Entry ${esc(res.entry_id)} saved successfully</p>
+      <p style="margin-top: 0.5rem; color: var(--accent);">
+        <strong>What happens next:</strong> Claude AI will analyze this observation within 5 minutes.
+        <br><a href="#" onclick="switchTab('queue'); return false;">→ Check Queue tab to see progress</a>
+      </p>
+    </div>`;
+    toast("✓ Saved and queued for AI analysis");
   } else if(res.entry?.status === "needs_enrichment"){
-    $("saveOutput").innerHTML = `<div class="item"><h3>Needs Enrichment: ${esc(res.entry_id)}</h3><p class="muted">Saved to memory, but the signal is still too generic or incomplete to trust as fully codified. Ask Claude to enrich it before relying on it in the cockpit.</p></div>`;
+    $("saveOutput").innerHTML = `<div class="item warning-feedback">
+      <h3>⚠ Saved (Needs Enrichment)</h3>
+      <p class="muted">Entry ${esc(res.entry_id)} saved, but signal is incomplete</p>
+      <p style="margin-top: 0.5rem;">
+        <strong>Next step:</strong> Fill in the Signal and Interpretation fields for better AI analysis.
+      </p>
+    </div>`;
     toast("Saved — needs enrichment");
   } else {
-    $("saveOutput").innerHTML = `<div class="item"><h3>Saved: ${esc(res.entry_id)}</h3><p class="muted">Created ${res.pull_rules?.length || 0} pull rules. Returned ${cards.length} surfaced memory cards.</p></div>` + cards.map(cardHTML).join("");
-    toast("Saved to memory");
+    $("saveOutput").innerHTML = `<div class="item success-feedback">
+      <h3>✓ Saved and Processed</h3>
+      <p class="muted">Entry ${esc(res.entry_id)} successfully codified</p>
+      <p style="margin-top: 0.5rem; color: var(--accent);">
+        Created ${res.pull_rules?.length || 0} pull rule(s).
+        <br><a href="#" onclick="switchTab('command'); return false;">→ View in Command Center</a>
+      </p>
+    </div>` + cards.map(cardHTML).join("");
+    toast("✓ Saved and processed");
   }
   loadCommand();
   updateQueueBadge();
@@ -1255,3 +1334,13 @@ $("exportBtn").addEventListener("click", ()=>{ window.location.href="/api/export
 loadCommand();
 checkAiStatus();
 updateQueueBadge();
+
+// WELCOME MODAL EVENT LISTENERS
+if($("closeWelcomeBtn")) $("closeWelcomeBtn").addEventListener("click", closeWelcome);
+if($("loadDemoBtn")) $("loadDemoBtn").addEventListener("click", loadDemoData);
+
+// SHOW WELCOME ON STARTUP
+window.addEventListener("load", () => {
+  showWelcome();
+  initializeApp();
+});

@@ -1,0 +1,103 @@
+
+/* TOOLTIPS */
+button[title] {
+  position: relative;
+}
+
+button[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text, #0f1720);
+  color: white;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  z-index: 1000;
+  margin-bottom: 8px;
+  pointer-events: none;
+}
+
+button[title]:hover::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: var(--text, #0f1720);
+  z-index: 1000;
+  margin-bottom: -4px;
+}
+
+/* HEADER ACTIONS */
+.header-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.header-actions a {
+  color: var(--accent, #0f766e);
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  border: 1px solid transparent;
+  transition: background 0.2s;
+}
+
+.header-actions a:hover {
+  background: var(--accent-soft, #d7f2ef);
+}
+
+/* CLAUDE INFO BANNER */
+.claude-info {
+  background: var(--accent-soft, #d7f2ef);
+  border-left: 4px solid var(--accent, #0f766e);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: var(--text, #0f1720);
+}
+
+.claude-info strong {
+  color: var(--accent, #0f766e);
+}
+
+/* SUCCESS/WARNING FEEDBACK */
+.success-feedback {
+  background: var(--good-soft, #dff5e4);
+  border-left: 4px solid var(--good, #146c2e);
+}
+
+.success-feedback h3 {
+  color: var(--good, #146c2e);
+  margin-bottom: 0.25rem;
+}
+
+.warning-feedback {
+  background: var(--bad-soft, #f8dfd7);
+  border-left: 4px solid var(--bad, #a43d1b);
+}
+
+.warning-feedback h3 {
+  color: var(--bad, #a43d1b);
+  margin-bottom: 0.25rem;
+}
+
+.success-feedback a,
+.warning-feedback a {
+  color: var(--accent, #0f766e);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.success-feedback a:hover,
+.warning-feedback a:hover {
+  text-decoration: underline;
+}

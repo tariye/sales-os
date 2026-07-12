@@ -7,6 +7,32 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+  <!-- WELCOME MODAL -->
+  <div id="welcomeModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <h2>Welcome to Signal Tracker</h2>
+      <p class="subtitle">Track observations. Discover patterns. Make better decisions.</p>
+
+      <div class="value-prop">
+        <div><span>📥</span><h4>Save Observations</h4><p>Paste market trends, ideas, research</p></div>
+        <div><span>🤖</span><h4>AI Enrichment</h4><p>Claude finds patterns & insights</p></div>
+        <div><span>📊</span><h4>Discover Patterns</h4><p>Connect signals, see cross-domain themes</p></div>
+      </div>
+
+      <h3>3-Step Quick Start</h3>
+      <ol>
+        <li>Click <strong>Input</strong> and paste an observation</li>
+        <li>Click <strong>Save</strong> (Claude enriches automatically)</li>
+        <li>Go to <strong>Dashboard</strong> to see results</li>
+      </ol>
+
+      <div class="modal-buttons">
+        <button id="loadDemoBtn" class="primary">Load Sample Data</button>
+        <button id="closeWelcomeBtn" class="secondary">Start Fresh</button>
+      </div>
+    </div>
+  </div>
+
   <header class="app-header">
     <div>
       <p class="eyebrow">Unified Intelligence OS</p>
