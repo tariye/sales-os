@@ -53,7 +53,7 @@ WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "info_analyzer.db"
 
-APP_VERSION = "v0.73-stock-intel-pilot"
+APP_VERSION = "v0.74-listening-lab-projects"
 APP_VERSIONS = [
     {
         "version": "v0.1",
@@ -382,6 +382,17 @@ APP_VERSIONS = [
             "Yahoo quote and headline adapters for live market/news context",
             "Local memory context is pulled into stock analysis so old thesis records resurface",
             "Stock Intel tab can analyze a ticker and save the result into the main memory ledger",
+        ],
+    },
+    {
+        "version": "v0.74",
+        "name": "Listening Lab Projects",
+        "features": [
+            "Dedicated Listening Lab tab for song/system breakdown projects",
+            "Project delete button with permanent project and extraction removal",
+            "Open project workspace with Continue Extraction and Save Extraction controls",
+            "System-generated section map, glossary, and sound example fields",
+            "Extraction Library stores every breakdown with a reusable user label",
         ],
     },
 ]
@@ -1067,6 +1078,36 @@ def init_db() -> None:
             FOREIGN KEY(sheet_id) REFERENCES import_sheets(id)
         );
 
+        CREATE TABLE IF NOT EXISTS listening_projects (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            title TEXT NOT NULL,
+            artist TEXT,
+            source_url TEXT,
+            notes TEXT,
+            status TEXT DEFAULT 'active',
+            metadata TEXT DEFAULT '{}'
+        );
+
+        CREATE TABLE IF NOT EXISTS listening_extractions (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            label TEXT,
+            extraction_type TEXT DEFAULT 'song_breakdown',
+            raw_evidence TEXT,
+            section_map TEXT DEFAULT '[]',
+            glossary TEXT DEFAULT '[]',
+            sound_example TEXT,
+            breakdown TEXT,
+            reuse_context TEXT,
+            tags TEXT DEFAULT '[]',
+            metadata TEXT DEFAULT '{}',
+            FOREIGN KEY(project_id) REFERENCES listening_projects(id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_entries_created ON entries(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_entries_domain ON entries(domain);
         CREATE INDEX IF NOT EXISTS idx_entries_status ON entries(status);
@@ -1090,6 +1131,10 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_watchlists_batch ON watchlists(batch_id, strategy_name);
         CREATE INDEX IF NOT EXISTS idx_watchlist_items_watchlist ON watchlist_items(watchlist_id, row_number);
         CREATE INDEX IF NOT EXISTS idx_device_log_catalog_batch ON device_log_catalog(batch_id, sheet_index);
+        CREATE INDEX IF NOT EXISTS idx_listening_projects_updated ON listening_projects(updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_listening_projects_status ON listening_projects(status);
+        CREATE INDEX IF NOT EXISTS idx_listening_extractions_project ON listening_extractions(project_id);
+        CREATE INDEX IF NOT EXISTS idx_listening_extractions_label ON listening_extractions(label);
         """)
         ensure_column(conn, "entries", "actionability", "TEXT DEFAULT 'watch'")
         ensure_column(conn, "entries", "pull_trigger_type", "TEXT DEFAULT 'tag'")
@@ -1229,6 +1274,21 @@ def row_to_entry(row) -> dict:
 
 def row_to_action(row) -> dict:
     d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_listening_project(row) -> dict:
+    d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_listening_extraction(row) -> dict:
+    d = dict(row)
+    d["section_map"] = json_loads(d.get("section_map"), [])
+    d["glossary"] = json_loads(d.get("glossary"), [])
+    d["tags"] = json_loads(d.get("tags"), [])
     d["metadata"] = json_loads(d.get("metadata"), {})
     return d
 
@@ -3404,6 +3464,364 @@ def create_entry(payload: dict) -> dict:
     return {"entry": entry, "action": action, "pull_rules": rules, "context_packet": pull}
 
 
+SECTION_KEYWORDS = [
+    ("intro", "Intro"),
+    ("verse", "Verse"),
+    ("pre chorus", "Pre-Chorus"),
+    ("pre-chorus", "Pre-Chorus"),
+    ("hook", "Hook"),
+    ("chorus", "Chorus"),
+    ("bridge", "Bridge"),
+    ("breakdown", "Breakdown"),
+    ("outro", "Outro"),
+    ("drop", "Drop"),
+    ("solo", "Solo"),
+]
+
+GLOSSARY_DEFS = {
+    "hook": "The repeatable idea that carries memory value and replay value.",
+    "groove": "The rhythmic pocket created by drums, bass, timing, and feel.",
+    "pocket": "The timing relationship that makes parts feel locked together.",
+    "bassline": "The low-end melodic/rhythmic anchor that routes movement.",
+    "melody": "The singable pitch pattern that creates recall.",
+    "chorus": "The high-repetition section that usually states the core emotional offer.",
+    "verse": "The narrative or setup section that gives the hook context.",
+    "bridge": "A contrast section that resets attention before the return.",
+    "sample": "A reused audio fragment that carries texture, reference, or identity.",
+    "sync": "Licensing fit for film, games, ads, creator content, or brand placement.",
+    "tension": "Energy created by unresolved rhythm, harmony, lyric, or arrangement.",
+    "release": "The moment tension resolves into payoff.",
+}
+
+
+def listening_tag_terms(text: str) -> list[str]:
+    terms = []
+    hay = normalize_text(text)
+    for term in GLOSSARY_DEFS:
+        if term in hay:
+            terms.append(term)
+    for term in ["music", "song", "listening lab", "extraction"]:
+        if term not in terms:
+            terms.append(term)
+    return terms[:12]
+
+
+def generate_listening_breakdown(project: dict, prompt: str = "") -> dict:
+    title = clean_text(project.get("title")) or "Untitled song"
+    artist = clean_text(project.get("artist"))
+    evidence = clean_text("\n".join([project.get("notes") or "", prompt or ""]))
+    hay = normalize_text(evidence)
+    section_map = []
+    seen = set()
+    for key, label in SECTION_KEYWORDS:
+        if key in hay and label not in seen:
+            section_map.append({
+                "section": label,
+                "system_read": f"{label} is explicitly referenced in the notes; inspect how it changes energy, repetition, or narrative function.",
+                "trackable_use": f"Label future clips where the {label.lower()} drives replay, contrast, or transition value.",
+            })
+            seen.add(label)
+    if not section_map:
+        section_map = [
+            {
+                "section": "Opening signal",
+                "system_read": "Map the first 10-20 seconds for the sound or phrase that tells the listener what world they are entering.",
+                "trackable_use": "Track whether the opening contains a reusable texture, groove, vocal tag, or emotional cue.",
+            },
+            {
+                "section": "Core loop",
+                "system_read": "Identify the repeated musical or lyrical loop that carries memory value.",
+                "trackable_use": "Track hook strength, repetition count, and whether the loop can be reused in sync, remix, or content routing.",
+            },
+            {
+                "section": "Payoff / exit",
+                "system_read": "Look for the moment where tension resolves or the track leaves a final identity mark.",
+                "trackable_use": "Track whether the exit creates replay demand or a clean clip ending.",
+            },
+        ]
+    glossary_terms = []
+    for term in listening_tag_terms(evidence):
+        if term in GLOSSARY_DEFS:
+            glossary_terms.append({"term": term, "meaning": GLOSSARY_DEFS[term]})
+    if not glossary_terms:
+        glossary_terms = [
+            {"term": "hook", "meaning": GLOSSARY_DEFS["hook"]},
+            {"term": "groove", "meaning": GLOSSARY_DEFS["groove"]},
+            {"term": "sync", "meaning": GLOSSARY_DEFS["sync"]},
+        ]
+    sound_focus = []
+    for token in ["bass", "drum", "vocal", "sample", "guitar", "piano", "synth", "808", "melody", "harmony"]:
+        if token in hay:
+            sound_focus.append(token)
+    sound_phrase = ", ".join(sound_focus[:4]) if sound_focus else "the most repeatable sound, rhythm, or vocal moment"
+    sound_example = (
+        f"Clip and label a 5-12 second example around {sound_phrase}. "
+        "Use it as proof of the song's reusable emotional, groove, or sync value."
+    )
+    breakdown = (
+        f"System breakdown for {title}{' by ' + artist if artist else ''}: "
+        "treat the song as an asset made of sections, repeatable sounds, emotional cues, and routing opportunities. "
+        "The extraction should identify which moments are reusable, what context they fit, and what metric proves value."
+    )
+    reuse_context = (
+        "Use this extraction later for playlist routing, sync prep, remix/stem library labels, content clips, "
+        "artist feedback, or pattern comparison against other songs."
+    )
+    return {
+        "label": f"{title} breakdown",
+        "extraction_type": "song_breakdown",
+        "raw_evidence": evidence,
+        "section_map": section_map,
+        "glossary": glossary_terms[:8],
+        "sound_example": sound_example,
+        "breakdown": breakdown,
+        "reuse_context": reuse_context,
+        "tags": listening_tag_terms(evidence),
+    }
+
+
+def create_listening_memory_entry(conn, project: dict, extraction: dict) -> str:
+    raw_input = "\n".join([
+        f"Listening Lab project: {project.get('title') or ''}",
+        f"Artist: {project.get('artist') or ''}",
+        f"User label: {extraction.get('label') or ''}",
+        f"Breakdown: {extraction.get('breakdown') or ''}",
+        f"Sound example: {extraction.get('sound_example') or ''}",
+        f"Reuse context: {extraction.get('reuse_context') or ''}",
+    ])
+    entry = codify_payload({
+        "raw_input": raw_input,
+        "domain": "Music",
+        "entity": project.get("title") or "Listening Lab",
+        "source_type": "Document",
+        "tags": ["music", "listening-lab", "song-breakdown"] + (extraction.get("tags") or []),
+        "title": f"Listening Lab: {extraction.get('label') or project.get('title') or 'Song breakdown'}",
+        "signal": f"{project.get('title') or 'Song'} has reusable music-asset signals that can be labeled, compared, and routed.",
+        "signal_role": "opportunity",
+        "actionability": "watch",
+        "card_type": "Opportunity Card",
+        "trackable_as": "reuse context + accepted labels",
+        "tracking_metric": "number of labeled sections, reusable sound examples, and future routing decisions",
+        "returned_action": "Label the extraction and reuse it in future music routing or pattern comparison.",
+        "pull_trigger": "Resurface during music analysis, sync prep, stem library setup, playlist routing, or song comparison.",
+        "pattern": "Songs become more valuable when reusable sections, glossary terms, and sound examples are labeled for later routing.",
+        "lesson": "Music memory compounds when each listening rep becomes a labeled reusable asset.",
+    })
+    metadata = entry.get("metadata") or {}
+    metadata.update({
+        "source": "listening_lab",
+        "project_id": project.get("id"),
+        "extraction_id": extraction.get("id"),
+    })
+    entry["metadata"] = metadata
+    entry = insert_entry(conn, entry)
+    contextualize_entry(conn, entry)
+    update_pattern_stats(conn, entry)
+    create_pull_rules(conn, entry)
+    return entry["id"]
+
+
+def list_listening_projects() -> dict:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT p.*,
+                   COUNT(e.id) AS extraction_count,
+                   MAX(e.updated_at) AS last_extraction_at
+            FROM listening_projects p
+            LEFT JOIN listening_extractions e ON e.project_id = p.id
+            WHERE p.status != 'deleted'
+            GROUP BY p.id
+            ORDER BY p.updated_at DESC
+            """
+        ).fetchall()
+        projects = []
+        for row in rows:
+            project = row_to_listening_project(row)
+            project["extraction_count"] = row["extraction_count"] or 0
+            project["last_extraction_at"] = row["last_extraction_at"] or ""
+            projects.append(project)
+    return {"projects": projects}
+
+
+def create_listening_project(payload: dict) -> dict:
+    title = clean_text(payload.get("title") or payload.get("song") or payload.get("name"))
+    if not title:
+        raise ValueError("project title is required")
+    now = now_iso()
+    project = {
+        "id": make_id("LP"),
+        "created_at": now,
+        "updated_at": now,
+        "title": title[:240],
+        "artist": clean_text(payload.get("artist"))[:180],
+        "source_url": clean_text(payload.get("source_url") or payload.get("url"))[:500],
+        "notes": clean_text(payload.get("notes") or payload.get("raw_input")),
+        "status": "active",
+        "metadata": payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+    }
+    with connect() as conn:
+        conn.execute(
+            """INSERT INTO listening_projects (id, created_at, updated_at, title, artist, source_url, notes, status, metadata)
+               VALUES (:id, :created_at, :updated_at, :title, :artist, :source_url, :notes, :status, :metadata)""",
+            {**project, "metadata": json.dumps(project["metadata"], ensure_ascii=False)},
+        )
+        audit(conn, "create", "listening_project", project["id"], {"title": project["title"], "artist": project["artist"]})
+        conn.commit()
+    return {"project": project}
+
+
+def get_listening_project(project_id: str) -> dict:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM listening_projects WHERE id=? AND status != 'deleted'", (project_id,)).fetchone()
+        if not row:
+            raise KeyError("project not found")
+        project = row_to_listening_project(row)
+        extractions = [
+            row_to_listening_extraction(r)
+            for r in conn.execute(
+                "SELECT * FROM listening_extractions WHERE project_id=? ORDER BY updated_at DESC",
+                (project_id,),
+            ).fetchall()
+        ]
+    return {"project": project, "extractions": extractions}
+
+
+def draft_listening_extraction(project_id: str, payload: dict) -> dict:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM listening_projects WHERE id=? AND status != 'deleted'", (project_id,)).fetchone()
+        if not row:
+            raise KeyError("project not found")
+        project = row_to_listening_project(row)
+    draft = generate_listening_breakdown(project, payload.get("prompt") or payload.get("notes") or payload.get("raw_evidence") or "")
+    if payload.get("label"):
+        draft["label"] = clean_text(payload.get("label"))
+    return {"project": project, "draft": draft}
+
+
+def save_listening_extraction(project_id: str, payload: dict) -> dict:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM listening_projects WHERE id=? AND status != 'deleted'", (project_id,)).fetchone()
+        if not row:
+            raise KeyError("project not found")
+        project = row_to_listening_project(row)
+        generated = generate_listening_breakdown(project, payload.get("prompt") or payload.get("notes") or payload.get("raw_evidence") or "")
+        extraction = {
+            **generated,
+            "id": make_id("LEX"),
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+            "project_id": project_id,
+            "label": clean_text(payload.get("label")) or generated["label"],
+            "extraction_type": clean_text(payload.get("extraction_type")) or generated["extraction_type"],
+            "raw_evidence": clean_text(payload.get("raw_evidence")) or generated["raw_evidence"],
+            "section_map": payload.get("section_map") if isinstance(payload.get("section_map"), list) else generated["section_map"],
+            "glossary": payload.get("glossary") if isinstance(payload.get("glossary"), list) else generated["glossary"],
+            "sound_example": clean_text(payload.get("sound_example")) or generated["sound_example"],
+            "breakdown": clean_text(payload.get("breakdown")) or generated["breakdown"],
+            "reuse_context": clean_text(payload.get("reuse_context")) or generated["reuse_context"],
+            "tags": normalize_tags(payload.get("tags")) or generated["tags"],
+            "metadata": payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+        }
+        conn.execute(
+            """INSERT INTO listening_extractions
+               (id, created_at, updated_at, project_id, label, extraction_type, raw_evidence, section_map, glossary, sound_example, breakdown, reuse_context, tags, metadata)
+               VALUES (:id, :created_at, :updated_at, :project_id, :label, :extraction_type, :raw_evidence, :section_map, :glossary, :sound_example, :breakdown, :reuse_context, :tags, :metadata)""",
+            {
+                **extraction,
+                "section_map": json.dumps(extraction["section_map"], ensure_ascii=False),
+                "glossary": json.dumps(extraction["glossary"], ensure_ascii=False),
+                "tags": json.dumps(extraction["tags"], ensure_ascii=False),
+                "metadata": json.dumps(extraction["metadata"], ensure_ascii=False),
+            },
+        )
+        linked_entry_id = create_listening_memory_entry(conn, project, extraction)
+        metadata = {**extraction["metadata"], "linked_entry_id": linked_entry_id}
+        conn.execute(
+            "UPDATE listening_extractions SET metadata=? WHERE id=?",
+            (json.dumps(metadata, ensure_ascii=False), extraction["id"]),
+        )
+        conn.execute("UPDATE listening_projects SET updated_at=? WHERE id=?", (now_iso(), project_id))
+        audit(conn, "create", "listening_extraction", extraction["id"], {"project_id": project_id, "label": extraction["label"]})
+        conn.commit()
+        extraction["metadata"] = metadata
+    return {"extraction": extraction, "linked_entry_id": linked_entry_id}
+
+
+def update_listening_extraction(extraction_id: str, payload: dict) -> dict:
+    allowed = {"label", "reuse_context", "sound_example", "breakdown", "raw_evidence", "extraction_type"}
+    updates = {k: clean_text(payload.get(k)) for k in allowed if k in payload}
+    if "tags" in payload:
+        updates["tags"] = json.dumps(normalize_tags(payload.get("tags")), ensure_ascii=False)
+    if not updates:
+        raise ValueError("no updatable extraction fields provided")
+    updates["updated_at"] = now_iso()
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM listening_extractions WHERE id=?", (extraction_id,)).fetchone()
+        if not row:
+            raise KeyError("extraction not found")
+        set_sql = ", ".join([f"{k}=?" for k in updates])
+        conn.execute(f"UPDATE listening_extractions SET {set_sql} WHERE id=?", tuple(updates.values()) + (extraction_id,))
+        updated = row_to_listening_extraction(conn.execute("SELECT * FROM listening_extractions WHERE id=?", (extraction_id,)).fetchone())
+        conn.execute("UPDATE listening_projects SET updated_at=? WHERE id=?", (now_iso(), updated["project_id"]))
+        audit(conn, "update", "listening_extraction", extraction_id, {"updated_fields": list(updates.keys())})
+        conn.commit()
+    return {"extraction": updated}
+
+
+def delete_listening_project(project_id: str) -> dict:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM listening_projects WHERE id=?", (project_id,)).fetchone()
+        if not row:
+            raise KeyError("project not found")
+        extraction_rows = conn.execute("SELECT * FROM listening_extractions WHERE project_id=?", (project_id,)).fetchall()
+        linked_entry_ids = []
+        for extraction_row in extraction_rows:
+            metadata = json_loads(extraction_row["metadata"], {})
+            linked = clean_text(metadata.get("linked_entry_id"))
+            if linked:
+                linked_entry_ids.append(linked)
+        for entry_id in linked_entry_ids:
+            conn.execute("DELETE FROM surfaced_cards WHERE source_entry_id=? OR triggered_by_entry_id=?", (entry_id, entry_id))
+            conn.execute("DELETE FROM actions WHERE entry_id=?", (entry_id,))
+            conn.execute("DELETE FROM pull_rules WHERE entry_id=?", (entry_id,))
+            conn.execute("DELETE FROM relationships WHERE from_entry_id=? OR to_entry_id=?", (entry_id, entry_id))
+            conn.execute("DELETE FROM entries_fts WHERE entry_id=?", (entry_id,))
+            conn.execute("DELETE FROM entries WHERE id=?", (entry_id,))
+        conn.execute("DELETE FROM listening_extractions WHERE project_id=?", (project_id,))
+        audit(conn, "delete", "listening_project", project_id, {"title": row["title"], "extractions_deleted": len(extraction_rows), "linked_entries_deleted": len(linked_entry_ids)})
+        conn.execute("DELETE FROM listening_projects WHERE id=?", (project_id,))
+        conn.commit()
+    return {"deleted": True, "project_id": project_id, "extractions_deleted": len(extraction_rows), "linked_entries_deleted": len(linked_entry_ids)}
+
+
+def listening_library(params: dict | None = None) -> dict:
+    q = clean_text(((params or {}).get("q") or [""])[0]) if isinstance(params, dict) else ""
+    args = []
+    where = []
+    if q:
+        like = f"%{q.lower()}%"
+        where.append("(LOWER(e.label) LIKE ? OR LOWER(e.breakdown) LIKE ? OR LOWER(e.reuse_context) LIKE ? OR LOWER(e.tags) LIKE ? OR LOWER(p.title) LIKE ? OR LOWER(p.artist) LIKE ?)")
+        args.extend([like, like, like, like, like, like])
+    sql = f"""
+        SELECT e.*, p.title AS project_title, p.artist AS project_artist
+        FROM listening_extractions e
+        JOIN listening_projects p ON p.id = e.project_id
+        {'WHERE ' + ' AND '.join(where) if where else ''}
+        ORDER BY e.updated_at DESC
+        LIMIT 200
+    """
+    with connect() as conn:
+        rows = conn.execute(sql, args).fetchall()
+        extractions = []
+        for row in rows:
+            extraction = row_to_listening_extraction(row)
+            extraction["project_title"] = row["project_title"]
+            extraction["project_artist"] = row["project_artist"]
+            extractions.append(extraction)
+    return {"extractions": extractions}
+
+
 def translation_contract(payload: dict) -> dict:
     draft = codify_payload(payload)
     return {
@@ -4818,6 +5236,13 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(list_import_batches(limit=limit))
             if path.startswith("/api/imports/"):
                 return self.send_json(get_import_batch(unquote(path.split("/api/imports/", 1)[1])))
+            if path == "/api/listening/projects":
+                return self.send_json(list_listening_projects())
+            if path == "/api/listening/library":
+                return self.send_json(listening_library(params))
+            if path.startswith("/api/listening/projects/"):
+                project_id = unquote(path.split("/api/listening/projects/", 1)[1])
+                return self.send_json(get_listening_project(project_id))
             if path == "/api/codify":
                 return self.send_json({"draft": codify_payload({"raw_input": (params.get("raw_input") or params.get("q") or [""])[0], "domain": (params.get("domain") or [""])[0], "tags": (params.get("tags") or [""])[0]})})
             if path == "/api/loop/analyze":
@@ -4930,6 +5355,14 @@ class Handler(SimpleHTTPRequestHandler):
                     company=payload.get("company") or "",
                     save=bool(payload.get("save")),
                 ), 201)
+            if path == "/api/listening/projects":
+                return self.send_json(create_listening_project(payload), 201)
+            if path.startswith("/api/listening/projects/") and path.endswith("/breakdown"):
+                project_id = unquote(path.split("/api/listening/projects/", 1)[1].rsplit("/breakdown", 1)[0])
+                return self.send_json(draft_listening_extraction(project_id, payload), 201)
+            if path.startswith("/api/listening/projects/") and path.endswith("/extractions"):
+                project_id = unquote(path.split("/api/listening/projects/", 1)[1].rsplit("/extractions", 1)[0])
+                return self.send_json(save_listening_extraction(project_id, payload), 201)
             if path.startswith("/api/entries/") and path.endswith("/recategorize"):
                 entry_id = unquote(path.split("/api/entries/", 1)[1].rsplit("/recategorize", 1)[0])
                 entry = recategorize_entry(entry_id, payload)
@@ -4984,6 +5417,9 @@ class Handler(SimpleHTTPRequestHandler):
         path = parsed.path
         try:
             payload = self.read_json()
+            if path.startswith("/api/listening/extractions/"):
+                extraction = update_listening_extraction(unquote(path.split("/api/listening/extractions/", 1)[1]), payload)
+                return self.send_json({"success": True, **extraction})
             if path.startswith("/api/entries/"):
                 entry = update_entry(unquote(path.split("/api/entries/", 1)[1]), payload)
                 return self.send_json({"success": True, "entry": entry})
@@ -5002,6 +5438,9 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path.startswith("/api/listening/projects/"):
+                result = delete_listening_project(unquote(path.split("/api/listening/projects/", 1)[1]))
+                return self.send_json({"success": True, **result})
             if path.startswith("/api/entries/"):
                 result = delete_entry(unquote(path.split("/api/entries/", 1)[1]))
                 return self.send_json({"success": True, **result})

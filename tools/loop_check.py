@@ -10,6 +10,7 @@ The script uses the live local site the way a user would:
 - checks Command Center resolver controls
 - pulls actionable memory
 - runs Stock Intel
+- runs Listening Lab project/extraction/library/delete flow
 - creates a temporary memory entry
 - pulls that entry back contextually
 - logs a result
@@ -137,6 +138,89 @@ def check_stock(api: ApiClient, symbol: str) -> dict:
     )
 
 
+def check_listening_lab(api: ApiClient) -> dict:
+    stamp = str(int(time.time()))
+    project_id = None
+    linked_entry_id = None
+    try:
+        created = api.post("/api/listening/projects", {
+            "title": f"Loop QA Listening Project {stamp}",
+            "artist": "Loop QA",
+            "source_url": "https://example.com/listening-loop",
+            "notes": "Intro sample, verse pocket, hook bassline and vocal chant, bridge release, sync-ready sound example.",
+        })
+        project = created.get("project") or {}
+        project_id = project.get("id")
+        opened = api.get(f"/api/listening/projects/{urllib.parse.quote(project_id)}")
+        if (opened.get("project") or {}).get("id") != project_id:
+            raise AssertionError(json.dumps(fail_check(
+                "listening_lab",
+                "Project was created but could not be opened.",
+                {"project_id": project_id},
+            ), ensure_ascii=False))
+        draft = api.post(f"/api/listening/projects/{urllib.parse.quote(project_id)}/breakdown", {
+            "prompt": "Generate a section map, glossary, and sound example for later reuse.",
+            "label": f"Loop QA extraction {stamp}",
+        }).get("draft") or {}
+        if not (draft.get("section_map") and draft.get("glossary") and draft.get("sound_example")):
+            raise AssertionError(json.dumps(fail_check(
+                "listening_lab",
+                "Breakdown draft missed section map, glossary, or sound example.",
+                {"draft_keys": sorted(draft.keys())},
+            ), ensure_ascii=False))
+        saved = api.post(f"/api/listening/projects/{urllib.parse.quote(project_id)}/extractions", {
+            **draft,
+            "label": f"Loop QA labeled extraction {stamp}",
+        })
+        extraction = saved.get("extraction") or {}
+        linked_entry_id = saved.get("linked_entry_id")
+        api.patch(f"/api/listening/extractions/{urllib.parse.quote(extraction.get('id'))}", {
+            "label": f"Loop QA reusable label {stamp}",
+        })
+        library = api.get(f"/api/listening/library?q={urllib.parse.quote('reusable label ' + stamp)}")
+        found = any(item.get("id") == extraction.get("id") for item in library.get("extractions") or [])
+        if not found:
+            raise AssertionError(json.dumps(fail_check(
+                "listening_lab",
+                "Saved extraction did not appear in the searchable library.",
+                {"extraction_id": extraction.get("id"), "matches": len(library.get("extractions") or [])},
+            ), ensure_ascii=False))
+        deleted = api.delete(f"/api/listening/projects/{urllib.parse.quote(project_id)}")
+        if deleted.get("linked_entries_deleted") != 1:
+            raise AssertionError(json.dumps(fail_check(
+                "listening_lab",
+                "Project delete did not remove linked memory entries.",
+                deleted,
+            ), ensure_ascii=False))
+        try:
+            api.get(f"/api/entries/{urllib.parse.quote(linked_entry_id)}")
+            raise AssertionError(json.dumps(fail_check(
+                "listening_lab",
+                "Linked memory entry survived project deletion.",
+                {"linked_entry_id": linked_entry_id},
+            ), ensure_ascii=False))
+        except RuntimeError as exc:
+            if "404" not in str(exc):
+                raise
+        project_id = None
+        return pass_check(
+            "listening_lab",
+            "Temporary project was opened, broken down, saved to library, labeled, and fully deleted.",
+            {"extraction_id": extraction.get("id"), "linked_entry_id": linked_entry_id},
+        )
+    finally:
+        if project_id:
+            try:
+                api.delete(f"/api/listening/projects/{urllib.parse.quote(project_id)}")
+            except Exception:
+                pass
+        if linked_entry_id:
+            try:
+                api.delete(f"/api/entries/{urllib.parse.quote(linked_entry_id)}")
+            except Exception:
+                pass
+
+
 def check_memory_loop(api: ApiClient) -> dict:
     stamp = str(int(time.time()))
     raw = f"LOOP QA temporary proof {stamp}: Command Center needs a complete input to action to result loop."
@@ -197,6 +281,7 @@ def run_loop(base_url: str, stock_symbol: str) -> dict:
         check_command_center,
         check_pull,
         lambda client: check_stock(client, stock_symbol),
+        check_listening_lab,
         check_memory_loop,
     ):
         try:

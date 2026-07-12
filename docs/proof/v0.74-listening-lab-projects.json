@@ -1,0 +1,20 @@
+{
+  "version": "v0.74-listening-lab-projects",
+  "generated_at": "2026-07-12T04:20:12+00:00",
+  "principle": "No feature ships until it survives the live user loop.",
+  "features_verified": [
+    "Dedicated Listening Lab tab is served by the active web app.",
+    "Project can be created and opened.",
+    "Continue Extraction generates a system-authored breakdown draft.",
+    "Breakdown includes section map, glossary, and sound example.",
+    "Save Extraction commits the extraction to the library and linked Music memory.",
+    "Library search finds labeled extractions.",
+    "Project delete permanently removes project, extractions, and linked memory entry.",
+    "Full app loop check still passes Command Center, Pull, Stock Intel, Listening Lab, and Memory Loop."
+  ],
+  "loop_check_summary": {
+    "passed": 6,
+    "failed": 0,
+    "total": 6
+  }
+}

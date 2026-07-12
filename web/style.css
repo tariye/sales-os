@@ -243,6 +243,13 @@ input:focus,textarea:focus,select:focus{
 .pattern-engine-card.warning{border-left:4px solid var(--bad)}
 .pattern-engine-card.caution{border-left:4px solid var(--warn)}
 .pattern-engine-card.advisory{border-left:4px solid var(--accent)}
+.listening-project-card{border-left:4px solid var(--accent)}
+.extraction-card{border-left:4px solid var(--warn)}
+.extraction-library-card{border-left:4px solid var(--good)}
+.mini-item{box-shadow:none;background:rgba(255,253,248,.72)}
+.compact-kv{grid-template-columns:110px 1fr}
+.inline-search{max-width:320px;margin-top:0}
+.lab-breakdown-grid{margin:14px 0}
 
 .steps{margin:0;padding-left:18px}
 .steps li{margin:0 0 5px}

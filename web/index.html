@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Info Analyzer OS v0.73</title>
+  <title>Info Analyzer OS v0.74</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <header class="app-header">
     <div>
       <p class="eyebrow">Intelligence OS</p>
-      <h1>Info Analyzer OS <span>v0.73</span></h1>
+      <h1>Info Analyzer OS <span>v0.74</span></h1>
       <p class="subtitle">Capture raw input, contextualize it into memory, and resurface only what changes a decision.</p>
     </div>
     <button id="exportBtn" class="ghost small">Export</button>
@@ -20,6 +20,7 @@
     <button class="tab active" data-tab="dump">New Entry</button>
     <button class="tab" data-tab="queue">Queue <span id="queueBadge" class="queue-badge hidden">0</span></button>
     <button class="tab" data-tab="command">Command Center</button>
+    <button class="tab" data-tab="listening">Listening Lab</button>
     <button class="tab" data-tab="stock">Stock Intel</button>
     <button class="tab" data-tab="memory">Memory DB</button>
     <button class="tab" data-tab="actions">Actions</button>
@@ -199,7 +200,49 @@
       </div>
     </section>
 
-    <!-- ④ STOCK INTEL ───────────────────────────────────────────── -->
+    <!-- ④ LISTENING LAB ─────────────────────────────────────────── -->
+    <section id="listening" class="panel">
+      <div class="card hero">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Listening Lab</p>
+            <h2>Song Breakdown Projects</h2>
+            <p class="subtitle">Create a project, open it, let the system break down the song, then save reusable extractions into the library.</p>
+          </div>
+          <button id="refreshListening" class="ghost small">Refresh</button>
+        </div>
+        <div class="grid two">
+          <label>Song / Project Title<input id="listeningTitle" placeholder="Song, beat, catalog asset, reference track..." /></label>
+          <label>Artist / Source<input id="listeningArtist" placeholder="Artist, producer, catalog, source..." /></label>
+        </div>
+        <label>Source URL<input id="listeningUrl" placeholder="YouTube, Spotify, file note, reference URL..." /></label>
+        <label>Raw Notes For The System<textarea id="listeningNotes" rows="4" placeholder="Paste lyrics summary, sonic notes, arrangement notes, timestamps, mood, instruments, hook ideas, sync context..."></textarea></label>
+        <div class="buttons">
+          <button id="createListeningProject" class="primary">Create Project</button>
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Projects</p><h2>Open Or Delete</h2></div></div>
+          <div id="listeningProjects" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Open Project</p><h2 id="openListeningTitle">No Project Open</h2></div></div>
+          <div id="openListeningProject" class="list"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div><p class="eyebrow">Extraction Library</p><h2>Reusable Song Intelligence</h2></div>
+          <input id="listeningLibrarySearch" class="inline-search" placeholder="Search labels, songs, tags..." />
+        </div>
+        <div id="listeningLibrary" class="list"></div>
+      </div>
+    </section>
+
+    <!-- ⑤ STOCK INTEL ───────────────────────────────────────────── -->
     <section id="stock" class="panel">
       <div class="card hero">
         <div class="card-head">
@@ -217,7 +260,7 @@
       <div id="stockOutput" class="list"></div>
     </section>
 
-    <!-- ⑤ MEMORY DB ─────────────────────────────────────────────── -->
+    <!-- ⑥ MEMORY DB ─────────────────────────────────────────────── -->
     <section id="memory" class="panel">
       <div class="card">
         <div class="card-head"><div><p class="eyebrow">SQLite Memory</p><h2>Ledger</h2></div><button id="refreshMemory" class="ghost small">Refresh</button></div>
@@ -229,7 +272,7 @@
       </div>
     </section>
 
-    <!-- ⑥ ACTIONS ───────────────────────────────────────────────── -->
+    <!-- ⑦ ACTIONS ───────────────────────────────────────────────── -->
     <section id="actions" class="panel">
       <div class="card">
         <div class="card-head"><div><p class="eyebrow">Execution Queue</p><h2>Returned Actions</h2></div><button id="refreshActions" class="ghost small">Refresh</button></div>
@@ -237,12 +280,12 @@
       </div>
     </section>
 
-    <!-- ⑦ PATTERNS ──────────────────────────────────────────────── -->
+    <!-- ⑧ PATTERNS ──────────────────────────────────────────────── -->
     <section id="patterns" class="panel">
       <div class="card"><div class="card-head"><div><p class="eyebrow">Pattern Engine</p><h2>Cross-Database Pattern Scan</h2></div><div class="buttons compact"><button id="scanPatterns" class="primary small">Run Pattern Engine</button><button id="refreshPatterns" class="ghost small">Refresh</button></div></div><div id="patternsList" class="list"></div></div>
     </section>
 
-    <!-- ⑧ CHANGELOG ─────────────────────────────────────────────── -->
+    <!-- ⑨ CHANGELOG ─────────────────────────────────────────────── -->
     <section id="changelog" class="panel">
       <div class="card hero">
         <div class="card-head">

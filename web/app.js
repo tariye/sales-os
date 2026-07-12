@@ -4,6 +4,8 @@ const esc = v => String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").
 const tagsFrom = s => String(s||"").split(/[#,]/).map(x=>x.trim().toLowerCase()).filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i);
 let lastDraft = null;
 let lastStockIntel = null;
+let currentListeningProject = null;
+let currentListeningExtractionDraft = null;
 const INNBANK_QUESTIONS = [
   "What value is being created?",
   "Where is money flowing?",
@@ -228,6 +230,7 @@ function switchTab(tab){
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
   document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active", p.id===tab));
   if(tab==="command") loadCommand();
+  if(tab==="listening") loadListeningLab();
   if(tab==="queue") loadQueue();
   if(tab==="stock") loadStockIntel();
   if(tab==="memory") loadMemory();
@@ -659,6 +662,171 @@ async function pullMemory(){
   toast(`Pulled ${quick.length + big.length} action signals`);
 }
 
+function sectionMapHTML(sections){
+  const rows = sections || [];
+  return rows.length ? rows.map(s=>`<div class="item mini-item">
+    <h3>${esc(s.section || "Section")}</h3>
+    <p class="muted">${esc(s.system_read || "")}</p>
+    ${kvHTML("Trackable Use", s.trackable_use || "")}
+  </div>`).join("") : `<div class="item"><h3>No section map</h3><p class="muted">Continue extraction to generate a section map.</p></div>`;
+}
+function glossaryHTML(items){
+  const rows = items || [];
+  return rows.length ? rows.map(g=>`<div class="kv compact-kv"><b>${esc(g.term || "")}</b><span>${esc(g.meaning || "")}</span></div>`).join("") : `<p class="muted">No glossary terms yet.</p>`;
+}
+function listeningProjectHTML(p){
+  return `<div class="item listening-project-card">
+    <h3>${esc(p.title)}</h3>
+    <div class="meta">
+      ${p.artist ? `<span class="tag">${esc(p.artist)}</span>` : ""}
+      <span class="tag">${esc(p.extraction_count || 0)} extractions</span>
+      <span class="tag">${esc(p.status || "active")}</span>
+    </div>
+    <p class="muted">${esc((p.notes || p.source_url || "No notes yet").slice(0,180))}</p>
+    <div class="buttons compact">
+      <button class="primary small" onclick="openListeningProject('${esc(p.id)}')">Open Project</button>
+      <button class="ghost small danger-btn" onclick="deleteListeningProject('${esc(p.id)}')">Delete</button>
+    </div>
+  </div>`;
+}
+function listeningExtractionDraftHTML(extraction, saved=false){
+  if(!extraction) return `<div class="item"><h3>No extraction yet</h3><p class="muted">Open a project and press Continue Extraction.</p></div>`;
+  return `<div class="item extraction-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">${saved ? "Saved Extraction" : "System Breakdown Draft"}</p>
+        <h3>${esc(extraction.label || "Song breakdown")}</h3>
+      </div>
+      <span class="pill">${esc(extraction.extraction_type || "song_breakdown")}</span>
+    </div>
+    ${saved
+      ? kvHTML("User Label", extraction.label || "")
+      : `<label>User Label<input id="listeningDraftLabel" value="${esc(extraction.label || "")}" placeholder="Label for later reuse: hook map, sync texture, groove idea..." /></label>`}
+    ${kvHTML("Breakdown", extraction.breakdown || "")}
+    <div class="grid two lab-breakdown-grid">
+      <div>
+        <h3>Section Map</h3>
+        <div class="list">${sectionMapHTML(extraction.section_map || [])}</div>
+      </div>
+      <div>
+        <h3>Glossary</h3>
+        ${glossaryHTML(extraction.glossary || [])}
+      </div>
+    </div>
+    ${kvHTML("Sound Example", extraction.sound_example || "")}
+    ${kvHTML("Reuse Context", extraction.reuse_context || "")}
+    <div class="meta">${(extraction.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
+    ${!saved ? `<div class="buttons">
+      <button class="primary small" onclick="saveListeningExtraction()">Save Extraction</button>
+    </div>` : ""}
+  </div>`;
+}
+function listeningLibraryHTML(e){
+  return `<div class="item extraction-library-card">
+    <h3>${esc(e.label || "Unlabeled extraction")}</h3>
+    <div class="meta">
+      <span class="tag">${esc(e.project_title || e.project_id)}</span>
+      ${e.project_artist ? `<span class="tag">${esc(e.project_artist)}</span>` : ""}
+      ${(e.tags||[]).slice(0,5).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}
+    </div>
+    ${kvHTML("Breakdown", e.breakdown || "")}
+    ${kvHTML("Sound Example", e.sound_example || "")}
+    ${kvHTML("Reuse", e.reuse_context || "")}
+    <label>Label For Later Use<input value="${esc(e.label || "")}" onchange="updateListeningExtractionLabel('${esc(e.id)}', this.value)" /></label>
+  </div>`;
+}
+async function loadListeningLab(){
+  const [projects, library] = await Promise.all([
+    api("/listening/projects"),
+    api(`/listening/library?q=${encodeURIComponent($("listeningLibrarySearch")?.value || "")}`),
+  ]);
+  $("listeningProjects").innerHTML = (projects.projects || []).length
+    ? projects.projects.map(listeningProjectHTML).join("")
+    : `<div class="item"><h3>No projects yet</h3><p class="muted">Create a Listening Lab project from song notes, a reference URL, or arrangement observations.</p></div>`;
+  $("listeningLibrary").innerHTML = (library.extractions || []).length
+    ? library.extractions.map(listeningLibraryHTML).join("")
+    : `<div class="item"><h3>Library empty</h3><p class="muted">Saved extractions appear here with labels for later reuse.</p></div>`;
+  if(!currentListeningProject){
+    $("openListeningTitle").textContent = "No Project Open";
+    $("openListeningProject").innerHTML = `<div class="item"><h3>Open a project</h3><p class="muted">Open Project loads the workspace where the system can continue extracting and save breakdowns.</p></div>`;
+  }
+}
+async function createListeningProject(){
+  const payload = {
+    title: $("listeningTitle").value.trim(),
+    artist: $("listeningArtist").value.trim(),
+    source_url: $("listeningUrl").value.trim(),
+    notes: $("listeningNotes").value.trim(),
+  };
+  if(!payload.title){ toast("Add a project title"); return; }
+  const res = await api("/listening/projects", {method:"POST", body:JSON.stringify(payload)});
+  toast("Listening project created");
+  $("listeningTitle").value = "";
+  $("listeningArtist").value = "";
+  $("listeningUrl").value = "";
+  $("listeningNotes").value = "";
+  await loadListeningLab();
+  await openListeningProject(res.project.id);
+}
+async function openListeningProject(id){
+  const res = await api(`/listening/projects/${encodeURIComponent(id)}`);
+  currentListeningProject = res.project;
+  currentListeningExtractionDraft = null;
+  $("openListeningTitle").textContent = currentListeningProject.title;
+  const saved = (res.extractions || []).map(e=>listeningExtractionDraftHTML(e, true)).join("");
+  $("openListeningProject").innerHTML = `<div class="item">
+    <h3>${esc(currentListeningProject.title)}</h3>
+    <div class="meta">
+      ${currentListeningProject.artist ? `<span class="tag">${esc(currentListeningProject.artist)}</span>` : ""}
+      ${currentListeningProject.source_url ? `<span class="tag">source attached</span>` : ""}
+      <span class="tag">${esc(res.extractions.length)} saved</span>
+    </div>
+    <p class="muted">${esc(currentListeningProject.notes || "No project notes yet.")}</p>
+    <label>Continue Extraction Prompt<textarea id="listeningExtractionPrompt" rows="3" placeholder="Ask the system what to break down next: section map, glossary, sound example, sync fit, hook map, groove analysis..."></textarea></label>
+    <div class="buttons">
+      <button class="primary small" onclick="continueListeningExtraction()">Continue Extraction</button>
+      <button class="ghost small" onclick="loadListeningLab()">Close Project</button>
+    </div>
+  </div>
+  <div id="listeningDraftHost">${listeningExtractionDraftHTML(null)}</div>
+  ${saved ? `<div class="item"><h3>Saved Project Extractions</h3><p class="muted">These are already in the library and memory ledger.</p></div>${saved}` : ""}`;
+}
+async function continueListeningExtraction(){
+  if(!currentListeningProject){ toast("Open a project first"); return; }
+  const prompt = document.getElementById("listeningExtractionPrompt")?.value || "";
+  const res = await api(`/listening/projects/${encodeURIComponent(currentListeningProject.id)}/breakdown`, {
+    method:"POST",
+    body:JSON.stringify({prompt, label:`${currentListeningProject.title} extraction`})
+  });
+  currentListeningExtractionDraft = res.draft;
+  document.getElementById("listeningDraftHost").innerHTML = listeningExtractionDraftHTML(currentListeningExtractionDraft);
+  toast("System breakdown draft generated");
+}
+async function saveListeningExtraction(){
+  if(!currentListeningExtractionDraft){ toast("No extraction draft"); return; }
+  const label = document.getElementById("listeningDraftLabel")?.value.trim();
+  const res = await api(`/listening/projects/${encodeURIComponent(currentListeningProject.id)}/extractions`, {
+    method:"POST",
+    body:JSON.stringify({...currentListeningExtractionDraft, label: label || currentListeningExtractionDraft.label})
+  });
+  currentListeningExtractionDraft = res.extraction;
+  toast("Extraction saved to library");
+  await openListeningProject(currentListeningProject.id);
+  await loadListeningLab();
+}
+async function updateListeningExtractionLabel(id, label){
+  await api(`/listening/extractions/${encodeURIComponent(id)}`, {method:"PATCH", body:JSON.stringify({label})});
+  toast("Label updated");
+  await loadListeningLab();
+}
+async function deleteListeningProject(id){
+  if(!confirm("Permanently delete this project and all of its extractions?")) return;
+  await api(`/listening/projects/${encodeURIComponent(id)}`, {method:"DELETE"});
+  if(currentListeningProject?.id === id) currentListeningProject = null;
+  toast("Project deleted");
+  await loadListeningLab();
+}
+
 function stockMetricHTML(label, item){
   if(!item) return `<div class="stat"><strong>n/a</strong><span class="muted">${esc(label)}</span></div>`;
   return `<div class="stat"><strong>${esc(item.display || item.value || "n/a")}</strong><span class="muted">${esc(label)}${item.end ? " · " + esc(item.end) : ""}</span></div>`;
@@ -969,6 +1137,9 @@ $("refreshChangelog").addEventListener("click", loadChangelog);
 $("refreshQueue").addEventListener("click", loadQueue);
 $("analyzeStockBtn").addEventListener("click", analyzeStock);
 $("saveStockIntel").addEventListener("click", saveStockIntel);
+$("refreshListening").addEventListener("click", loadListeningLab);
+$("createListeningProject").addEventListener("click", createListeningProject);
+$("listeningLibrarySearch").addEventListener("input", ()=>{ clearTimeout(window.__listeningSearchTimer); window.__listeningSearchTimer=setTimeout(loadListeningLab,250); });
 $("searchInput").addEventListener("input", ()=>{ clearTimeout(window.__searchTimer); window.__searchTimer=setTimeout(loadMemory,250); });
 $("filterDomain").addEventListener("change", loadMemory);
 $("clearBtn").addEventListener("click", ()=>{ document.querySelectorAll("textarea,input").forEach(el=>{ if(!["searchInput"].includes(el.id)) el.value=""; }); $("sourceTypeInput").value=""; $("draftPill").textContent="empty"; $("draftPill").className="pill muted"; $("saveOutput").innerHTML=""; });
