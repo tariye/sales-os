@@ -1,0 +1,44 @@
+{
+  "generated_at": "",
+  "base_url": "http://127.0.0.1:8000",
+  "principle": "No feature ships until it survives the live user loop.",
+  "summary": {
+    "passed": 0,
+    "failed": 0,
+    "total": 0
+  },
+  "checks": [
+    {
+      "name": "health",
+      "status": "pass|fail",
+      "detail": "Live app responds with a version.",
+      "evidence": {}
+    },
+    {
+      "name": "command_center_resolvers",
+      "status": "pass|fail",
+      "detail": "Command Center callouts expose resolver buttons.",
+      "evidence": {}
+    },
+    {
+      "name": "pull_sales",
+      "status": "pass|fail",
+      "detail": "Pull Engine returns an actionable sales card.",
+      "evidence": {}
+    },
+    {
+      "name": "stock_intel",
+      "status": "pass|fail",
+      "detail": "Stock Intel returns financials and extracted signals.",
+      "evidence": {}
+    },
+    {
+      "name": "memory_loop",
+      "status": "pass|fail",
+      "detail": "Temporary entry was saved, pulled, result-logged, and cleaned up.",
+      "evidence": {}
+    }
+  ],
+  "status": "pass|fail"
+}
+

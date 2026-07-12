@@ -1,5 +1,22 @@
 # Changelog
 
+## Engineering Doctrine - Loop Principle - 2026-07-11
+
+### Added
+
+- Added `docs/engineering/loop-principle.md`.
+- Added `tools/loop_check.py` as the executable user-loop checker.
+- Added `docs/proof/loop-check-template.json`.
+- README now points to the loop check command.
+
+### Rule
+
+No feature ships until it survives:
+
+```text
+Build -> Run -> Use -> Observe -> Fix -> Retest -> Document -> Commit
+```
+
 ## v0.73-stock-intel-pilot - 2026-07-11
 
 ### Added

@@ -28,10 +28,21 @@ Current version: `v0.73-stock-intel-pilot`
 Proof artifacts:
 
 - [CHANGELOG.md](CHANGELOG.md)
+- [Loop Principle](docs/engineering/loop-principle.md)
 - [ADR 0001: Command Center Resolver](docs/adr/0001-command-center-resolver.md)
 - [v0.72 proof entry](docs/proof/v0.72-command-resolver.json)
 - [ADR 0002: Stock Intel Pilot](docs/adr/0002-stock-intel-pilot.md)
 - [v0.73 proof entry](docs/proof/v0.73-stock-intel-pilot.json)
+
+## Loop check
+
+Before committing new feature work, run:
+
+```bash
+python3 tools/loop_check.py --base-url http://127.0.0.1:8000 --stock AAPL
+```
+
+The checker exercises the live site as a user: health, Command Center resolver buttons, Pull Engine, Stock Intel, and a temporary write/pull/result/delete memory loop.
 
 ## Run locally
 
