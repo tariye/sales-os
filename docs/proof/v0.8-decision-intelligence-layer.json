@@ -1,0 +1,26 @@
+{
+  "version": "v0.8-decision-intelligence-layer",
+  "generated_at": "2026-07-12T16:14:42+00:00",
+  "principle": "No signal is complete until it changes a decision, confirms a decision, or improves a decision rule.",
+  "features_verified": [
+    "Decision rules are stored as first-class reusable heuristics.",
+    "Decision reviews connect saved signals to affected decisions.",
+    "Saved signals can create decision reviews and update decision rules.",
+    "Command Center shows Decision Queue and Decision Rules.",
+    "Decision feedback updates the review and strengthens or weakens the linked rule.",
+    "Export includes decision rules and decision reviews.",
+    "Loop checker verifies the Decision Intelligence Layer end to end."
+  ],
+  "loop_check_summary": {
+    "passed": 9,
+    "failed": 0,
+    "total": 9
+  },
+  "github_check": {
+    "repo_checked": "https://github.com/tariye/sales-os.git",
+    "remote_main_commit": "bfa1480df4cd8f4eafb7b6a5bbe8787a980eec34",
+    "local_before_v0_8": "8369c4b v0.75-asset-lab-cockpit-links",
+    "v0_79_found_locally": false,
+    "v0_79_found_on_remote_main": false
+  }
+}

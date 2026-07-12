@@ -134,6 +134,57 @@ async function openDataPlane(encodedDomains, name){
   $("dataPlaneDrilldown").innerHTML = `<div class="grid two"><div><div class="item"><h3>Signals</h3><p class="muted">${esc(entries.length)} recent signal(s)</p></div>${signalHTML}</div><div><div class="item"><h3>Routes</h3><p class="muted">${esc(actions.length)} open route(s)</p></div>${routeHTML}</div></div>`;
   $("dataPlaneDrilldown").scrollIntoView({behavior:"smooth", block:"start"});
 }
+function decisionReviewHTML(review){
+  const before = Number(review.confidence_before || 0).toFixed(2);
+  const after = Number(review.confidence_after || 0).toFixed(2);
+  return `<div class="item decision-card">
+    <h3>${esc(review.decision_question || review.entry_title || review.id)}</h3>
+    <div class="meta"><span class="tag">${esc(review.status || "")}</span><span class="tag">${esc(review.entry_domain || "")}</span><span class="tag">confidence ${esc(before)} → ${esc(after)}</span></div>
+    ${kvHTML("Signal", review.entry_signal || "")}
+    ${kvHTML("Recommended Change", review.recommended_change || "")}
+    ${kvHTML("Feedback Metric", review.feedback_metric || "")}
+    <div class="buttons compact">
+      <button class="ghost small" onclick="openSourceEntry('${esc(review.entry_id)}')">Open Source</button>
+      <button class="primary small" onclick="updateDecisionFeedback('${esc(review.id)}')">Log Feedback</button>
+    </div>
+  </div>`;
+}
+function decisionRuleHTML(rule){
+  return `<div class="item rule-card">
+    <h3>${esc(rule.name || rule.id)}</h3>
+    <div class="meta"><span class="tag">${esc(rule.domain || "")}</span><span class="tag">confidence ${esc(Number(rule.confidence || 0).toFixed(2))}</span><span class="tag">${esc(rule.evidence_count || 0)} evidence</span></div>
+    ${kvHTML("Rule", rule.rule_text || "")}
+    <div class="kv"><b>Outcomes</b><span>${esc(rule.success_count || 0)} success · ${esc(rule.failure_count || 0)} failure</span></div>
+  </div>`;
+}
+async function loadDecisions(){
+  const [queue, rules] = await Promise.all([
+    api("/decisions/queue?status=open&limit=8"),
+    api("/decisions/rules?limit=8"),
+  ]);
+  const stats = queue.stats || {};
+  $("decisionStats").innerHTML = [
+    ["Open decisions", stats.open || 0],
+    ["Watching", stats.watching || 0],
+    ["Updated", stats.updated || 0],
+    ["Active rules", stats.rules || 0],
+  ].map(([k,v])=>`<div class="stat"><strong>${esc(v)}</strong><span class="muted">${esc(k)}</span></div>`).join("");
+  $("decisionQueueList").innerHTML = (queue.reviews || []).length
+    ? queue.reviews.map(decisionReviewHTML).join("")
+    : `<div class="item"><h3>Decision queue quiet</h3><p class="muted">No open decision reviews. Save a signal that affects a rule or action.</p></div>`;
+  $("decisionRulesList").innerHTML = (rules.rules || []).length
+    ? rules.rules.map(decisionRuleHTML).join("")
+    : `<div class="item"><h3>No decision rules yet</h3><p class="muted">Rules form as signals are saved and feedback is logged.</p></div>`;
+}
+async function updateDecisionFeedback(id){
+  const result = prompt("What happened? What did reality prove?");
+  if(!result) return;
+  const ruleUpdate = prompt("How should the decision rule update?") || "";
+  const outcome = prompt("Outcome: success, failure, neutral, or updated?", "updated") || "updated";
+  await api(`/decisions/${encodeURIComponent(id)}/feedback`, {method:"PATCH", body:JSON.stringify({result, rule_update:ruleUpdate, outcome})});
+  toast("Decision feedback logged");
+  await loadDecisions();
+}
 function renderImportPlanes(imports){
   const el = $("importPlanes");
   if(!el) return;
@@ -1049,6 +1100,7 @@ async function loadCommand(){
   renderPlaneCards("innbankDataPlanes", DATA_PLANES, domainCounts, actionCounts);
   renderPlaneCards("innbankSubplanes", SUB_CONTROL_PLANES, domainCounts, actionCounts);
   renderImportPlanes(d.imports || {});
+  loadDecisions();
   const cockpit = d.cockpit || {};
   if(d.total_entries === 0){
     $("warningLane").innerHTML = `<div class="item callout advisory"><h3>Start routing reality</h3><p class="muted">Go to <strong>New Entry</strong>, capture a real signal, and start building the control plane one value record at a time.</p></div>`;
@@ -1184,6 +1236,7 @@ $("rewireMemory").addEventListener("click", rewireMemory);
 $("refreshMemory").addEventListener("click", loadMemory);
 $("refreshActions").addEventListener("click", loadActions);
 $("refreshCommand").addEventListener("click", loadCommand);
+$("refreshDecisions").addEventListener("click", loadDecisions);
 $("dormantBtn").addEventListener("click", loadDormant);
 $("refreshPatterns").addEventListener("click", loadPatterns);
 $("scanPatterns").addEventListener("click", runPatternEngine);

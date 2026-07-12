@@ -164,6 +164,17 @@
         <div id="dataPlaneDrilldown" class="list"><div class="item"><h3>No plane selected</h3><p class="muted">Click a data plane to view its signals and active routes.</p></div></div>
       </div>
       <div class="card">
+        <div class="card-head">
+          <div><p class="eyebrow">Decision Intelligence Layer</p><h2>No Signal Is Complete Until It Changes A Decision</h2></div>
+          <button id="refreshDecisions" class="ghost small">Refresh</button>
+        </div>
+        <div id="decisionStats" class="stats"></div>
+        <div class="grid two" style="margin-top:14px">
+          <div><div class="item"><h3>Decision Queue</h3><p class="muted">Signals that should change, confirm, or review a decision.</p></div><div id="decisionQueueList" class="list"></div></div>
+          <div><div class="item"><h3>Decision Rules</h3><p class="muted">Reusable heuristics being strengthened or weakened by feedback.</p></div><div id="decisionRulesList" class="list"></div></div>
+        </div>
+      </div>
+      <div class="card">
         <div class="card-head"><div><p class="eyebrow">Sub-Control Planes</p><h2>Systems That Convert Signal Into Results</h2></div></div>
         <div id="innbankSubplanes" class="plane-grid"></div>
       </div>

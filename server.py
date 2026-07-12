@@ -53,7 +53,7 @@ WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "info_analyzer.db"
 
-APP_VERSION = "v0.75-asset-lab-cockpit-links"
+APP_VERSION = "v0.8-decision-intelligence-layer"
 APP_VERSIONS = [
     {
         "version": "v0.1",
@@ -404,6 +404,17 @@ APP_VERSIONS = [
             "Command Center data planes are clickable and reveal their signals and active routes",
             "Pattern cards headline the actual pattern/signal and can be recontextualized into action queue items",
             "Action cards expose clickable source memory plus similar-signal context for deeper recontextualization",
+        ],
+    },
+    {
+        "version": "v0.8",
+        "name": "Decision Intelligence Layer",
+        "features": [
+            "Decision rules table stores reusable heuristics, confidence, evidence count, and feedback outcomes",
+            "Decision reviews connect signals to affected decisions, recommended changes, confidence movement, and feedback metrics",
+            "Every saved signal can create or update a decision review and decision rule",
+            "Command Center shows Decision Queue and Decision Rules",
+            "Feedback can update a decision review and strengthen or weaken the linked rule",
         ],
     },
 ]
@@ -1119,6 +1130,45 @@ def init_db() -> None:
             FOREIGN KEY(project_id) REFERENCES listening_projects(id)
         );
 
+        CREATE TABLE IF NOT EXISTS decision_rules (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            name TEXT NOT NULL,
+            domain TEXT DEFAULT 'Other',
+            entity TEXT,
+            rule_text TEXT NOT NULL,
+            confidence REAL DEFAULT 0.5,
+            status TEXT DEFAULT 'active',
+            evidence_count INTEGER DEFAULT 0,
+            action_count INTEGER DEFAULT 0,
+            success_count INTEGER DEFAULT 0,
+            failure_count INTEGER DEFAULT 0,
+            last_entry_id TEXT,
+            metadata TEXT DEFAULT '{}',
+            FOREIGN KEY(last_entry_id) REFERENCES entries(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS decision_reviews (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            entry_id TEXT NOT NULL UNIQUE,
+            rule_id TEXT,
+            decision_question TEXT NOT NULL,
+            current_rule TEXT,
+            recommended_change TEXT,
+            confidence_before REAL DEFAULT 0.5,
+            confidence_after REAL DEFAULT 0.5,
+            status TEXT DEFAULT 'open',
+            feedback_metric TEXT,
+            result TEXT,
+            rule_update TEXT,
+            metadata TEXT DEFAULT '{}',
+            FOREIGN KEY(entry_id) REFERENCES entries(id),
+            FOREIGN KEY(rule_id) REFERENCES decision_rules(id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_entries_created ON entries(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_entries_domain ON entries(domain);
         CREATE INDEX IF NOT EXISTS idx_entries_status ON entries(status);
@@ -1146,6 +1196,9 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_listening_projects_status ON listening_projects(status);
         CREATE INDEX IF NOT EXISTS idx_listening_extractions_project ON listening_extractions(project_id);
         CREATE INDEX IF NOT EXISTS idx_listening_extractions_label ON listening_extractions(label);
+        CREATE INDEX IF NOT EXISTS idx_decision_rules_domain ON decision_rules(domain, status);
+        CREATE INDEX IF NOT EXISTS idx_decision_reviews_status ON decision_reviews(status, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_decision_reviews_entry ON decision_reviews(entry_id);
         """)
         ensure_column(conn, "entries", "actionability", "TEXT DEFAULT 'watch'")
         ensure_column(conn, "entries", "pull_trigger_type", "TEXT DEFAULT 'tag'")
@@ -1304,6 +1357,18 @@ def row_to_listening_extraction(row) -> dict:
     d["breakdown_map"] = d["section_map"]
     d["key_terms"] = d["glossary"]
     d["concrete_example"] = d.get("sound_example") or ""
+    return d
+
+
+def row_to_decision_rule(row) -> dict:
+    d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_decision_review(row) -> dict:
+    d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
     return d
 
 
@@ -3507,12 +3572,108 @@ def create_entry(payload: dict) -> dict:
         action = upsert_action_for_entry(conn, entry)
         update_pattern_stats(conn, entry)
         rules = create_pull_rules(conn, entry)
+        decision = upsert_decision_review_for_entry(conn, entry)
         conn.commit()
     pull = resurface_context(
         raw_input=entry["raw_input"], domain=entry["domain"], entity=entry["entity"], tags=entry["tags"],
         signal_role=entry["signal_role"], triggered_by_entry_id=entry["id"], save_cards=True,
     )
-    return {"entry": entry, "action": action, "pull_rules": rules, "context_packet": pull}
+    return {"entry": entry, "action": action, "decision": decision, "pull_rules": rules, "context_packet": pull}
+
+
+def decision_confidence_value(entry: dict) -> float:
+    base = {"Low": 0.35, "Medium": 0.55, "High": 0.75}.get(clean_text(entry.get("confidence")), 0.55)
+    role = clean_text(entry.get("signal_role"))
+    if role == "proof":
+        return min(0.95, base + 0.15)
+    if role in {"risk", "contradiction"}:
+        return max(0.2, base - 0.1)
+    if role in {"action", "opportunity"}:
+        return min(0.85, base + 0.05)
+    return base
+
+
+def decision_rule_key(entry: dict) -> str:
+    basis = clean_text(entry.get("pattern") or entry.get("lesson") or entry.get("signal") or entry.get("title") or "Signal rule")
+    domain = clean_text(entry.get("domain")) or "Other"
+    entity = clean_text(entry.get("entity"))
+    return f"{domain}|{entity}|{basis[:160]}".lower()
+
+
+def build_decision_rule_text(entry: dict) -> str:
+    if clean_text(entry.get("pattern")):
+        return clean_text(entry.get("pattern"))
+    if clean_text(entry.get("lesson")):
+        return clean_text(entry.get("lesson"))
+    signal = clean_text(entry.get("signal") or entry.get("title") or "this signal")
+    metric = clean_text(entry.get("tracking_metric") or entry.get("result_to_track") or "observable result")
+    return f"When {signal} appears, compare it against {metric} before changing action."
+
+
+def upsert_decision_review_for_entry(conn, entry: dict) -> dict | None:
+    if entry.get("status") in {"archived", "raw", "pending_claude", "needs_enrichment"}:
+        return None
+    signal = clean_text(entry.get("signal") or entry.get("interpretation") or entry.get("raw_input"))
+    if not signal:
+        return None
+    now = now_iso()
+    rule_text = build_decision_rule_text(entry)
+    rule_id = "DR-" + uuid.uuid5(uuid.NAMESPACE_URL, decision_rule_key(entry)).hex[:16].upper()
+    rule_row = conn.execute("SELECT * FROM decision_rules WHERE id=?", (rule_id,)).fetchone()
+    before = float(rule_row["confidence"]) if rule_row else 0.5
+    after = decision_confidence_value(entry)
+    rule_name = clean_text(entry.get("pattern") or entry.get("lesson") or entry.get("title") or entry.get("signal"))[:220] or "Decision rule"
+    domain = clean_text(entry.get("domain")) or "Other"
+    entity = clean_text(entry.get("entity"))
+    if rule_row:
+        evidence_count = int(rule_row["evidence_count"] or 0) + 1
+        blended = round((before * 0.75) + (after * 0.25), 3)
+        conn.execute(
+            """UPDATE decision_rules
+               SET updated_at=?, name=?, domain=?, entity=?, rule_text=?, confidence=?, evidence_count=?, action_count=action_count+?, last_entry_id=?
+               WHERE id=?""",
+            (now, rule_name, domain, entity, rule_text, blended, evidence_count, 1 if entry.get("actionability") in {"now", "next", "review"} else 0, entry["id"], rule_id),
+        )
+        after = blended
+    else:
+        conn.execute(
+            """INSERT INTO decision_rules
+               (id, created_at, updated_at, name, domain, entity, rule_text, confidence, status, evidence_count, action_count, last_entry_id, metadata)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?)""",
+            (rule_id, now, now, rule_name, domain, entity, rule_text, after, 1 if entry.get("actionability") in {"now", "next", "review"} else 0, entry["id"], json.dumps({"created_from_entry": entry["id"]}, ensure_ascii=False)),
+        )
+    review_id = "DREV-" + uuid.uuid5(uuid.NAMESPACE_URL, entry["id"]).hex[:16].upper()
+    decision_question = clean_text(entry.get("metadata", {}).get("decision_question") if isinstance(entry.get("metadata"), dict) else "") or (
+        f"What decision should change for {entity or domain}?"
+    )
+    recommended_change = clean_text(entry.get("returned_action") or entry.get("next_step") or entry.get("first_step")) or "Watch this signal until it confirms, contradicts, or changes the rule."
+    status = "open" if entry.get("actionability") in {"now", "next", "review"} or entry.get("signal_role") in {"risk", "contradiction", "opportunity", "proof"} else "watching"
+    payload = {
+        "id": review_id,
+        "created_at": now,
+        "updated_at": now,
+        "entry_id": entry["id"],
+        "rule_id": rule_id,
+        "decision_question": decision_question,
+        "current_rule": rule_text,
+        "recommended_change": recommended_change,
+        "confidence_before": before,
+        "confidence_after": after,
+        "status": status,
+        "feedback_metric": clean_text(entry.get("tracking_metric") or entry.get("result_to_track") or entry.get("impact_metric")),
+        "metadata": json.dumps({
+            "signal_role": entry.get("signal_role"),
+            "actionability": entry.get("actionability"),
+            "card_type": entry.get("card_type"),
+        }, ensure_ascii=False),
+    }
+    conn.execute(
+        """INSERT OR REPLACE INTO decision_reviews
+           (id, created_at, updated_at, entry_id, rule_id, decision_question, current_rule, recommended_change, confidence_before, confidence_after, status, feedback_metric, metadata)
+           VALUES (:id, COALESCE((SELECT created_at FROM decision_reviews WHERE id=:id), :created_at), :updated_at, :entry_id, :rule_id, :decision_question, :current_rule, :recommended_change, :confidence_before, :confidence_after, :status, :feedback_metric, :metadata)""",
+        payload,
+    )
+    return {**payload, "metadata": json_loads(payload["metadata"], {})}
 
 
 ASSET_KEYWORDS = [
@@ -3863,6 +4024,7 @@ def delete_listening_project(project_id: str) -> dict:
             conn.execute("DELETE FROM actions WHERE entry_id=?", (entry_id,))
             conn.execute("DELETE FROM pull_rules WHERE entry_id=?", (entry_id,))
             conn.execute("DELETE FROM relationships WHERE from_entry_id=? OR to_entry_id=?", (entry_id, entry_id))
+            delete_decision_memory_for_entry(conn, entry_id)
             conn.execute("DELETE FROM entries_fts WHERE entry_id=?", (entry_id,))
             conn.execute("DELETE FROM entries WHERE id=?", (entry_id,))
         conn.execute("DELETE FROM listening_extractions WHERE project_id=?", (project_id,))
@@ -4185,6 +4347,7 @@ def update_entry(entry_id: str, payload: dict) -> dict:
         update_pattern_stats(conn, entry)
         upsert_action_for_entry(conn, entry)
         create_pull_rules(conn, entry)
+        upsert_decision_review_for_entry(conn, entry)
         audit(conn, "update", "entry", entry_id, {"updated_fields": list(updates.keys())})
         conn.commit()
     return entry
@@ -4248,6 +4411,22 @@ def recategorize_entry(entry_id: str, payload: dict) -> dict:
     return update_entry(entry_id, updates)
 
 
+def delete_decision_memory_for_entry(conn, entry_id: str) -> None:
+    review_rows = conn.execute("SELECT rule_id FROM decision_reviews WHERE entry_id=?", (entry_id,)).fetchall()
+    rule_ids = [clean_text(r["rule_id"]) for r in review_rows if clean_text(r["rule_id"])]
+    conn.execute("DELETE FROM decision_reviews WHERE entry_id=?", (entry_id,))
+    for rule_id in rule_ids:
+        row = conn.execute("SELECT * FROM decision_rules WHERE id=?", (rule_id,)).fetchone()
+        if not row:
+            continue
+        rule = row_to_decision_rule(row)
+        metadata = rule.get("metadata") or {}
+        if metadata.get("created_from_entry") == entry_id and int(rule.get("evidence_count") or 0) <= 1:
+            conn.execute("DELETE FROM decision_rules WHERE id=?", (rule_id,))
+        else:
+            conn.execute("UPDATE decision_rules SET last_entry_id=NULL WHERE id=? AND last_entry_id=?", (rule_id, entry_id))
+
+
 def delete_entry(entry_id: str) -> dict:
     with connect() as conn:
         entry = get_entry_by_id(conn, entry_id)
@@ -4257,6 +4436,7 @@ def delete_entry(entry_id: str) -> dict:
         conn.execute("DELETE FROM actions WHERE entry_id=?", (entry_id,))
         conn.execute("DELETE FROM pull_rules WHERE entry_id=?", (entry_id,))
         conn.execute("DELETE FROM relationships WHERE from_entry_id=? OR to_entry_id=?", (entry_id, entry_id))
+        delete_decision_memory_for_entry(conn, entry_id)
         conn.execute("DELETE FROM entries_fts WHERE entry_id=?", (entry_id,))
         audit(conn, "delete", "entry", entry_id, {"title": entry.get("title"), "domain": entry.get("domain")})
         conn.execute("DELETE FROM entries WHERE id=?", (entry_id,))
@@ -4289,6 +4469,118 @@ def create_relationship(payload: dict) -> dict:
         audit(conn, "create", "relationship", rel_id, rel)
         conn.commit()
     return rel
+
+
+def list_decision_queue(params: dict) -> dict:
+    status = clean_text((params.get("status") or ["open"])[0]).lower()
+    limit = int(clean_text((params.get("limit") or ["50"])[0]) or 50)
+    where = []
+    args = []
+    if status and status != "all":
+        where.append("dr.status = ?")
+        args.append(status)
+    sql = f"""
+        SELECT dr.*, e.title AS entry_title, e.domain AS entry_domain, e.entity AS entry_entity,
+               e.signal AS entry_signal, e.returned_action AS entry_action,
+               r.name AS rule_name, r.confidence AS rule_confidence, r.evidence_count AS rule_evidence_count
+        FROM decision_reviews dr
+        LEFT JOIN entries e ON e.id = dr.entry_id
+        LEFT JOIN decision_rules r ON r.id = dr.rule_id
+        {'WHERE ' + ' AND '.join(where) if where else ''}
+        ORDER BY CASE dr.status WHEN 'open' THEN 0 WHEN 'watching' THEN 1 ELSE 2 END, dr.updated_at DESC
+        LIMIT ?
+    """
+    args.append(max(1, min(200, limit)))
+    with connect() as conn:
+        reviews = []
+        for row in conn.execute(sql, args).fetchall():
+            review = row_to_decision_review(row)
+            review.update({
+                "entry_title": row["entry_title"],
+                "entry_domain": row["entry_domain"],
+                "entry_entity": row["entry_entity"],
+                "entry_signal": row["entry_signal"],
+                "entry_action": row["entry_action"],
+                "rule_name": row["rule_name"],
+                "rule_confidence": row["rule_confidence"],
+                "rule_evidence_count": row["rule_evidence_count"],
+            })
+            reviews.append(review)
+        stats = {
+            "open": conn.execute("SELECT COUNT(*) FROM decision_reviews WHERE status='open'").fetchone()[0],
+            "watching": conn.execute("SELECT COUNT(*) FROM decision_reviews WHERE status='watching'").fetchone()[0],
+            "updated": conn.execute("SELECT COUNT(*) FROM decision_reviews WHERE status='updated'").fetchone()[0],
+            "rules": conn.execute("SELECT COUNT(*) FROM decision_rules WHERE status='active'").fetchone()[0],
+        }
+    return {"reviews": reviews, "stats": stats}
+
+
+def list_decision_rules(params: dict) -> dict:
+    domain = clean_text((params.get("domain") or [""])[0])
+    limit = int(clean_text((params.get("limit") or ["50"])[0]) or 50)
+    where = ["status='active'"]
+    args = []
+    if domain:
+        where.append("domain=?")
+        args.append(domain)
+    args.append(max(1, min(200, limit)))
+    with connect() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM decision_rules WHERE {' AND '.join(where)} ORDER BY confidence DESC, evidence_count DESC, updated_at DESC LIMIT ?",
+            args,
+        ).fetchall()
+        rules = [row_to_decision_rule(r) for r in rows]
+    return {"rules": rules}
+
+
+def update_decision_feedback(review_id: str, payload: dict) -> dict:
+    result = clean_text(payload.get("result"))
+    rule_update = clean_text(payload.get("rule_update") or payload.get("lesson"))
+    outcome = clean_text(payload.get("outcome")).lower()
+    if outcome not in {"success", "failure", "neutral", "updated"}:
+        outcome = "updated"
+    if not result and not rule_update:
+        raise ValueError("decision feedback requires result or rule_update")
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM decision_reviews WHERE id=?", (review_id,)).fetchone()
+        if not row:
+            raise KeyError("decision review not found")
+        review = row_to_decision_review(row)
+        now = now_iso()
+        conn.execute(
+            "UPDATE decision_reviews SET updated_at=?, status='updated', result=?, rule_update=? WHERE id=?",
+            (now, result, rule_update, review_id),
+        )
+        if review.get("rule_id"):
+            rule_row = conn.execute("SELECT * FROM decision_rules WHERE id=?", (review["rule_id"],)).fetchone()
+            if rule_row:
+                rule = row_to_decision_rule(rule_row)
+                confidence = float(rule.get("confidence") or 0.5)
+                if outcome == "success":
+                    confidence = min(0.98, confidence + 0.06)
+                elif outcome == "failure":
+                    confidence = max(0.05, confidence - 0.08)
+                elif outcome == "neutral":
+                    confidence = max(0.05, confidence - 0.01)
+                new_rule_text = rule_update or rule.get("rule_text")
+                conn.execute(
+                    """UPDATE decision_rules
+                       SET updated_at=?, rule_text=?, confidence=?, success_count=success_count+?, failure_count=failure_count+?, metadata=?
+                       WHERE id=?""",
+                    (
+                        now,
+                        new_rule_text,
+                        round(confidence, 3),
+                        1 if outcome == "success" else 0,
+                        1 if outcome == "failure" else 0,
+                        json.dumps({**(rule.get("metadata") or {}), "last_feedback_result": result, "last_feedback_outcome": outcome}, ensure_ascii=False),
+                        review["rule_id"],
+                    ),
+                )
+        audit(conn, "update", "decision_review", review_id, {"outcome": outcome, "result": result, "rule_update": rule_update})
+        conn.commit()
+        updated = conn.execute("SELECT * FROM decision_reviews WHERE id=?", (review_id,)).fetchone()
+    return {"review": row_to_decision_review(updated), "outcome": outcome}
 
 
 def list_actions(params: dict) -> list[dict]:
@@ -5154,6 +5446,8 @@ def export_all() -> dict:
             "entries": [row_to_entry(r) for r in conn.execute("SELECT * FROM entries ORDER BY created_at").fetchall()],
             "relationships": [dict(r) for r in conn.execute("SELECT * FROM relationships ORDER BY created_at").fetchall()],
             "actions": [row_to_action(r) for r in conn.execute("SELECT * FROM actions ORDER BY created_at").fetchall()],
+            "decision_rules": [row_to_decision_rule(r) for r in conn.execute("SELECT * FROM decision_rules ORDER BY created_at").fetchall()],
+            "decision_reviews": [row_to_decision_review(r) for r in conn.execute("SELECT * FROM decision_reviews ORDER BY created_at").fetchall()],
             "patterns": patterns(),
             "pull_rules": [dict(r) for r in conn.execute("SELECT * FROM pull_rules ORDER BY created_at").fetchall()],
             "surfaced_cards": [row_to_card(r) for r in conn.execute("SELECT * FROM surfaced_cards ORDER BY created_at").fetchall()],
@@ -5423,6 +5717,10 @@ class Handler(SimpleHTTPRequestHandler):
                 ))
             if path == "/api/actions":
                 return self.send_json({"actions": list_actions(params)})
+            if path == "/api/decisions/queue":
+                return self.send_json(list_decision_queue(params))
+            if path == "/api/decisions/rules":
+                return self.send_json(list_decision_rules(params))
             if path == "/api/patterns":
                 return self.send_json({"patterns": patterns(), "insights": pattern_insights(), "engine": pattern_engine_scan(save=False, scan_type="preview")})
             if path == "/api/pattern-engine/scan":
@@ -5560,6 +5858,9 @@ class Handler(SimpleHTTPRequestHandler):
             if path.startswith("/api/assets/breakdowns/"):
                 extraction = update_listening_extraction(unquote(path.split("/api/assets/breakdowns/", 1)[1]), payload)
                 return self.send_json({"success": True, **extraction})
+            if path.startswith("/api/decisions/") and path.endswith("/feedback"):
+                review_id = unquote(path.split("/api/decisions/", 1)[1].rsplit("/feedback", 1)[0])
+                return self.send_json({"success": True, **update_decision_feedback(review_id, payload)})
             if path.startswith("/api/listening/extractions/"):
                 extraction = update_listening_extraction(unquote(path.split("/api/listening/extractions/", 1)[1]), payload)
                 return self.send_json({"success": True, **extraction})

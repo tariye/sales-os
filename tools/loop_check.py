@@ -167,6 +167,55 @@ def check_pattern_to_action(api: ApiClient) -> dict:
                 pass
 
 
+def check_decision_layer(api: ApiClient) -> dict:
+    stamp = str(int(time.time()))
+    entry_id = None
+    try:
+        created = api.post("/api/entries", {
+            "title": f"Loop QA decision signal {stamp}",
+            "raw_input": f"Decision QA {stamp}: repeated customer objections mean the offer page may be unclear.",
+            "domain": "Business",
+            "entity": "Decision QA",
+            "source_type": "Observation",
+            "signal": "Repeated customer objections indicate the decision rule for offer clarity needs review.",
+            "signal_role": "opportunity",
+            "interpretation": "This signal should change the decision about what to test next on the offer page.",
+            "pattern": "When repeated objections cluster around one offer, test clarity before adding more traffic.",
+            "trackable_as": "conversion behavior + objection frequency",
+            "tracking_metric": "Objection count, conversion rate, and completed page test result.",
+            "returned_action": "Create one offer-clarity test and log whether objections decline.",
+            "first_step": "Write the unclear offer claim as one sentence and test a clearer version.",
+            "actionability": "next",
+            "tags": ["decision-qa", stamp],
+        })
+        entry_id = created.get("entry_id")
+        queue = api.get("/api/decisions/queue?status=open&limit=50").get("reviews") or []
+        review = next((item for item in queue if item.get("entry_id") == entry_id), None)
+        if not review:
+            raise AssertionError(json.dumps(fail_check(
+                "decision_layer",
+                "Saved signal did not create an open decision review.",
+                {"entry_id": entry_id, "queue_count": len(queue)},
+            ), ensure_ascii=False))
+        updated = api.patch(f"/api/decisions/{urllib.parse.quote(review['id'])}/feedback", {
+            "result": "Offer clarity test was defined and assigned a tracking metric.",
+            "rule_update": "When objections cluster around one offer, test clarity before scaling traffic.",
+            "outcome": "success",
+        })
+        return assert_condition(
+            (updated.get("review") or {}).get("status") == "updated",
+            "decision_layer",
+            "Signal created a decision review and feedback updated the rule loop.",
+            {"entry_id": entry_id, "review_id": review.get("id")},
+        )
+    finally:
+        if entry_id:
+            try:
+                api.delete(f"/api/entries/{urllib.parse.quote(entry_id)}")
+            except Exception:
+                pass
+
+
 def check_stock(api: ApiClient, symbol: str) -> dict:
     data = api.post("/api/stock/analyze", {"symbol": symbol})
     analysis = data.get("analysis") or {}
@@ -331,6 +380,7 @@ def run_loop(base_url: str, stock_symbol: str) -> dict:
         check_actions_context,
         check_pull,
         check_pattern_to_action,
+        check_decision_layer,
         lambda client: check_stock(client, stock_symbol),
         check_asset_lab,
         check_memory_loop,

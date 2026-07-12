@@ -246,6 +246,8 @@ input:focus,textarea:focus,select:focus{
 .asset-project-card{border-left:4px solid var(--accent)}
 .extraction-card{border-left:4px solid var(--warn)}
 .extraction-library-card{border-left:4px solid var(--good)}
+.decision-card{border-left:4px solid var(--accent)}
+.rule-card{border-left:4px solid var(--good)}
 .clickable-plane{cursor:pointer}
 .clickable-plane:hover{border-color:rgba(24,79,67,.34);transform:translateY(-1px)}
 .mini-item{box-shadow:none;background:rgba(255,253,248,.72)}
