@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Info Analyzer OS v0.75</title>
+  <title>Info Analyzer OS v0.81</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
@@ -40,7 +40,7 @@
   <header class="app-header">
     <div>
       <p class="eyebrow">Intelligence OS</p>
-      <h1>Info Analyzer OS <span>v0.75</span></h1>
+      <h1>Info Analyzer OS <span>v0.81</span></h1>
       <p class="subtitle">Capture raw input, contextualize it into memory, and resurface only what changes a decision.</p>
     </div>
     <div class="header-actions">
@@ -53,6 +53,7 @@
     <button class="tab active" data-tab="dump" title="Paste raw observations and let Claude analyze them">New Entry</button>
     <button class="tab" data-tab="queue" title="Entries waiting for AI enrichment" >Queue <span id="queueBadge" class="queue-badge hidden">0</span></button>
     <button class="tab" data-tab="command" title="Dashboard showing all signals and actions">Command Center</button>
+    <button class="tab" data-tab="live" title="Real-time source ingest and signal routing">Live Signals</button>
     <button class="tab" data-tab="asset" title="Lab projects and asset breakdown">Asset Lab</button>
     <button class="tab" data-tab="stock" title="Stock research and investment signals">Stock Intel</button>
     <button class="tab" data-tab="memory" title="All saved observations and patterns">Memory DB</button>
@@ -248,7 +249,60 @@
       </div>
     </section>
 
-    <!-- ④ ASSET LAB ─────────────────────────────────────────────── -->
+    <!-- ④ LIVE SIGNALS ──────────────────────────────────────────── -->
+    <section id="live" class="panel">
+      <div class="card hero">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Real-Time Ingest</p>
+            <h2>Live Signal Dashboard</h2>
+            <p class="subtitle">Register sources, ingest new evidence, and route only the signals that can change a decision.</p>
+          </div>
+          <div class="buttons compact">
+            <button id="runIngestBtn" class="primary small">Run Ingest</button>
+            <button id="refreshLiveBtn" class="ghost small">Refresh</button>
+          </div>
+        </div>
+        <div id="liveStats" class="stats"></div>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Source Registry</p><h2>Add A Feed</h2></div></div>
+          <div class="grid two">
+            <label>Name<input id="ingestName" placeholder="Sales trend feed, Apple news, SK Hynix watch..." /></label>
+            <label>Type
+              <select id="ingestType"><option value="manual">Manual Test</option><option value="url">URL</option><option value="rss">RSS/Atom</option></select>
+            </label>
+            <label>Domain
+              <select id="ingestDomain"><option>Business</option><option>Investing</option><option>Lab</option><option>Career</option><option>Fitness</option><option>Network+</option><option>Music</option><option>AI Project</option><option>Personal Finance</option><option>Personal Preference</option><option>Other</option></select>
+            </label>
+            <label>Entity<input id="ingestEntity" placeholder="Company, product, source, system..." /></label>
+          </div>
+          <label>URL <span class="label-hint">for URL/RSS sources</span><input id="ingestUrl" placeholder="https://..." /></label>
+          <label>Manual Source Text <span class="label-hint">for testing or phone dumps</span><textarea id="ingestManualText" rows="5" placeholder="Paste a live signal here, e.g. Sales signal: customer objections are clustering around pricing. Track conversion rate and objections before increasing traffic."></textarea></label>
+          <div class="buttons"><button id="addIngestSourceBtn" class="primary">Add Source</button></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Active Sources</p><h2>What The System Watches</h2></div></div>
+          <div id="ingestSourcesList" class="list"></div>
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">New Signals</p><h2>Needs Decision</h2></div></div>
+          <div id="liveNewList" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Signal Routing</p><h2>Watch / Acted / Closed</h2></div></div>
+          <div id="liveRoutedList" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ⑤ ASSET LAB ─────────────────────────────────────────────── -->
     <section id="asset" class="panel">
       <div class="card hero">
         <div class="card-head">
@@ -295,7 +349,7 @@
       </div>
     </section>
 
-    <!-- ⑤ STOCK INTEL ───────────────────────────────────────────── -->
+    <!-- ⑥ STOCK INTEL ───────────────────────────────────────────── -->
     <section id="stock" class="panel">
       <div class="card hero">
         <div class="card-head">
@@ -313,7 +367,7 @@
       <div id="stockOutput" class="list"></div>
     </section>
 
-    <!-- ⑥ MEMORY DB ─────────────────────────────────────────────── -->
+    <!-- ⑦ MEMORY DB ─────────────────────────────────────────────── -->
     <section id="memory" class="panel">
       <div class="card">
         <div class="card-head"><div><p class="eyebrow">SQLite Memory</p><h2>Ledger</h2></div><button id="refreshMemory" class="ghost small">Refresh</button></div>
@@ -325,7 +379,7 @@
       </div>
     </section>
 
-    <!-- ⑦ ACTIONS ───────────────────────────────────────────────── -->
+    <!-- ⑧ ACTIONS ───────────────────────────────────────────────── -->
     <section id="actions" class="panel">
       <div class="card hero">
         <div class="card-head"><div><p class="eyebrow">Execution Queue</p><h2>Next Actions</h2></div><button id="refreshActions" class="ghost small">Refresh</button></div>
@@ -336,7 +390,7 @@
       </div>
     </section>
 
-    <!-- ⑧ PATTERNS ──────────────────────────────────────────────── -->
+    <!-- ⑨ PATTERNS ──────────────────────────────────────────────── -->
     <section id="patterns" class="panel">
       <div class="card hero">
         <div class="card-head"><div><p class="eyebrow">Pattern Engine</p><h2>Recurring Themes</h2></div><div class="buttons compact"><button id="scanPatterns" class="primary small">Scan for Patterns</button><button id="refreshPatterns" class="ghost small">Refresh</button></div></div>
@@ -347,7 +401,7 @@
       </div>
     </section>
 
-    <!-- ⑨ CHANGELOG ─────────────────────────────────────────────── -->
+    <!-- ⑩ CHANGELOG ─────────────────────────────────────────────── -->
     <section id="changelog" class="panel">
       <div class="card hero">
         <div class="card-head">

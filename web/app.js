@@ -355,6 +355,7 @@ function switchTab(tab){
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
   document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active", p.id===tab));
   if(tab==="command") loadCommand();
+  if(tab==="live") loadLiveDashboard();
   if(tab==="asset") loadAssetLab();
   if(tab==="queue") loadQueue();
   if(tab==="stock") loadStockIntel();
@@ -1292,6 +1293,130 @@ async function runPatternEngine(){
   loadPatterns();
 }
 
+function liveSignalHTML(signal){
+  const sourceUrl = signal.metadata?.source_url || "";
+  const buttons = `
+    <button class="primary small" onclick="updateLiveSignalStatus('${esc(signal.id)}','acted')">Act</button>
+    <button class="secondary small" onclick="updateLiveSignalStatus('${esc(signal.id)}','watching')">Watch</button>
+    <button class="ghost small" onclick="updateLiveSignalStatus('${esc(signal.id)}','rule_updated')">Update Rule</button>
+    <button class="ghost small" onclick="updateLiveSignalStatus('${esc(signal.id)}','ignored')">Ignore</button>
+    ${sourceUrl ? `<a class="ghost small link-button" href="${esc(sourceUrl)}" target="_blank">Open Source</a>` : ""}
+    ${signal.entry_id ? `<button class="ghost small" onclick="openSourceEntry('${esc(signal.entry_id)}')">Open Memory</button>` : ""}
+  `;
+  return `<div class="item live-signal-card ${esc(signal.priority || "").toLowerCase()}">
+    <div class="plane-head">
+      <div>
+        <h3>${esc(signal.signal || "Live signal")}</h3>
+        <div class="meta">
+          <span class="tag">${esc(signal.status || "new")}</span>
+          <span class="tag">${esc(signal.priority || "Medium")}</span>
+          <span class="tag">${esc(signal.domain || "Other")}</span>
+          ${signal.entity ? `<span class="tag">${esc(signal.entity)}</span>` : ""}
+          <span class="tag">${esc(signal.related_memory_count || 0)} related memories</span>
+        </div>
+      </div>
+      <span class="pill">${esc(signal.source_name || "Source")}</span>
+    </div>
+    ${kvHTML("Why It Matters", signal.why_it_matters || "")}
+    ${kvHTML("Decision Affected", signal.decision_affected || "")}
+    ${kvHTML("Recommended Action", signal.recommended_action || "")}
+    ${kvHTML("Tracking Metric", signal.tracking_metric || "")}
+    <div class="buttons compact">${buttons}</div>
+  </div>`;
+}
+
+function ingestSourceHTML(source){
+  return `<div class="item">
+    <h3>${esc(source.name)}</h3>
+    <div class="meta">
+      <span class="tag">${esc(source.source_type)}</span>
+      <span class="tag">${esc(source.domain || "Other")}</span>
+      ${source.entity ? `<span class="tag">${esc(source.entity)}</span>` : ""}
+      <span class="tag">${source.active ? "active" : "inactive"}</span>
+    </div>
+    <p class="muted">${esc(source.url || source.metadata?.manual_text || "").slice(0,180)}</p>
+    <div class="buttons compact">
+      <button class="primary small" onclick="runIngest('${esc(source.id)}')">Run Source</button>
+      <button class="ghost small" onclick="deleteIngestSource('${esc(source.id)}')">Delete</button>
+    </div>
+  </div>`;
+}
+
+async function loadLiveDashboard(){
+  const [sources, live] = await Promise.all([
+    api("/ingest/sources"),
+    api("/live-signals?limit=60"),
+  ]);
+  const stats = live.stats || {};
+  const signals = live.signals || [];
+  $("liveStats").innerHTML = [
+    ["New", stats.new || 0],
+    ["Watching", stats.watching || 0],
+    ["Acted", stats.acted || 0],
+    ["Ignored", stats.ignored || 0],
+  ].map(([k,v])=>`<div class="stat"><strong>${esc(v)}</strong><span class="muted">${esc(k)}</span></div>`).join("");
+  $("ingestSourcesList").innerHTML = (sources.sources || []).length
+    ? sources.sources.map(ingestSourceHTML).join("")
+    : `<div class="item"><h3>No sources yet</h3><p class="muted">Add a manual, URL, or RSS source, then run ingest.</p></div>`;
+  const newSignals = signals.filter(s => ["new"].includes(s.status));
+  const routedSignals = signals.filter(s => !["new"].includes(s.status));
+  $("liveNewList").innerHTML = newSignals.length
+    ? newSignals.map(liveSignalHTML).join("")
+    : `<div class="item"><h3>Quiet</h3><p class="muted">No new live signals need a decision.</p></div>`;
+  $("liveRoutedList").innerHTML = routedSignals.length
+    ? routedSignals.map(liveSignalHTML).join("")
+    : `<div class="item"><h3>No routed signals yet</h3><p class="muted">Act, Watch, Update Rule, or Ignore a signal to move it here.</p></div>`;
+}
+
+async function addIngestSource(){
+  const payload = {
+    name: $("ingestName").value.trim(),
+    source_type: $("ingestType").value,
+    url: $("ingestUrl").value.trim(),
+    domain: $("ingestDomain").value,
+    entity: $("ingestEntity").value.trim(),
+    manual_text: $("ingestManualText").value.trim(),
+  };
+  const res = await api("/ingest/sources", {method:"POST", body:JSON.stringify(payload)});
+  toast("Source added");
+  await runIngest(res.source.id);
+  $("ingestName").value = "";
+  $("ingestUrl").value = "";
+  $("ingestEntity").value = "";
+  $("ingestManualText").value = "";
+}
+
+async function runIngest(sourceId=""){
+  const res = await api("/ingest/run", {method:"POST", body:JSON.stringify(sourceId ? {source_id:sourceId} : {})});
+  const err = (res.errors || []).length ? `, ${res.errors.length} error(s)` : "";
+  toast(`Ingested ${res.created_signals || 0} signal(s), skipped ${res.skipped || 0}${err}`);
+  loadLiveDashboard();
+  loadCommand();
+}
+
+async function updateLiveSignalStatus(id, status){
+  let note = "";
+  if(status === "ignored"){
+    note = prompt("Why should this signal be ignored?") || "";
+  } else if(status === "rule_updated"){
+    note = prompt("What decision rule changed because of this signal?") || "";
+  } else if(status === "acted"){
+    note = prompt("What exact action are you taking now?") || "";
+  }
+  await api(`/live-signals/${encodeURIComponent(id)}`, {method:"PATCH", body:JSON.stringify({status, result:note, rule_update:note})});
+  toast(`Live signal marked ${status}`);
+  loadLiveDashboard();
+  loadActions();
+  loadDecisions();
+}
+
+async function deleteIngestSource(id){
+  if(!confirm("Delete this ingest source and the live memory entries it created?")) return;
+  const res = await api(`/ingest/sources/${encodeURIComponent(id)}`, {method:"DELETE"});
+  toast(`Deleted source and ${res.linked_entries_deleted || 0} linked entries`);
+  loadLiveDashboard();
+}
+
 async function checkAiStatus(){
   try {
     const s = await api("/ai/status");
@@ -1321,6 +1446,9 @@ $("refreshPatterns").addEventListener("click", loadPatterns);
 $("scanPatterns").addEventListener("click", runPatternEngine);
 $("refreshChangelog").addEventListener("click", loadChangelog);
 $("refreshQueue").addEventListener("click", loadQueue);
+$("refreshLiveBtn").addEventListener("click", loadLiveDashboard);
+$("runIngestBtn").addEventListener("click", ()=>runIngest());
+$("addIngestSourceBtn").addEventListener("click", addIngestSource);
 $("analyzeStockBtn").addEventListener("click", analyzeStock);
 $("saveStockIntel").addEventListener("click", saveStockIntel);
 $("refreshAssetLab").addEventListener("click", loadAssetLab);

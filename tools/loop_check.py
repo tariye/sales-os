@@ -131,6 +131,88 @@ def check_pull(api: ApiClient) -> dict:
     )
 
 
+def check_live_ingest(api: ApiClient) -> dict:
+    stamp = str(int(time.time()))
+    source_id = None
+    try:
+        created = api.post("/api/ingest/sources", {
+            "name": f"Loop QA Sales Live Source {stamp}",
+            "source_type": "manual",
+            "domain": "Business",
+            "entity": "Sales QA",
+            "manual_text": (
+                f"Sales live signal {stamp}: customer objections are clustering around pricing. "
+                "Before increasing traffic, review the offer page, track objection frequency, "
+                "conversion rate, and whether a clearer pricing explanation improves close rate."
+            ),
+        })
+        source = created.get("source") or {}
+        source_id = source.get("id")
+        if not source_id:
+            raise AssertionError(json.dumps(fail_check(
+                "live_ingest",
+                "Ingest source was not created.",
+                created,
+            ), ensure_ascii=False))
+        run = api.post("/api/ingest/run", {"source_id": source_id})
+        signals = run.get("signals") or []
+        signal = next((item for item in signals if item.get("source_id") == source_id), None)
+        if not signal:
+            live = api.get("/api/live-signals?status=new&limit=80").get("signals") or []
+            signal = next((item for item in live if item.get("source_id") == source_id), None)
+        if not signal:
+            raise AssertionError(json.dumps(fail_check(
+                "live_ingest",
+                "Manual sales source did not produce a live signal.",
+                {"run": run},
+            ), ensure_ascii=False))
+        watched = api.patch(f"/api/live-signals/{urllib.parse.quote(signal['id'])}", {
+            "status": "watching",
+            "result": "Loop checker confirmed this signal can be watched.",
+        }).get("signal") or {}
+        acted = api.patch(f"/api/live-signals/{urllib.parse.quote(signal['id'])}", {
+            "status": "acted",
+            "result": "Loop checker routed the live sales signal into action.",
+        }).get("signal") or {}
+        if not (watched.get("status") == "watching" and acted.get("status") == "acted" and bool(signal.get("entry_id"))):
+            raise AssertionError(json.dumps(fail_check(
+                "live_ingest",
+                "Manual sales source did not preserve status updates or linked memory.",
+                {
+                    "source_id": source_id,
+                    "signal_id": signal.get("id"),
+                    "entry_id": signal.get("entry_id"),
+                    "watched_status": watched.get("status"),
+                    "acted_status": acted.get("status"),
+                },
+            ), ensure_ascii=False))
+        cleanup = api.delete(f"/api/ingest/sources/{urllib.parse.quote(source_id)}")
+        if cleanup.get("linked_entries_deleted", 0) < 1:
+            raise AssertionError(json.dumps(fail_check(
+                "live_ingest",
+                "Live ingest worked, but source cleanup did not remove linked memory entries.",
+                cleanup,
+            ), ensure_ascii=False))
+        source_id = None
+        return pass_check(
+            "live_ingest",
+            "Manual sales source produced a live signal, linked memory, accepted Watch/Act status updates, and cleaned up.",
+            {
+                "source_id": source.get("id"),
+                "signal_id": signal.get("id"),
+                "entry_id": signal.get("entry_id"),
+                "recommended_action": signal.get("recommended_action"),
+                "cleanup": cleanup,
+            },
+        )
+    finally:
+        if source_id:
+            try:
+                api.delete(f"/api/ingest/sources/{urllib.parse.quote(source_id)}")
+            except Exception:
+                pass
+
+
 def check_pattern_to_action(api: ApiClient) -> dict:
     stamp = str(int(time.time()))
     entry_id = None
@@ -379,6 +461,7 @@ def run_loop(base_url: str, stock_symbol: str) -> dict:
         check_command_center,
         check_actions_context,
         check_pull,
+        check_live_ingest,
         check_pattern_to_action,
         check_decision_layer,
         lambda client: check_stock(client, stock_symbol),

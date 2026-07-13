@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sqlite3
+import urllib.request
 import uuid
 import zipfile
 from datetime import datetime, date, timezone
@@ -53,8 +54,19 @@ WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "info_analyzer.db"
 
-APP_VERSION = "v0.8-decision-intelligence-layer"
+APP_VERSION = "v0.81-real-time-signal-dashboard"
 APP_VERSIONS = [
+    {
+        "version": "v0.81",
+        "name": "Real-Time Signal Dashboard",
+        "features": [
+            "Live ingest source registry for manual, URL, and RSS-style feeds",
+            "Ingested raw evidence is preserved while translated live signals surface in the cockpit",
+            "Live signal action states: act, watch, update rule, ignore",
+            "Live signals create normal memory entries, actions, decision reviews, and pull rules",
+            "Loop checker validates the ingest-to-decision-to-status cycle",
+        ],
+    },
     {
         "version": "v0.1",
         "name": "SQLite Memory Foundation",
@@ -1169,6 +1181,67 @@ def init_db() -> None:
             FOREIGN KEY(rule_id) REFERENCES decision_rules(id)
         );
 
+        CREATE TABLE IF NOT EXISTS ingest_sources (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            name TEXT NOT NULL,
+            source_type TEXT DEFAULT 'manual',
+            url TEXT,
+            domain TEXT DEFAULT 'Other',
+            entity TEXT,
+            poll_interval_minutes INTEGER DEFAULT 60,
+            active INTEGER DEFAULT 1,
+            last_run_at TEXT,
+            metadata TEXT DEFAULT '{}'
+        );
+
+        CREATE TABLE IF NOT EXISTS ingest_items (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            source_name TEXT,
+            source_type TEXT,
+            url TEXT,
+            title TEXT,
+            raw_text TEXT NOT NULL,
+            published_at TEXT,
+            fingerprint TEXT UNIQUE,
+            entity TEXT,
+            domain TEXT DEFAULT 'Other',
+            status TEXT DEFAULT 'new',
+            metadata TEXT DEFAULT '{}',
+            FOREIGN KEY(source_id) REFERENCES ingest_sources(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS live_signals (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            ingest_item_id TEXT,
+            entry_id TEXT,
+            decision_review_id TEXT,
+            source_id TEXT,
+            source_name TEXT,
+            domain TEXT DEFAULT 'Other',
+            entity TEXT,
+            signal TEXT,
+            why_it_matters TEXT,
+            decision_affected TEXT,
+            recommended_action TEXT,
+            tracking_metric TEXT,
+            confidence TEXT DEFAULT 'Medium',
+            priority TEXT DEFAULT 'Medium',
+            status TEXT DEFAULT 'new',
+            related_memory_count INTEGER DEFAULT 0,
+            metadata TEXT DEFAULT '{}',
+            FOREIGN KEY(ingest_item_id) REFERENCES ingest_items(id),
+            FOREIGN KEY(entry_id) REFERENCES entries(id),
+            FOREIGN KEY(decision_review_id) REFERENCES decision_reviews(id),
+            FOREIGN KEY(source_id) REFERENCES ingest_sources(id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_entries_created ON entries(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_entries_domain ON entries(domain);
         CREATE INDEX IF NOT EXISTS idx_entries_status ON entries(status);
@@ -1199,6 +1272,12 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_decision_rules_domain ON decision_rules(domain, status);
         CREATE INDEX IF NOT EXISTS idx_decision_reviews_status ON decision_reviews(status, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_decision_reviews_entry ON decision_reviews(entry_id);
+        CREATE INDEX IF NOT EXISTS idx_ingest_sources_active ON ingest_sources(active, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_ingest_items_source ON ingest_items(source_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_ingest_items_fingerprint ON ingest_items(fingerprint);
+        CREATE INDEX IF NOT EXISTS idx_live_signals_status ON live_signals(status, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_live_signals_domain ON live_signals(domain, status);
+        CREATE INDEX IF NOT EXISTS idx_live_signals_source ON live_signals(source_id, updated_at DESC);
         """)
         ensure_column(conn, "entries", "actionability", "TEXT DEFAULT 'watch'")
         ensure_column(conn, "entries", "pull_trigger_type", "TEXT DEFAULT 'tag'")
@@ -1367,6 +1446,25 @@ def row_to_decision_rule(row) -> dict:
 
 
 def row_to_decision_review(row) -> dict:
+    d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_ingest_source(row) -> dict:
+    d = dict(row)
+    d["active"] = bool(d.get("active"))
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_ingest_item(row) -> dict:
+    d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_live_signal(row) -> dict:
     d = dict(row)
     d["metadata"] = json_loads(d.get("metadata"), {})
     return d
@@ -3583,6 +3681,447 @@ def create_entry(payload: dict) -> dict:
     return {"entry": entry, "action": action, "decision": decision, "pull_rules": rules, "context_packet": pull}
 
 
+def text_fingerprint(*parts: str) -> str:
+    raw = "\n".join(clean_text(p) for p in parts if clean_text(p))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def strip_html(value: str) -> str:
+    value = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", value or "")
+    value = re.sub(r"(?is)<[^>]+>", " ", value)
+    value = re.sub(r"&nbsp;", " ", value)
+    value = re.sub(r"&amp;", "&", value)
+    value = re.sub(r"&lt;", "<", value)
+    value = re.sub(r"&gt;", ">", value)
+    value = re.sub(r"&quot;", '"', value)
+    return clean_text(value)
+
+
+def extract_xml_text(node, tag: str) -> str:
+    found = node.find(tag)
+    if found is not None and found.text:
+        return clean_text(found.text)
+    for child in list(node):
+        if child.tag.lower().endswith(tag.lower()) and child.text:
+            return clean_text(child.text)
+    return ""
+
+
+def source_manual_text(source: dict) -> str:
+    metadata = source.get("metadata") or {}
+    return clean_text(
+        metadata.get("manual_text")
+        or metadata.get("raw_text")
+        or metadata.get("sample_text")
+        or source.get("url")
+        or ""
+    )
+
+
+def fetch_url_text(url: str) -> str:
+    if not clean_text(url):
+        return ""
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "InfoAnalyzerOS/0.81 (+local intelligence dashboard)",
+            "Accept": "application/rss+xml, application/atom+xml, text/html, text/plain;q=0.8, */*;q=0.5",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=12) as resp:
+        raw = resp.read(2_000_000)
+    return raw.decode("utf-8", errors="replace")
+
+
+def parse_rss_items(raw: str, source: dict) -> list[dict]:
+    try:
+        root = ET.fromstring(raw)
+    except Exception:
+        return []
+    items = []
+    nodes = root.findall(".//item") or root.findall(".//{http://www.w3.org/2005/Atom}entry") or root.findall(".//entry")
+    for node in nodes[:20]:
+        title = extract_xml_text(node, "title")
+        link = extract_xml_text(node, "link")
+        if not link:
+            link_node = node.find("{http://www.w3.org/2005/Atom}link") or node.find("link")
+            if link_node is not None:
+                link = clean_text(link_node.attrib.get("href") or link_node.text or "")
+        description = (
+            extract_xml_text(node, "description")
+            or extract_xml_text(node, "summary")
+            or extract_xml_text(node, "content")
+        )
+        published = extract_xml_text(node, "pubDate") or extract_xml_text(node, "published") or extract_xml_text(node, "updated")
+        raw_text = strip_html(" ".join([title, description]))
+        if not raw_text:
+            continue
+        items.append({
+            "title": title or raw_text[:90],
+            "url": link or source.get("url") or "",
+            "raw_text": raw_text,
+            "published_at": published,
+            "entity": source.get("entity") or "",
+            "domain": source.get("domain") or "Other",
+        })
+    return items
+
+
+def parse_html_item(raw: str, source: dict) -> dict:
+    title = ""
+    match = re.search(r"(?is)<title[^>]*>(.*?)</title>", raw or "")
+    if match:
+        title = strip_html(match.group(1))
+    desc = ""
+    meta = re.search(r'(?is)<meta[^>]+name=["\']description["\'][^>]+content=["\'](.*?)["\']', raw or "")
+    if meta:
+        desc = strip_html(meta.group(1))
+    text = strip_html(desc or raw)
+    if len(text) > 900:
+        text = text[:900].rsplit(" ", 1)[0]
+    return {
+        "title": title or source.get("name") or "Live source update",
+        "url": source.get("url") or "",
+        "raw_text": text or source.get("name") or "Live source update",
+        "published_at": "",
+        "entity": source.get("entity") or "",
+        "domain": source.get("domain") or "Other",
+    }
+
+
+def fetch_source_items(source: dict) -> list[dict]:
+    source_type = normalize_text(source.get("source_type") or "manual")
+    if source_type == "manual":
+        raw = source_manual_text(source)
+        if not raw:
+            raise ValueError("manual source requires manual_text")
+        return [{
+            "title": source.get("name") or raw[:90],
+            "url": source.get("url") or "",
+            "raw_text": raw,
+            "published_at": "",
+            "entity": source.get("entity") or "",
+            "domain": source.get("domain") or "Other",
+        }]
+    raw = fetch_url_text(source.get("url") or "")
+    if source_type == "rss" or "<rss" in raw[:500].lower() or "<feed" in raw[:500].lower():
+        items = parse_rss_items(raw, source)
+        if items:
+            return items
+    return [parse_html_item(raw, source)]
+
+
+def create_ingest_source(payload: dict) -> dict:
+    name = clean_text(payload.get("name"))
+    source_type = normalize_text(payload.get("source_type") or "manual")
+    if source_type not in {"manual", "url", "rss"}:
+        source_type = "manual"
+    url = clean_text(payload.get("url"))
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    manual_text = clean_text(payload.get("manual_text"))
+    if manual_text:
+        metadata["manual_text"] = manual_text
+    if not name:
+        name = clean_text(payload.get("entity")) or (manual_text[:60] if manual_text else "Live source")
+    if source_type in {"url", "rss"} and not url:
+        raise ValueError("url is required for url/rss sources")
+    if source_type == "manual" and not source_manual_text({"metadata": metadata, "url": url}):
+        raise ValueError("manual_text is required for manual sources")
+    now = now_iso()
+    source = {
+        "id": clean_text(payload.get("id")) or make_id("SRC"),
+        "created_at": now,
+        "updated_at": now,
+        "name": name,
+        "source_type": source_type,
+        "url": url,
+        "domain": clean_text(payload.get("domain")) or "Other",
+        "entity": clean_text(payload.get("entity")) or "",
+        "poll_interval_minutes": int(payload.get("poll_interval_minutes") or 60),
+        "active": 1 if payload.get("active", True) else 0,
+        "last_run_at": "",
+        "metadata": metadata,
+    }
+    with connect() as conn:
+        conn.execute(
+            """INSERT INTO ingest_sources
+               (id, created_at, updated_at, name, source_type, url, domain, entity, poll_interval_minutes, active, last_run_at, metadata)
+               VALUES (:id, :created_at, :updated_at, :name, :source_type, :url, :domain, :entity, :poll_interval_minutes, :active, :last_run_at, :metadata)""",
+            {**source, "metadata": json.dumps(metadata, ensure_ascii=False)},
+        )
+        audit(conn, "create", "ingest_source", source["id"], {"name": name, "source_type": source_type})
+        conn.commit()
+    return {"source": source}
+
+
+def list_ingest_sources() -> dict:
+    with connect() as conn:
+        rows = conn.execute("SELECT * FROM ingest_sources ORDER BY updated_at DESC, created_at DESC").fetchall()
+    return {"sources": [row_to_ingest_source(r) for r in rows]}
+
+
+def related_memory_count(conn, domain: str, entity: str, raw_text: str) -> int:
+    terms = q_terms(" ".join([entity or "", raw_text or ""]))[:6]
+    clauses = ["status NOT IN ('archived','superseded')"]
+    args = []
+    if entity:
+        clauses.append("LOWER(entity)=?")
+        args.append(normalize_text(entity))
+    elif domain:
+        clauses.append("domain=?")
+        args.append(domain)
+    if terms:
+        like_clauses = []
+        for term in terms[:4]:
+            like_clauses.append("(LOWER(raw_input) LIKE ? OR LOWER(signal) LIKE ? OR LOWER(pattern) LIKE ?)")
+            args.extend([f"%{term}%", f"%{term}%", f"%{term}%"])
+        clauses.append("(" + " OR ".join(like_clauses) + ")")
+    return int(conn.execute(f"SELECT COUNT(*) FROM entries WHERE {' AND '.join(clauses)}", args).fetchone()[0])
+
+
+def insert_live_signal_from_item(conn, source: dict, item: dict) -> dict:
+    raw = clean_text(item.get("raw_text"))
+    title = clean_text(item.get("title")) or raw[:100] or source.get("name")
+    domain = clean_text(item.get("domain") or source.get("domain")) or "Other"
+    entity = clean_text(item.get("entity") or source.get("entity")) or ""
+    related_count = related_memory_count(conn, domain, entity, raw)
+    entry_payload = codify_payload({
+        "title": f"Live Signal: {title}",
+        "raw_input": raw,
+        "domain": domain,
+        "entity": entity,
+        "source_type": "live_ingest",
+        "signal": title,
+        "signal_role": "watch",
+        "interpretation": f"New source data may affect the decision rule for {entity or domain}.",
+        "trackable_as": "decision update + action result",
+        "tracking_metric": "Decision changed, action created, rule updated, or signal ignored with reason.",
+        "returned_action": "Review this live signal and choose Act, Watch, Update Rule, or Ignore.",
+        "first_step": "Open the source evidence and decide whether this changes an active decision.",
+        "impact_metric": "Decision velocity and decision quality improved by routing new evidence into action.",
+        "feedback_to_capture": "Selected live signal status, result, and whether the decision rule changed.",
+        "pull_trigger": f"Resurface when future entries mention {entity or domain}, live signals, source updates, or decision changes.",
+        "trigger_condition": f"New source item mentions {entity or domain} or repeats this signal.",
+        "actionability": "review",
+        "tags": ["live-signal", "ingest", normalize_text(domain), normalize_text(entity)],
+        "metadata": {
+            "source_id": source["id"],
+            "source_name": source.get("name"),
+            "source_url": item.get("url") or source.get("url"),
+            "published_at": item.get("published_at"),
+        },
+    })
+    entry = insert_entry(conn, entry_payload)
+    contextual = contextualize_entry(conn, entry)
+    entry = contextual.get("entry") or entry
+    action = upsert_action_for_entry(conn, entry)
+    update_pattern_stats(conn, entry)
+    create_pull_rules(conn, entry)
+    decision = upsert_decision_review_for_entry(conn, entry)
+    review_id = (decision or {}).get("id") or ""
+    now = now_iso()
+    live = {
+        "id": make_id("LIVE"),
+        "created_at": now,
+        "updated_at": now,
+        "ingest_item_id": item["id"],
+        "entry_id": entry["id"],
+        "decision_review_id": review_id,
+        "source_id": source["id"],
+        "source_name": source.get("name") or "",
+        "domain": domain,
+        "entity": entity,
+        "signal": entry.get("signal") or title,
+        "why_it_matters": entry.get("interpretation") or "",
+        "decision_affected": f"What decision should change for {entity or domain}?",
+        "recommended_action": entry.get("returned_action") or "",
+        "tracking_metric": entry.get("tracking_metric") or entry.get("result_to_track") or "",
+        "confidence": entry.get("confidence") or "Medium",
+        "priority": "High" if entry.get("signal_role") in {"risk", "contradiction"} else "Medium",
+        "status": "new",
+        "related_memory_count": related_count,
+        "metadata": {
+            "source_url": item.get("url") or source.get("url"),
+            "published_at": item.get("published_at"),
+            "action_id": (action or {}).get("id"),
+        },
+    }
+    conn.execute(
+        """INSERT INTO live_signals
+           (id, created_at, updated_at, ingest_item_id, entry_id, decision_review_id, source_id, source_name, domain, entity,
+            signal, why_it_matters, decision_affected, recommended_action, tracking_metric, confidence, priority, status,
+            related_memory_count, metadata)
+           VALUES (:id, :created_at, :updated_at, :ingest_item_id, :entry_id, :decision_review_id, :source_id, :source_name,
+            :domain, :entity, :signal, :why_it_matters, :decision_affected, :recommended_action, :tracking_metric,
+            :confidence, :priority, :status, :related_memory_count, :metadata)""",
+        {**live, "metadata": json.dumps(live["metadata"], ensure_ascii=False)},
+    )
+    return live
+
+
+def run_ingest(payload: dict) -> dict:
+    source_id = clean_text(payload.get("source_id"))
+    with connect() as conn:
+        if source_id:
+            rows = conn.execute("SELECT * FROM ingest_sources WHERE id=?", (source_id,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM ingest_sources WHERE active=1 ORDER BY updated_at DESC").fetchall()
+        if not rows:
+            raise KeyError("ingest source not found")
+        created_items = []
+        created_signals = []
+        skipped = 0
+        errors = []
+        for row in rows:
+            source = row_to_ingest_source(row)
+            try:
+                items = fetch_source_items(source)
+            except Exception as exc:
+                errors.append({"source_id": source["id"], "source_name": source.get("name"), "error": str(exc)})
+                continue
+            for item in items:
+                raw = clean_text(item.get("raw_text"))
+                if not raw:
+                    skipped += 1
+                    continue
+                fp = text_fingerprint(source["id"], item.get("url") or "", item.get("title") or "", raw)
+                exists = conn.execute("SELECT id FROM ingest_items WHERE fingerprint=?", (fp,)).fetchone()
+                if exists:
+                    skipped += 1
+                    continue
+                now = now_iso()
+                item_id = make_id("ITEM")
+                item_row = {
+                    "id": item_id,
+                    "created_at": now,
+                    "updated_at": now,
+                    "source_id": source["id"],
+                    "source_name": source.get("name") or "",
+                    "source_type": source.get("source_type") or "manual",
+                    "url": clean_text(item.get("url") or source.get("url") or ""),
+                    "title": clean_text(item.get("title")) or source.get("name") or "Live source update",
+                    "raw_text": raw,
+                    "published_at": clean_text(item.get("published_at")),
+                    "fingerprint": fp,
+                    "entity": clean_text(item.get("entity") or source.get("entity")),
+                    "domain": clean_text(item.get("domain") or source.get("domain")) or "Other",
+                    "status": "processed",
+                    "metadata": {"source_run_at": now},
+                }
+                conn.execute(
+                    """INSERT INTO ingest_items
+                       (id, created_at, updated_at, source_id, source_name, source_type, url, title, raw_text, published_at,
+                        fingerprint, entity, domain, status, metadata)
+                       VALUES (:id, :created_at, :updated_at, :source_id, :source_name, :source_type, :url, :title, :raw_text,
+                        :published_at, :fingerprint, :entity, :domain, :status, :metadata)""",
+                    {**item_row, "metadata": json.dumps(item_row["metadata"], ensure_ascii=False)},
+                )
+                live = insert_live_signal_from_item(conn, source, item_row)
+                created_items.append(item_row)
+                created_signals.append(live)
+            conn.execute("UPDATE ingest_sources SET updated_at=?, last_run_at=? WHERE id=?", (now_iso(), now_iso(), source["id"]))
+        conn.commit()
+    return {
+        "created_items": len(created_items),
+        "created_signals": len(created_signals),
+        "skipped": skipped,
+        "errors": errors,
+        "signals": created_signals[:20],
+    }
+
+
+def list_live_signals(params: dict) -> dict:
+    status = clean_text((params.get("status") or [""])[0]) if isinstance(params.get("status"), list) else clean_text(params.get("status"))
+    domain = clean_text((params.get("domain") or [""])[0]) if isinstance(params.get("domain"), list) else clean_text(params.get("domain"))
+    limit = int(clean_text((params.get("limit") or ["40"])[0]) or 40) if isinstance(params.get("limit"), list) else int(params.get("limit") or 40)
+    clauses = []
+    args = []
+    if status:
+        clauses.append("status=?")
+        args.append(status)
+    if domain:
+        clauses.append("domain=?")
+        args.append(domain)
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    with connect() as conn:
+        rows = conn.execute(f"SELECT * FROM live_signals {where} ORDER BY updated_at DESC, created_at DESC LIMIT ?", (*args, limit)).fetchall()
+        stats_rows = conn.execute("SELECT status, COUNT(*) AS count FROM live_signals GROUP BY status").fetchall()
+    return {
+        "signals": [row_to_live_signal(r) for r in rows],
+        "stats": {r["status"]: r["count"] for r in stats_rows},
+    }
+
+
+def update_live_signal(signal_id: str, payload: dict) -> dict:
+    status = normalize_text(payload.get("status") or "")
+    allowed = {"new", "watching", "acted", "rule_updated", "ignored"}
+    if status not in allowed:
+        raise ValueError("status must be one of: " + ", ".join(sorted(allowed)))
+    result = clean_text(payload.get("result") or payload.get("note") or "")
+    now = now_iso()
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM live_signals WHERE id=?", (signal_id,)).fetchone()
+        if not row:
+            raise KeyError("live signal not found")
+        live = row_to_live_signal(row)
+        metadata = live.get("metadata") or {}
+        metadata["last_status_note"] = result
+        metadata["last_status_update_at"] = now
+        conn.execute(
+            "UPDATE live_signals SET updated_at=?, status=?, metadata=? WHERE id=?",
+            (now, status, json.dumps(metadata, ensure_ascii=False), signal_id),
+        )
+        if live.get("entry_id"):
+            entry_updates = {"updated_at": now}
+            if status == "acted":
+                conn.execute("UPDATE entries SET updated_at=?, action_status='in_progress', status='active' WHERE id=?", (now, live["entry_id"]))
+                conn.execute("UPDATE actions SET updated_at=?, status='in_progress' WHERE entry_id=? AND status='open'", (now, live["entry_id"]))
+            elif status == "ignored":
+                conn.execute("UPDATE entries SET updated_at=?, action_status='cancelled', result=? WHERE id=?", (now, result or "Live signal ignored.", live["entry_id"]))
+                conn.execute("UPDATE actions SET updated_at=?, status='cancelled', result=? WHERE entry_id=? AND status NOT IN ('done','cancelled')", (now, result or "Live signal ignored.", live["entry_id"]))
+            elif status == "rule_updated" and live.get("decision_review_id"):
+                update_payload = {
+                    "result": result or "Live signal updated the decision rule.",
+                    "rule_update": payload.get("rule_update") or live.get("signal") or "Live signal changed the decision rule.",
+                    "outcome": "success",
+                }
+                review = conn.execute("SELECT * FROM decision_reviews WHERE id=?", (live["decision_review_id"],)).fetchone()
+                if review:
+                    conn.execute(
+                        "UPDATE decision_reviews SET updated_at=?, status='updated', result=?, rule_update=? WHERE id=?",
+                        (now, update_payload["result"], update_payload["rule_update"], live["decision_review_id"]),
+                    )
+            elif status == "watching":
+                conn.execute("UPDATE entries SET updated_at=?, action_status='waiting' WHERE id=?", (now, live["entry_id"]))
+        audit(conn, "update", "live_signal", signal_id, {"status": status, "result": result})
+        conn.commit()
+        updated = conn.execute("SELECT * FROM live_signals WHERE id=?", (signal_id,)).fetchone()
+    return {"signal": row_to_live_signal(updated)}
+
+
+def delete_ingest_source(source_id: str) -> dict:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM ingest_sources WHERE id=?", (source_id,)).fetchone()
+        if not row:
+            raise KeyError("ingest source not found")
+        live_rows = conn.execute("SELECT entry_id FROM live_signals WHERE source_id=?", (source_id,)).fetchall()
+        entry_ids = [clean_text(r["entry_id"]) for r in live_rows if clean_text(r["entry_id"])]
+        conn.execute("DELETE FROM live_signals WHERE source_id=?", (source_id,))
+        conn.execute("DELETE FROM ingest_items WHERE source_id=?", (source_id,))
+        for entry_id in entry_ids:
+            conn.execute("DELETE FROM surfaced_cards WHERE source_entry_id=? OR triggered_by_entry_id=?", (entry_id, entry_id))
+            conn.execute("DELETE FROM actions WHERE entry_id=?", (entry_id,))
+            conn.execute("DELETE FROM pull_rules WHERE entry_id=?", (entry_id,))
+            conn.execute("DELETE FROM relationships WHERE from_entry_id=? OR to_entry_id=?", (entry_id, entry_id))
+            delete_decision_memory_for_entry(conn, entry_id)
+            conn.execute("DELETE FROM entries_fts WHERE entry_id=?", (entry_id,))
+            conn.execute("DELETE FROM entries WHERE id=?", (entry_id,))
+        conn.execute("DELETE FROM ingest_sources WHERE id=?", (source_id,))
+        audit(conn, "delete", "ingest_source", source_id, {"linked_entries_deleted": len(entry_ids)})
+        conn.commit()
+    return {"deleted": True, "source_id": source_id, "linked_entries_deleted": len(entry_ids)}
+
+
 def decision_confidence_value(entry: dict) -> float:
     base = {"Low": 0.35, "Medium": 0.55, "High": 0.75}.get(clean_text(entry.get("confidence")), 0.55)
     role = clean_text(entry.get("signal_role"))
@@ -5644,6 +6183,10 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(version_history())
             if path == "/api/import/capabilities":
                 return self.send_json(workbook_import_capabilities())
+            if path == "/api/ingest/sources":
+                return self.send_json(list_ingest_sources())
+            if path == "/api/live-signals":
+                return self.send_json(list_live_signals(params))
             if path == "/api/stock/analyze":
                 return self.send_json(stock_intel(
                     symbol=(params.get("symbol") or params.get("ticker") or [""])[0],
@@ -5779,6 +6322,10 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(translation_contract(payload))
             if path == "/api/import/workbook":
                 return self.send_json(import_workbook_path(payload.get("path") or payload.get("source_path") or ""), 201)
+            if path == "/api/ingest/sources":
+                return self.send_json(create_ingest_source(payload), 201)
+            if path == "/api/ingest/run":
+                return self.send_json(run_ingest(payload), 201)
             if path == "/api/stock/analyze":
                 return self.send_json(stock_intel(
                     symbol=payload.get("symbol") or payload.get("ticker") or "",
@@ -5857,6 +6404,9 @@ class Handler(SimpleHTTPRequestHandler):
         path = parsed.path
         try:
             payload = self.read_json()
+            if path.startswith("/api/live-signals/"):
+                signal_id = unquote(path.split("/api/live-signals/", 1)[1])
+                return self.send_json({"success": True, **update_live_signal(signal_id, payload)})
             if path.startswith("/api/assets/breakdowns/"):
                 extraction = update_listening_extraction(unquote(path.split("/api/assets/breakdowns/", 1)[1]), payload)
                 return self.send_json({"success": True, **extraction})
@@ -5884,6 +6434,9 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path.startswith("/api/ingest/sources/"):
+                result = delete_ingest_source(unquote(path.split("/api/ingest/sources/", 1)[1]))
+                return self.send_json({"success": True, **result})
             if path.startswith("/api/assets/projects/"):
                 result = delete_listening_project(unquote(path.split("/api/assets/projects/", 1)[1]))
                 return self.send_json({"success": True, **result})
