@@ -3,31 +3,31 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Info Analyzer OS v0.81</title>
+  <title>Info Analyzer OS v0.82</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <!-- WELCOME MODAL -->
   <div id="welcomeModal" class="modal-overlay" style="display: none;">
     <div class="modal-card">
-      <h2>Welcome to Signal Tracker</h2>
-      <p class="subtitle">Track observations. Discover patterns. Make better decisions.</p>
+      <h2>Welcome to Info Analyzer OS</h2>
+      <p class="subtitle">Turn raw information into trackable decisions, actions, and reusable memory.</p>
 
       <div class="value-prop">
-        <div><span>📥</span><h4>Save Observations</h4><p>Paste market trends, ideas, research</p></div>
-        <div><span>🤖</span><h4>AI Enrichment</h4><p>Claude finds patterns & insights</p></div>
-        <div><span>📊</span><h4>Discover Patterns</h4><p>Connect signals, see cross-domain themes</p></div>
+        <div><span>📥</span><h4>Capture</h4><p>Paste observations, articles, plans, and signals</p></div>
+        <div><span>⚙</span><h4>Translate</h4><p>Convert raw input into trackable memory</p></div>
+        <div><span>📊</span><h4>Decide</h4><p>Surface only what changes an action</p></div>
       </div>
 
       <h3>3-Step Quick Start</h3>
       <ol>
         <li>Click <strong>New Entry</strong> and paste an observation</li>
-        <li>Click <strong>Save</strong> (Claude enriches automatically)</li>
-        <li>Go to <strong>Command Center</strong> to see results</li>
+        <li>Click <strong>Save Entry</strong> to translate and store it</li>
+        <li>Go to <strong>Command Center</strong> or <strong>Live Signals</strong> to act</li>
       </ol>
 
       <div style="background: #e8f4f1; padding: 0.75rem; border-radius: 4px; font-size: 0.85rem; margin-top: 1rem;">
-        <strong>🤖 How it works:</strong> Claude AI analyzes your observations to find patterns, extract insights, and suggest actions. All processing is secure and private.
+        <strong>How it works:</strong> raw data stays attached as evidence, but the cockpit shows translated signals, actions, triggers, and feedback loops.
       </div>
 
       <div class="modal-buttons">
@@ -40,7 +40,7 @@
   <header class="app-header">
     <div>
       <p class="eyebrow">Intelligence OS</p>
-      <h1>Info Analyzer OS <span>v0.81</span></h1>
+      <h1>Info Analyzer OS <span>v0.82</span></h1>
       <p class="subtitle">Capture raw input, contextualize it into memory, and resurface only what changes a decision.</p>
     </div>
     <div class="header-actions">
@@ -50,8 +50,8 @@
   </header>
 
   <nav class="tabs">
-    <button class="tab active" data-tab="dump" title="Paste raw observations and let Claude analyze them">New Entry</button>
-    <button class="tab" data-tab="queue" title="Entries waiting for AI enrichment" >Queue <span id="queueBadge" class="queue-badge hidden">0</span></button>
+    <button class="tab active" data-tab="dump" title="Paste raw observations and turn them into signal memory">New Entry</button>
+    <button class="tab" data-tab="queue" title="Entries waiting for stronger translation" >Queue <span id="queueBadge" class="queue-badge hidden">0</span></button>
     <button class="tab" data-tab="command" title="Dashboard showing all signals and actions">Command Center</button>
     <button class="tab" data-tab="live" title="Real-time source ingest and signal routing">Live Signals</button>
     <button class="tab" data-tab="asset" title="Lab projects and asset breakdown">Asset Lab</button>
@@ -86,7 +86,7 @@
             </select>
           </label>
         </div>
-        <p class="workflow-guide"><span>① Paste raw input</span><span class="wf-sep">→</span><span>② Save entry</span><span class="wf-sep">→</span><span>③ Claude enriches if needed</span></p>
+        <p class="workflow-guide"><span>① Paste raw input</span><span class="wf-sep">→</span><span>② Translate into signal</span><span class="wf-sep">→</span><span>③ Save with action + metric</span></p>
         <div class="buttons">
           <button id="saveBtn" class="primary">Save Entry</button>
         </div>
@@ -96,11 +96,11 @@
       <!-- Collapsible manual translation — for power users / pre-filled imports -->
       <details class="contract-panel" id="contractDetails">
         <summary class="contract-toggle">
-          Fill manually <span class="contract-toggle-hint">— optional, Claude fills these automatically in session</span>
+          Fill manually <span class="contract-toggle-hint">— optional, the translation layer fills these when possible</span>
           <span id="draftPill" class="pill muted" style="margin-left:auto">empty</span>
         </summary>
         <div class="card contract-card">
-          <p class="field-hint">Fill any fields you already know before saving. Leave the rest empty — Claude reads the full raw input in context and fills them more accurately than the regex engine ever could.</p>
+          <p class="field-hint">Fill any fields you already know before saving. Leave the rest empty — the translation layer will infer a signal, action, metric, trigger, and context.</p>
           <div class="grid one">
             <label>Title<input id="titleInput" /></label>
             <div class="grid two">
@@ -154,10 +154,10 @@
     <section id="queue" class="panel">
       <div class="card hero">
         <div class="card-head">
-          <div><p class="eyebrow">Processing Queue</p><h2>Pending Claude Enrichment</h2></div>
+          <div><p class="eyebrow">Processing Queue</p><h2>Needs Stronger Translation</h2></div>
           <button id="refreshQueue" class="ghost small">Refresh</button>
         </div>
-        <p class="field-hint">These entries are saved to memory and waiting for Claude Code to process. Ask Claude to <strong>"run the queue"</strong> — it reads all entries, enriches each one with real signal analysis, and writes back. Complex entries can also be <strong>decomposed</strong> into multiple linked signals.</p>
+        <p class="field-hint">These entries are saved but still need stronger signal definition. Re-translate, decompose, or process them with Claude Code when you want deeper analysis.</p>
         <div id="queueMeta" class="stats"></div>
       </div>
       <div id="queueList" class="list"></div>
@@ -178,6 +178,14 @@
           </div>
         </div>
         <div id="commandStats" class="stats"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div><p class="eyebrow">Decision Inbox</p><h2>What Needs A Decision Now</h2></div>
+          <button id="refreshDecisionInbox" class="ghost small">Refresh</button>
+        </div>
+        <p class="field-hint">This is the cockpit lane: only signals that should confirm, change, or challenge a decision belong here.</p>
+        <div id="commandDecisionInbox" class="list"></div>
       </div>
       <div class="grid two inn-topology">
         <div class="card">
@@ -383,7 +391,7 @@
     <section id="actions" class="panel">
       <div class="card hero">
         <div class="card-head"><div><p class="eyebrow">Execution Queue</p><h2>Next Actions</h2></div><button id="refreshActions" class="ghost small">Refresh</button></div>
-        <p class="field-hint">When Claude analyzes queued entries, it generates concrete actions — next steps tied to your observations. Track progress here.</p>
+        <p class="field-hint">Returned actions are concrete next steps tied to translated signals. Track progress, log results, or recategorize weak actions here.</p>
       </div>
       <div class="card">
         <div id="actionsList" class="list"></div>
@@ -394,7 +402,7 @@
     <section id="patterns" class="panel">
       <div class="card hero">
         <div class="card-head"><div><p class="eyebrow">Pattern Engine</p><h2>Recurring Themes</h2></div><div class="buttons compact"><button id="scanPatterns" class="primary small">Scan for Patterns</button><button id="refreshPatterns" class="ghost small">Refresh</button></div></div>
-        <p class="field-hint">Patterns emerge when Claude finds recurring themes across your entries. Examples: "Risk signals cluster in Q3", "Same entity appears 5+ times", "Multiple domains showing the same trend". Click Scan to detect patterns in your observations.</p>
+        <p class="field-hint">Patterns emerge when repeated signals cross the database. Click Scan to detect recurring themes, contradictions, risks, and opportunity patterns.</p>
       </div>
       <div class="card">
         <div id="patternsList" class="list"></div>

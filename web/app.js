@@ -222,6 +222,11 @@ async function loadDecisions(){
   $("decisionQueueList").innerHTML = (queue.reviews || []).length
     ? queue.reviews.map(decisionReviewHTML).join("")
     : `<div class="item"><h3>Decision queue quiet</h3><p class="muted">No open decision reviews. Save a signal that affects a rule or action.</p></div>`;
+  if($("commandDecisionInbox")){
+    $("commandDecisionInbox").innerHTML = (queue.reviews || []).length
+      ? (queue.reviews || []).slice(0,5).map(decisionReviewHTML).join("")
+      : `<div class="item"><h3>Decision inbox quiet</h3><p class="muted">No decision-changing signals need review right now.</p></div>`;
+  }
   $("decisionRulesList").innerHTML = (rules.rules || []).length
     ? rules.rules.map(decisionRuleHTML).join("")
     : `<div class="item"><h3>No decision rules yet</h3><p class="muted">Rules form as signals are saved and feedback is logged.</p></div>`;
@@ -472,7 +477,7 @@ function enrichBadge(e){
 }
 function entryHTML(e){
   const inQueue = e.status === "pending_claude" || e.status === "raw" || e.status === "needs_enrichment";
-  const queueLabel = e.status === "needs_enrichment" ? "Needs Enrichment" : (inQueue ? "In Queue" : "Queue for Claude");
+  const queueLabel = e.status === "needs_enrichment" ? "Needs Translation" : (inQueue ? "In Queue" : "Queue for Processor");
   const queueClass = inQueue ? "ghost small queue-active" : "ghost small";
   const badge = enrichBadge(e);
   const chip = e.metadata?.contextual_memory || null;
@@ -513,21 +518,21 @@ async function queueForClaude(id, btn){
     const res = await api(`/entries/${encodeURIComponent(id)}`, {method:"PATCH", body:JSON.stringify({status: newStatus})});
     const status = res.entry?.status || newStatus;
     const stillQueued = status === "pending_claude" || status === "raw" || status === "needs_enrichment";
-    btn.textContent = status === "needs_enrichment" ? "Needs Enrichment" : (stillQueued ? "In Queue" : "Queue for Claude");
+    btn.textContent = status === "needs_enrichment" ? "Needs Translation" : (stillQueued ? "In Queue" : "Queue for Processor");
     btn.className = stillQueued ? "ghost small queue-active" : "ghost small";
     btn.closest(".item").classList.toggle("item-queued", stillQueued);
-    toast(status === "needs_enrichment" ? "Still needs enrichment" : (stillQueued ? "Queued for Claude" : "Removed from queue"));
+    toast(status === "needs_enrichment" ? "Still needs translation" : (stillQueued ? "Queued for processor" : "Removed from queue"));
     updateQueueBadge();
     loadCommand();
   } catch(err){ toast("Error: " + err.message); }
 }
 function queueEntryHTML(e){
   const age = e.created_at ? e.created_at.slice(0,10) : "";
-  const badge = e.status === "needs_enrichment" ? "◈ Needs Enrichment" : "⏳ Processing";
+  const badge = e.status === "needs_enrichment" ? "◈ Needs Translation" : "⏳ Processor Queue";
   const progressMsg = e.status === "needs_enrichment"
     ? "Waiting for better signal definition"
-    : "AI is analyzing this. Usually 5 minutes.";
-  const buttonLabel = e.status === "needs_enrichment" ? "Needs Enrichment" : "Queued";
+    : "Waiting for deeper processing or decomposition.";
+  const buttonLabel = e.status === "needs_enrichment" ? "Needs Translation" : "Queued";
   return `<div class="item item-queued">
     <div class="entry-top">
       <span class="enrich-badge ${e.status === "needs_enrichment" ? "eb-needs" : "eb-queued"}">${badge}</span>
@@ -558,11 +563,11 @@ async function loadQueue(){
     .map(([d,es])=>`<div class="stat stat-queue"><strong>${esc(es.length)}</strong><span class="muted">${esc(d)}</span></div>`)
     .join("");
   $("queueMeta").innerHTML = entries.length
-    ? `<div class="stat stat-queue"><strong>${esc(entries.length)}</strong><span class="muted">Need Claude</span></div>${domainStats}`
+    ? `<div class="stat stat-queue"><strong>${esc(entries.length)}</strong><span class="muted">Need translation</span></div>${domainStats}`
     : `<p class="muted" style="margin:0">Queue is empty.</p>`;
   $("queueList").innerHTML = entries.length
     ? entries.map(queueEntryHTML).join("")
-    : `<div class="item"><h3>Queue is empty</h3><p class="muted">Save entries from the New Entry tab. Partial or generic entries land here automatically until Claude enriches them.</p></div>`;
+    : `<div class="item"><h3>Queue is empty</h3><p class="muted">Partial or generic entries land here only when they need stronger translation.</p></div>`;
   updateQueueBadge(entries.length);
 }
 async function updateQueueBadge(count){
@@ -771,43 +776,73 @@ async function loopAnalyze(){
 async function save(){
   let payload = collectDraft();
   if(!payload.raw_input){ toast("Paste raw input first"); return; }
-  // If no signal or interpretation, queue for Claude — skip regex auto-fill
-  const toQueue = !payload.signal && !payload.interpretation;
-  if(toQueue) payload.status = "pending_claude";
-  const res = await api("/entries", {method:"POST", body:JSON.stringify(payload)});
-  const cards = res.context_packet?.cards || [];
-  if(res.entry?.status === "pending_claude"){
-    $("saveOutput").innerHTML = `<div class="item success-feedback">
-      <h3>✓ Queued for AI Analysis</h3>
+  const btn = $("saveBtn");
+  const originalText = btn.textContent;
+  btn.textContent = "Translating + Saving...";
+  btn.disabled = true;
+  if(!payload.signal && !payload.interpretation){
+    try {
+      const translated = await api("/translate/ai", {method:"POST", body:JSON.stringify(collectBase())});
+      payload = {...payload, ...(translated.draft || {}), raw_input: payload.raw_input};
+      if(payload.signal && !payload.interpretation){
+        payload.interpretation = `This signal may affect the decision for ${payload.entity || payload.domain || "this context"} and should be tracked before it drives action.`;
+      }
+      if(payload.signal && payload.returned_action && payload.tracking_metric){
+        payload.status = "codified";
+        payload.raw_staging_status = "processed";
+      }
+      fillDraft(payload);
+      toast(translated.ai_used ? "AI translated before save" : "Local translation before save");
+    } catch(err) {
+      payload.status = "needs_enrichment";
+      toast("Translation fallback failed; saved for review");
+    }
+  }
+  try {
+    const res = await api("/entries", {method:"POST", body:JSON.stringify(payload)});
+    const cards = res.context_packet?.cards || [];
+    const topCards = cards
+      .filter(c => c && (c.recommended_action || c.action || c.decision_update))
+      .sort((a,b)=>(Number(b.score || 0) - Number(a.score || 0)))
+      .slice(0,3);
+    if(res.entry?.status === "pending_claude"){
+      $("saveOutput").innerHTML = `<div class="item success-feedback">
+      <h3>✓ Saved For Processor Review</h3>
       <p class="muted">Entry ${esc(res.entry_id)} saved successfully</p>
       <p style="margin-top: 0.5rem; color: var(--accent);">
-        <strong>What happens next:</strong> Claude AI will analyze this observation within 5 minutes.
-        <br><a href="#" onclick="switchTab('queue'); return false;">→ Check Queue tab to see progress</a>
+        <strong>What happens next:</strong> this entry needs stronger translation before it should drive decisions.
+        <br><a href="#" onclick="switchTab('queue'); return false;">→ Check Queue tab</a>
       </p>
     </div>`;
-    toast("✓ Saved and queued for AI analysis");
-  } else if(res.entry?.status === "needs_enrichment"){
-    $("saveOutput").innerHTML = `<div class="item warning-feedback">
-      <h3>⚠ Saved (Needs Enrichment)</h3>
+      toast("✓ Saved for processor review");
+    } else if(res.entry?.status === "needs_enrichment"){
+      $("saveOutput").innerHTML = `<div class="item warning-feedback">
+      <h3>⚠ Saved (Needs Stronger Translation)</h3>
       <p class="muted">Entry ${esc(res.entry_id)} saved, but signal is incomplete</p>
       <p style="margin-top: 0.5rem;">
-        <strong>Next step:</strong> Fill in the Signal and Interpretation fields for better AI analysis.
+        <strong>Next step:</strong> add a signal, action, metric, or trigger so this memory can resurface correctly.
       </p>
     </div>`;
-    toast("Saved — needs enrichment");
-  } else {
-    $("saveOutput").innerHTML = `<div class="item success-feedback">
+      toast("Saved — needs stronger translation");
+    } else {
+      $("saveOutput").innerHTML = `<div class="item success-feedback">
       <h3>✓ Saved and Processed</h3>
       <p class="muted">Entry ${esc(res.entry_id)} successfully codified</p>
       <p style="margin-top: 0.5rem; color: var(--accent);">
         Created ${res.pull_rules?.length || 0} pull rule(s).
         <br><a href="#" onclick="switchTab('command'); return false;">→ View in Command Center</a>
       </p>
-    </div>` + cards.map(cardHTML).join("");
-    toast("✓ Saved and processed");
+    </div>` + (topCards.length ? `<div class="item"><h3>Top Resurfaced Context</h3><p class="muted">Showing only the highest-value context so the cockpit stays quiet.</p></div>${topCards.map(cardHTML).join("")}` : "");
+      toast("✓ Saved and processed");
+    }
+    loadCommand();
+    updateQueueBadge();
+  } catch(err) {
+    toast("Save failed: " + err.message);
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
   }
-  loadCommand();
-  updateQueueBadge();
 }
 async function pullMemory(){
   const raw = $("pullInput").value.trim();
@@ -948,6 +983,7 @@ async function openAssetProject(id){
       <span class="tag">${esc(res.extractions.length)} saved</span>
     </div>
     <p class="muted">${esc(currentAssetProject.notes || "No project notes yet.")}</p>
+    <div class="kv"><b>Next Step</b><span>Press Break Down Signal to generate a section map, glossary, concrete example, action path, and reusable library entry.</span></div>
     <label>Breakdown Prompt<textarea id="assetBreakdownPrompt" rows="3" placeholder="Ask the system what to clarify: mechanism, metric, risk, opportunity, first step, trigger, related memories..."></textarea></label>
     <div class="buttons">
       <button class="primary small" onclick="continueAssetBreakdown()">Break Down Signal</button>
@@ -1306,10 +1342,10 @@ async function runPatternEngine(){
 function liveSignalHTML(signal){
   const sourceUrl = signal.metadata?.source_url || "";
   const buttons = `
-    <button class="primary small" onclick="updateLiveSignalStatus('${esc(signal.id)}','acted')">Act</button>
-    <button class="secondary small" onclick="updateLiveSignalStatus('${esc(signal.id)}','watching')">Watch</button>
-    <button class="ghost small" onclick="updateLiveSignalStatus('${esc(signal.id)}','rule_updated')">Update Rule</button>
-    <button class="ghost small" onclick="updateLiveSignalStatus('${esc(signal.id)}','ignored')">Ignore</button>
+    <button class="primary small" onclick="openLiveSignalForm('${esc(signal.id)}','acted')">Act</button>
+    <button class="secondary small" onclick="updateLiveSignalStatus('${esc(signal.id)}','watching','Watching for trigger.')">Watch</button>
+    <button class="ghost small" onclick="openLiveSignalForm('${esc(signal.id)}','rule_updated')">Update Rule</button>
+    <button class="ghost small" onclick="openLiveSignalForm('${esc(signal.id)}','ignored')">Ignore</button>
     ${sourceUrl ? `<a class="ghost small link-button" href="${esc(sourceUrl)}" target="_blank">Open Source</a>` : ""}
     ${signal.entry_id ? `<button class="ghost small" onclick="openSourceEntry('${esc(signal.entry_id)}')">Open Memory</button>` : ""}
   `;
@@ -1332,6 +1368,7 @@ function liveSignalHTML(signal){
     ${kvHTML("Recommended Action", signal.recommended_action || "")}
     ${kvHTML("Tracking Metric", signal.tracking_metric || "")}
     <div class="buttons compact">${buttons}</div>
+    <div id="liveForm-${esc(signal.id)}" class="inline-action-form hidden"></div>
   </div>`;
 }
 
@@ -1404,15 +1441,30 @@ async function runIngest(sourceId=""){
   loadCommand();
 }
 
-async function updateLiveSignalStatus(id, status){
-  let note = "";
-  if(status === "ignored"){
-    note = prompt("Why should this signal be ignored?") || "";
-  } else if(status === "rule_updated"){
-    note = prompt("What decision rule changed because of this signal?") || "";
-  } else if(status === "acted"){
-    note = prompt("What exact action are you taking now?") || "";
-  }
+function liveStatusPrompt(status){
+  if(status === "ignored") return "Why should this signal be ignored?";
+  if(status === "rule_updated") return "What decision rule changed because of this signal?";
+  if(status === "acted") return "What exact action are you taking now?";
+  return "Add a short note.";
+}
+function openLiveSignalForm(id, status){
+  const host = $(`liveForm-${id}`);
+  if(!host) return;
+  host.classList.remove("hidden");
+  host.innerHTML = `
+    <label>${esc(liveStatusPrompt(status))}
+      <textarea id="liveNote-${esc(id)}" rows="3" placeholder="Write the result, rule change, action taken, or reason..."></textarea>
+    </label>
+    <div class="buttons compact">
+      <button class="primary small" onclick="submitLiveSignalStatus('${esc(id)}','${esc(status)}')">Submit</button>
+      <button class="ghost small" onclick="document.getElementById('liveForm-${esc(id)}').classList.add('hidden')">Cancel</button>
+    </div>`;
+}
+async function submitLiveSignalStatus(id, status){
+  const note = $(`liveNote-${id}`)?.value.trim() || "";
+  await updateLiveSignalStatus(id, status, note);
+}
+async function updateLiveSignalStatus(id, status, note=""){
   await api(`/live-signals/${encodeURIComponent(id)}`, {method:"PATCH", body:JSON.stringify({status, result:note, rule_update:note})});
   toast(`Live signal marked ${status}`);
   loadLiveDashboard();
@@ -1451,6 +1503,7 @@ $("refreshMemory").addEventListener("click", loadMemory);
 $("refreshActions").addEventListener("click", loadActions);
 $("refreshCommand").addEventListener("click", loadCommand);
 $("refreshDecisions").addEventListener("click", loadDecisions);
+if($("refreshDecisionInbox")) $("refreshDecisionInbox").addEventListener("click", loadDecisions);
 $("dormantBtn").addEventListener("click", loadDormant);
 $("refreshPatterns").addEventListener("click", loadPatterns);
 $("scanPatterns").addEventListener("click", runPatternEngine);

@@ -54,8 +54,22 @@ WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "info_analyzer.db"
 
-APP_VERSION = "v0.81-real-time-signal-dashboard"
+APP_VERSION = "v0.82-ui-cockpit-hardening"
 APP_VERSIONS = [
+    {
+        "version": "v0.82",
+        "name": "UI Cockpit Hardening",
+        "features": [
+            "First-run copy reframed around Info Analyzer OS instead of Signal Tracker",
+            "Raw Save Entry now translates locally before saving instead of defaulting to a vague queue",
+            "Structured extractor reads Hidden Signal, Decision, and Track language into specific actions and metrics",
+            "Command Center adds a top Decision Inbox lane",
+            "Live Signal actions use inline forms instead of browser prompts",
+            "Live ingest creates more specific recommended actions from source text",
+            "Asset Lab open-project view now shows the next extraction step clearly",
+            "Context packets show only top resurfaced context to keep the cockpit quiet",
+        ],
+    },
     {
         "version": "v0.81",
         "name": "Real-Time Signal Dashboard",
@@ -2558,6 +2572,57 @@ def loop_engineer(payload: dict) -> dict:
     return {**out, "outcome": outcome, "analysis": out, "qa_scores": scores, "loop_trace": trace, "database_json": db_json}
 
 
+def extract_inline_label(raw: str, labels: list[str]) -> str:
+    text = clean_text(raw)
+    for label in labels:
+        match = re.search(rf"(?i)\b{re.escape(label)}\s*:\s*([^.;\n]+(?:[.;][^.;\n]+)?)", text)
+        if match:
+            return clean_text(match.group(1)).strip(" .;")
+    return ""
+
+
+def first_sentence_with(raw: str, words: list[str]) -> str:
+    for sentence in re.split(r"(?<=[.!?])\s+", clean_text(raw)):
+        low = sentence.lower()
+        if any(word in low for word in words):
+            return clean_text(sentence).strip(" .")
+    return ""
+
+
+def structured_raw_translation(raw: str, domain: str, entity: str) -> dict:
+    signal = (
+        extract_inline_label(raw, ["hidden signal", "signal"])
+        or first_sentence_with(raw, ["customer", "buyer", "shopper", "objection", "risk", "opportunity", "revenue", "margin", "cash", "training", "sop"])
+    )
+    decision = extract_inline_label(raw, ["decision", "action", "next step"])
+    track = extract_inline_label(raw, ["track", "tracking metric", "measure"])
+    low = raw.lower()
+    if not signal:
+        return {}
+    if decision:
+        action = decision
+    elif any(w in low for w in ["price", "pricing", "total cost", "delivery", "setup", "objection", "conversion", "close rate"]):
+        action = "Clarify the offer/listing total cost, setup, and delivery terms, then compare objection count and conversion rate."
+    elif domain == "Investing":
+        action = f"Compare the {entity} signal against revenue, margin, cash conversion, valuation, and thesis risk."
+    elif domain == "Lab":
+        action = "Turn the signal into one checklist/SOP test and log before-after error rate or cycle time."
+    else:
+        action = f"Review this {domain} signal, choose the next action, and log the result."
+    if not track:
+        if any(w in low for w in ["price", "pricing", "delivery", "setup", "conversion"]):
+            track = "Pricing objections, delivery/setup questions, conversion rate, and result after copy update."
+        else:
+            track = default_tracking_metric(domain, "watch")
+    return {
+        "signal": signal[:260],
+        "interpretation": f"This signal may change the active decision for {entity or domain}: {signal}",
+        "returned_action": action[:500],
+        "tracking_metric": track[:360],
+        "first_step": action.split(".")[0].strip() + ".",
+    }
+
+
 def codify_payload(payload: dict) -> dict:
     raw = clean_text(payload.get("raw_input") or payload.get("raw_text"))
     if not raw:
@@ -2572,12 +2637,13 @@ def codify_payload(payload: dict) -> dict:
     if role not in SIGNAL_ROLES:
         role = "watch"
     title = clean_text(payload.get("title")) or make_short_title(raw, domain, entity)
+    structured = structured_raw_translation(raw, domain, entity)
     _payload_signal = clean_text(payload.get("signal"))
     _payload_interp = clean_text(payload.get("interpretation"))
-    signal = _payload_signal or f"{role.title()} signal in {domain}: {simple_summary(raw)}"
-    interpretation = _payload_interp
+    signal = _payload_signal or structured.get("signal") or f"{role.title()} signal in {domain}: {simple_summary(raw)}"
+    interpretation = _payload_interp or structured.get("interpretation", "")
     pattern = clean_text(payload.get("pattern"))
-    returned_action = clean_text(payload.get("returned_action"))
+    returned_action = clean_text(payload.get("returned_action")) or structured.get("returned_action", "")
     if not returned_action:
         actions = {
             "action": "Execute the next concrete step and log the result.",
@@ -2605,13 +2671,13 @@ def codify_payload(payload: dict) -> dict:
     if relationship_type not in REL_TYPES:
         relationship_type = default_relationship_type(role)
     trackable_as = clean_text(payload.get("trackable_as")) or default_trackable_as(domain, role)
-    tracking_metric = clean_text(payload.get("tracking_metric")) or default_tracking_metric(domain, role)
+    tracking_metric = clean_text(payload.get("tracking_metric")) or structured.get("tracking_metric") or default_tracking_metric(domain, role)
     lesson = clean_text(payload.get("lesson"))
     _incoming_status = clean_text(payload.get("status")).lower()
     if not _incoming_status:
         if role == "archive":
             _incoming_status = "archived"
-        elif _payload_signal or _payload_interp:
+        elif _payload_signal or _payload_interp or structured.get("signal"):
             _incoming_status = "codified"
         else:
             _incoming_status = "pending_claude"
@@ -2636,7 +2702,7 @@ def codify_payload(payload: dict) -> dict:
         "relationship_type": relationship_type,
         "card_type": card_type,
         "result_to_track": clean_text(payload.get("result_to_track")) or tracking_metric,
-        "first_step": clean_text(payload.get("first_step")),
+        "first_step": clean_text(payload.get("first_step")) or structured.get("first_step", ""),
         "impact_metric": clean_text(payload.get("impact_metric")),
         "feedback_to_capture": clean_text(payload.get("feedback_to_capture")),
         "related_memory_query": clean_text(payload.get("related_memory_query")),
@@ -3811,6 +3877,57 @@ def fetch_source_items(source: dict) -> list[dict]:
     return [parse_html_item(raw, source)]
 
 
+def extract_label_value(text: str, labels: list[str]) -> str:
+    raw = clean_text(text)
+    for label in labels:
+        match = re.search(rf"(?i)\b{re.escape(label)}\s*:\s*([^.;\n]+(?:[.;][^.;\n]+)?)", raw)
+        if match:
+            return clean_text(match.group(1)).strip(" .;")
+    return ""
+
+
+def sentence_with_any(text: str, words: list[str]) -> str:
+    sentences = re.split(r"(?<=[.!?])\s+", clean_text(text))
+    for sentence in sentences:
+        low = sentence.lower()
+        if any(w in low for w in words):
+            return clean_text(sentence).strip(" .")
+    return ""
+
+
+def live_signal_translation(raw: str, title: str, entity: str, domain: str) -> dict:
+    signal = (
+        extract_label_value(raw, ["hidden signal", "signal"])
+        or sentence_with_any(raw, ["signal", "risk", "opportunity", "objection", "customers", "buyers", "shoppers", "revenue", "margin"])
+        or title
+    )
+    decision = extract_label_value(raw, ["decision", "next step", "action"])
+    track = extract_label_value(raw, ["track", "tracking metric", "measure"])
+    if not track:
+        track = sentence_with_any(raw, ["track", "measure", "conversion", "margin", "revenue", "objection", "close rate"])
+    low = raw.lower()
+    if decision:
+        action = decision
+    elif any(w in low for w in ["pricing", "price", "objection", "delivery", "setup", "close rate", "conversion"]):
+        action = "Update the offer/listing copy to clarify total cost, setup, and delivery, then compare objection count and conversion rate."
+    elif any(w in low for w in ["earnings", "revenue", "margin", "cash flow", "inventory"]):
+        action = f"Open the latest source evidence for {entity or domain}, compare revenue, margin, cash, and risk signals, then update the decision rule."
+    elif any(w in low for w in ["sop", "training", "operator", "calibration", "quality"]):
+        action = "Update the operating checklist, run one controlled trial, and log whether error rate or setup time improves."
+    else:
+        action = f"Review this source item for {entity or domain}, decide whether it changes an active rule, and log the decision outcome."
+    if not track:
+        track = "Decision changed, action created, result logged, and follow-up metric reviewed."
+    why = f"This source may change the active decision for {entity or domain}: {signal}"
+    return {
+        "signal": signal[:240],
+        "interpretation": why,
+        "returned_action": action[:500],
+        "first_step": action[:240],
+        "tracking_metric": track[:360],
+    }
+
+
 def create_ingest_source(payload: dict) -> dict:
     name = clean_text(payload.get("name"))
     source_type = normalize_text(payload.get("source_type") or "manual")
@@ -3885,19 +4002,20 @@ def insert_live_signal_from_item(conn, source: dict, item: dict) -> dict:
     domain = clean_text(item.get("domain") or source.get("domain")) or "Other"
     entity = clean_text(item.get("entity") or source.get("entity")) or ""
     related_count = related_memory_count(conn, domain, entity, raw)
+    translated = live_signal_translation(raw, title, entity, domain)
     entry_payload = codify_payload({
         "title": f"Live Signal: {title}",
         "raw_input": raw,
         "domain": domain,
         "entity": entity,
         "source_type": "live_ingest",
-        "signal": title,
+        "signal": translated["signal"],
         "signal_role": "watch",
-        "interpretation": f"New source data may affect the decision rule for {entity or domain}.",
+        "interpretation": translated["interpretation"],
         "trackable_as": "decision update + action result",
-        "tracking_metric": "Decision changed, action created, rule updated, or signal ignored with reason.",
-        "returned_action": "Review this live signal and choose Act, Watch, Update Rule, or Ignore.",
-        "first_step": "Open the source evidence and decide whether this changes an active decision.",
+        "tracking_metric": translated["tracking_metric"],
+        "returned_action": translated["returned_action"],
+        "first_step": translated["first_step"],
         "impact_metric": "Decision velocity and decision quality improved by routing new evidence into action.",
         "feedback_to_capture": "Selected live signal status, result, and whether the decision rule changed.",
         "pull_trigger": f"Resurface when future entries mention {entity or domain}, live signals, source updates, or decision changes.",
