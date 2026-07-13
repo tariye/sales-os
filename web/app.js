@@ -997,6 +997,16 @@ function stockMetricHTML(label, item){
   if(!item) return `<div class="stat"><strong>n/a</strong><span class="muted">${esc(label)}</span></div>`;
   return `<div class="stat"><strong>${esc(item.display || item.value || "n/a")}</strong><span class="muted">${esc(label)}${item.end ? " · " + esc(item.end) : ""}</span></div>`;
 }
+function fmtMoney(value){
+  const n = Number(value);
+  if(!Number.isFinite(n)) return String(value || "n/a");
+  return new Intl.NumberFormat("en-US", {style:"currency", currency:"USD", maximumFractionDigits:n >= 100 ? 0 : 2}).format(n);
+}
+function fmtPct(value){
+  const n = Number(value);
+  if(!Number.isFinite(n)) return String(value || "n/a");
+  return `${n.toFixed(1)}%`;
+}
 function stockAnalysisHTML(res){
   const a = res.analysis || {};
   const company = a.company || {};
