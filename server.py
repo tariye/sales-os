@@ -2514,7 +2514,7 @@ def codify_payload(payload: dict) -> dict:
         if role == "archive":
             _incoming_status = "archived"
         elif _payload_signal or _payload_interp:
-            _incoming_status = "needs_enrichment"
+            _incoming_status = "codified"
         else:
             _incoming_status = "pending_claude"
     status = _incoming_status if _incoming_status in STATUS_VALUES else "pending_claude"
@@ -3391,6 +3391,8 @@ def apply_entry_hygiene(entry: dict, requested_status: str = "") -> dict:
         status = requested
     elif not signal and not interpretation:
         status = "pending_claude"
+    elif requested == "codified":
+        status = "codified"
     elif issues:
         status = "needs_enrichment"
     elif requested == "watching":
