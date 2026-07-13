@@ -65,6 +65,7 @@ APP_VERSIONS = [
             "Structured extractor reads Hidden Signal, Decision, and Track language into specific actions and metrics",
             "Command Center adds a top Decision Inbox lane",
             "Live Signal actions use inline forms instead of browser prompts",
+            "Live Signal buttons use data-driven event routing so Act, Watch, Update Rule, Ignore, and Submit survive browser reloads",
             "Live ingest creates more specific recommended actions from source text",
             "Asset Lab open-project view now shows the next extraction step clearly",
             "Context packets show only top resurfaced context to keep the cockpit quiet",

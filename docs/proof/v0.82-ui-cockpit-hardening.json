@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-13T08:25:28+00:00",
+  "generated_at": "2026-07-13T18:42:25+00:00",
   "base_url": "http://127.0.0.1:8000",
   "stock_symbol": "AAPL",
   "principle": "No feature ships until it survives the live user loop.",
@@ -49,14 +49,14 @@
       "status": "pass",
       "detail": "Manual sales source produced a live signal, linked memory, accepted Watch/Act status updates, and cleaned up.",
       "evidence": {
-        "source_id": "SRC-20260713082521-EDCDE4",
-        "signal_id": "LIVE-20260713082521-EDAAD3",
-        "entry_id": "IA-20260713082521-233B01",
+        "source_id": "SRC-20260713184222-09970B",
+        "signal_id": "LIVE-20260713184222-8971A4",
+        "entry_id": "IA-20260713184222-4B8B63",
         "recommended_action": "Update the offer/listing copy to clarify total cost, setup, and delivery, then compare objection count and conversion rate.",
         "cleanup": {
           "success": true,
           "deleted": true,
-          "source_id": "SRC-20260713082521-EDCDE4",
+          "source_id": "SRC-20260713184222-09970B",
           "linked_entries_deleted": 1
         }
       }
@@ -66,8 +66,8 @@
       "status": "pass",
       "detail": "Pattern was recontextualized into an action queue item with source context.",
       "evidence": {
-        "entry_id": "IA-20260713082521-2A393C",
-        "action_id": "ACT-E41EA688BCE75F64"
+        "entry_id": "IA-20260713184222-78CC28",
+        "action_id": "ACT-D91A329F074356B4"
       }
     },
     {
@@ -75,8 +75,8 @@
       "status": "pass",
       "detail": "Signal created a decision review and feedback updated the rule loop.",
       "evidence": {
-        "entry_id": "IA-20260713082521-9C3311",
-        "review_id": "DREV-97A8D8964DF8520F"
+        "entry_id": "IA-20260713184222-721D00",
+        "review_id": "DREV-78EDD33FB0295835"
       }
     },
     {
@@ -103,8 +103,8 @@
       "status": "pass",
       "detail": "Temporary asset was opened, broken down, saved to library, labeled, and fully deleted.",
       "evidence": {
-        "extraction_id": "LEX-20260713082527-2B3151",
-        "linked_entry_id": "IA-20260713082527-8BF1DC"
+        "extraction_id": "LEX-20260713184224-67D24A",
+        "linked_entry_id": "IA-20260713184224-0F8F9A"
       }
     },
     {
@@ -112,7 +112,7 @@
       "status": "pass",
       "detail": "Temporary entry was saved, pulled, result-logged, and cleaned up.",
       "evidence": {
-        "entry_id": "IA-20260713082527-2E1E9E",
+        "entry_id": "IA-20260713184225-BC97A8",
         "pull_cards": 5
       }
     }

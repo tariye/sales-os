@@ -1342,12 +1342,12 @@ async function runPatternEngine(){
 function liveSignalHTML(signal){
   const sourceUrl = signal.metadata?.source_url || "";
   const buttons = `
-    <button class="primary small" onclick="openLiveSignalForm('${esc(signal.id)}','acted')">Act</button>
-    <button class="secondary small" onclick="updateLiveSignalStatus('${esc(signal.id)}','watching','Watching for trigger.')">Watch</button>
-    <button class="ghost small" onclick="openLiveSignalForm('${esc(signal.id)}','rule_updated')">Update Rule</button>
-    <button class="ghost small" onclick="openLiveSignalForm('${esc(signal.id)}','ignored')">Ignore</button>
+    <button class="primary small" type="button" data-live-form-status="acted" data-live-id="${esc(signal.id)}">Act</button>
+    <button class="secondary small" type="button" data-live-status="watching" data-live-id="${esc(signal.id)}" data-live-note="Watching for trigger.">Watch</button>
+    <button class="ghost small" type="button" data-live-form-status="rule_updated" data-live-id="${esc(signal.id)}">Update Rule</button>
+    <button class="ghost small" type="button" data-live-form-status="ignored" data-live-id="${esc(signal.id)}">Ignore</button>
     ${sourceUrl ? `<a class="ghost small link-button" href="${esc(sourceUrl)}" target="_blank">Open Source</a>` : ""}
-    ${signal.entry_id ? `<button class="ghost small" onclick="openSourceEntry('${esc(signal.entry_id)}')">Open Memory</button>` : ""}
+    ${signal.entry_id ? `<button class="ghost small" type="button" data-live-memory-entry="${esc(signal.entry_id)}">Open Memory</button>` : ""}
   `;
   return `<div class="item live-signal-card ${esc(signal.priority || "").toLowerCase()}">
     <div class="plane-head">
@@ -1456,8 +1456,8 @@ function openLiveSignalForm(id, status){
       <textarea id="liveNote-${esc(id)}" rows="3" placeholder="Write the result, rule change, action taken, or reason..."></textarea>
     </label>
     <div class="buttons compact">
-      <button class="primary small" onclick="submitLiveSignalStatus('${esc(id)}','${esc(status)}')">Submit</button>
-      <button class="ghost small" onclick="document.getElementById('liveForm-${esc(id)}').classList.add('hidden')">Cancel</button>
+      <button class="primary small" type="button" data-live-submit="${esc(id)}" data-live-status="${esc(status)}">Submit</button>
+      <button class="ghost small" type="button" data-live-cancel="${esc(id)}">Cancel</button>
     </div>`;
 }
 async function submitLiveSignalStatus(id, status){
@@ -1471,6 +1471,38 @@ async function updateLiveSignalStatus(id, status, note=""){
   loadActions();
   loadDecisions();
 }
+
+document.addEventListener("click", async event => {
+  const submitButton = event.target.closest("[data-live-submit]");
+  if(submitButton){
+    const id = submitButton.dataset.liveSubmit;
+    await submitLiveSignalStatus(id, submitButton.dataset.liveStatus || "acted");
+    return;
+  }
+  const cancelButton = event.target.closest("[data-live-cancel]");
+  if(cancelButton){
+    $(`liveForm-${cancelButton.dataset.liveCancel}`)?.classList.add("hidden");
+    return;
+  }
+  const formButton = event.target.closest("[data-live-form-status]");
+  if(formButton){
+    openLiveSignalForm(formButton.dataset.liveId, formButton.dataset.liveFormStatus);
+    return;
+  }
+  const statusButton = event.target.closest("[data-live-status][data-live-id]");
+  if(statusButton){
+    await updateLiveSignalStatus(
+      statusButton.dataset.liveId,
+      statusButton.dataset.liveStatus,
+      statusButton.dataset.liveNote || ""
+    );
+    return;
+  }
+  const memoryButton = event.target.closest("[data-live-memory-entry]");
+  if(memoryButton){
+    openSourceEntry(memoryButton.dataset.liveMemoryEntry);
+  }
+});
 
 async function deleteIngestSource(id){
   if(!confirm("Delete this ingest source and the live memory entries it created?")) return;
