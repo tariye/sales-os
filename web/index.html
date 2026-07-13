@@ -327,15 +327,24 @@
 
     <!-- ⑦ ACTIONS ───────────────────────────────────────────────── -->
     <section id="actions" class="panel">
+      <div class="card hero">
+        <div class="card-head"><div><p class="eyebrow">Execution Queue</p><h2>Next Actions</h2></div><button id="refreshActions" class="ghost small">Refresh</button></div>
+        <p class="field-hint">When Claude analyzes queued entries, it generates concrete actions — next steps tied to your observations. Track progress here.</p>
+      </div>
       <div class="card">
-        <div class="card-head"><div><p class="eyebrow">Execution Queue</p><h2>Returned Actions</h2></div><button id="refreshActions" class="ghost small">Refresh</button></div>
         <div id="actionsList" class="list"></div>
       </div>
     </section>
 
     <!-- ⑧ PATTERNS ──────────────────────────────────────────────── -->
     <section id="patterns" class="panel">
-      <div class="card"><div class="card-head"><div><p class="eyebrow">Pattern Engine</p><h2>Cross-Database Pattern Scan</h2></div><div class="buttons compact"><button id="scanPatterns" class="primary small">Run Pattern Engine</button><button id="refreshPatterns" class="ghost small">Refresh</button></div></div><div id="patternsList" class="list"></div></div>
+      <div class="card hero">
+        <div class="card-head"><div><p class="eyebrow">Pattern Engine</p><h2>Recurring Themes</h2></div><div class="buttons compact"><button id="scanPatterns" class="primary small">Scan for Patterns</button><button id="refreshPatterns" class="ghost small">Refresh</button></div></div>
+        <p class="field-hint">Patterns emerge when Claude finds recurring themes across your entries. Examples: "Risk signals cluster in Q3", "Same entity appears 5+ times", "Multiple domains showing the same trend". Click Scan to detect patterns in your observations.</p>
+      </div>
+      <div class="card">
+        <div id="patternsList" class="list"></div>
+      </div>
     </section>
 
     <!-- ⑨ CHANGELOG ─────────────────────────────────────────────── -->
