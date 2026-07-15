@@ -1,0 +1,44 @@
+{
+  "chatgpt_contract_files": [
+    "memory/index.json",
+    "memory/snapshots/latest.json",
+    "memory/actions.jsonl",
+    "memory/patterns.jsonl",
+    "memory/watchlist.jsonl",
+    "memory/entries.jsonl",
+    "memory/chat_inbox.jsonl",
+    "memory/export_status.json",
+    "memory/briefing_manifest.json",
+    "memory/system_health.json",
+    "memory/activity.jsonl",
+    "memory/decisions.jsonl",
+    "memory/projects.jsonl"
+  ],
+  "counts": {
+    "actions": 120,
+    "decisions": 0,
+    "entries": 100,
+    "patterns": 56,
+    "projects": 0,
+    "watchlist": 126
+  },
+  "export_success": true,
+  "generated_at": "2026-07-15T19:41:45Z",
+  "import_result": {
+    "archived": "",
+    "duplicates": 0,
+    "imported": 0,
+    "pending_before": 0
+  },
+  "json_errors": [],
+  "source_of_truth": "data/info_analyzer.db",
+  "validation": {
+    "broken_links": 0,
+    "duplicate_entities": 9,
+    "errors": [],
+    "missing_required_files": [],
+    "ok": true,
+    "orphan_actions": 0,
+    "orphan_decisions": 0
+  }
+}

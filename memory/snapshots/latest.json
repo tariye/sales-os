@@ -1,0 +1,1379 @@
+{
+  "critical_alerts": [
+    {
+      "action": "insights",
+      "domain": "Investing",
+      "id": "ESI-SIG-20260623190049-354FFA",
+      "signal": "Cash conversion signal"
+    },
+    {
+      "action": "insights",
+      "domain": "Investing",
+      "id": "ESI-SIG-20260623190252-A3F079",
+      "signal": "Cash conversion signal"
+    },
+    {
+      "action": "insights",
+      "domain": "Investing",
+      "id": "ESI-SIG-20260624085026-DA9748",
+      "signal": "Cash conversion signal"
+    },
+    {
+      "action": "insights",
+      "domain": "Investing",
+      "id": "ESI-SIG-20260624085028-E7B2AB",
+      "signal": "Cash conversion signal"
+    },
+    {
+      "action": "insights",
+      "domain": "Investing",
+      "id": "ESI-SIG-20260624085028-EECDDA",
+      "signal": "Cash conversion signal"
+    },
+    {
+      "action": "insights",
+      "domain": "Investing",
+      "id": "ESI-SIG-20260624090005-AF084D",
+      "signal": "Cash conversion signal"
+    },
+    {
+      "action": "insights",
+      "domain": "Investing",
+      "id": "ESI-SIG-20260624091948-6610AA",
+      "signal": "Cash conversion signal"
+    }
+  ],
+  "current_constraints": [
+    "SQLite is authoritative; GitHub memory files are compact exports for ChatGPT.",
+    "Do not export the full database into chat context.",
+    "Every useful signal must become trackable, actionable, linked, or scheduled for resurfacing."
+  ],
+  "current_context": {
+    "active_domains": [
+      [
+        "Investing",
+        90
+      ],
+      [
+        "Lab",
+        6
+      ],
+      [
+        "Business",
+        3
+      ],
+      [
+        "AI Project",
+        1
+      ]
+    ],
+    "source_of_truth": "data/info_analyzer.db",
+    "system": "Info Analyzer OS / Sales OS",
+    "transport_layer": "memory/"
+  },
+  "current_priorities": [
+    {
+      "action": "Define the failure mode, mitigation step, and metric to watch.",
+      "domain": "Business",
+      "entity": "Customer Retention",
+      "id": "ACT-B46138D689A950CC",
+      "priority": "High",
+      "track": "Units sold, conversion rate, margin, customer response, time to sale",
+      "why": "Repeat purchases declining 15%"
+    },
+    {
+      "action": "Compare against old belief. Update confidence with evidence.",
+      "domain": "Business",
+      "entity": "Info Analyzer Intelligence Ledger Raw Data",
+      "id": "ACT-CC94C1BB6CF652CD",
+      "priority": "High",
+      "track": "Signal tracked and acted upon",
+      "why": "Contradiction in Business: Info Analyzer Intelligence Ledger Raw Data: Raw Signals: South Korean..."
+    },
+    {
+      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "domain": "AI Project",
+      "entity": "Info Analyzer database",
+      "id": "ACT-F5E1265B954159AA",
+      "priority": "High",
+      "track": "Signal tracked and acted upon",
+      "why": "Risk in AI Project: The pull engine keeps surfacing Investing entries when I query..."
+    },
+    {
+      "action": "Compare against old belief. Update confidence with evidence.",
+      "domain": "Fitness",
+      "entity": "Arm training",
+      "id": "ACT-E24BB7F781B75408",
+      "priority": "High",
+      "track": "Signal tracked and acted upon",
+      "why": "Contradiction in Fitness: Been training arms 2x per week for 6 weeks. Arm..."
+    },
+    {
+      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "domain": "Business",
+      "entity": "Value proposition",
+      "id": "ACT-54D7A8AB94EA5BA7",
+      "priority": "High",
+      "track": "Signal tracked and acted upon",
+      "why": "Risk in Business: Potential customer asked: what makes you different from competitors? I..."
+    },
+    {
+      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "domain": "Career",
+      "entity": "Resume",
+      "id": "ACT-348A57783B8E5B48",
+      "priority": "High",
+      "track": "Signal tracked and acted upon",
+      "why": "Risk in Career: I applied to 4 roles this month. Got responses from..."
+    },
+    {
+      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "domain": "Lab",
+      "entity": "Robot arm calibration",
+      "id": "ACT-4EA59FDE56075E0C",
+      "priority": "High",
+      "track": "Signal tracked and acted upon",
+      "why": "Risk in Lab: During the last 3 data collection sessions, the robot arm..."
+    },
+    {
+      "action": "Monitor whether NVIDIA reroutes China demand through partners or loses it permanently. Update thesis if H20 ban becomes permanent.",
+      "domain": "Investing",
+      "entity": "NVIDIA",
+      "id": "ACT-0DE765D7511C5318",
+      "priority": "High",
+      "track": "Data center revenue ex-China, gross margin stability above 75%, Q2 actual vs $45B guide.",
+      "why": "NVIDIA is printing revenue but the China H20 export ban is a $15B known risk that is not yet priced as a structural ceiling \u2014 it is being treated as a one-time headwind."
+    }
+  ],
+  "decisions": [],
+  "generated_at": "2026-07-15T19:41:45Z",
+  "open_loops": [
+    {
+      "action": "Define the failure mode, mitigation step, and metric to watch.",
+      "due_date": "",
+      "id": "ACT-B46138D689A950CC",
+      "source_entry": "IA-20260712230008-BD11A4",
+      "status": "open"
+    },
+    {
+      "action": "Compare against old belief. Update confidence with evidence.",
+      "due_date": "",
+      "id": "ACT-CC94C1BB6CF652CD",
+      "source_entry": "IA-20260703232609-15CA52",
+      "status": "open"
+    },
+    {
+      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "due_date": "",
+      "id": "ACT-F5E1265B954159AA",
+      "source_entry": "IA-20260629083024-3567F5",
+      "status": "open"
+    },
+    {
+      "action": "Compare against old belief. Update confidence with evidence.",
+      "due_date": "",
+      "id": "ACT-E24BB7F781B75408",
+      "source_entry": "IA-20260629083024-7B302A",
+      "status": "open"
+    },
+    {
+      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "due_date": "",
+      "id": "ACT-54D7A8AB94EA5BA7",
+      "source_entry": "IA-20260629083209-754D78",
+      "status": "open"
+    },
+    {
+      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "due_date": "",
+      "id": "ACT-348A57783B8E5B48",
+      "source_entry": "IA-20260629082955-7F37C2",
+      "status": "open"
+    },
+    {
+      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "due_date": "",
+      "id": "ACT-4EA59FDE56075E0C",
+      "source_entry": "IA-20260629082955-D59947",
+      "status": "open"
+    },
+    {
+      "action": "Monitor whether NVIDIA reroutes China demand through partners or loses it permanently. Update thesis if H20 ban becomes permanent.",
+      "due_date": "2026-08-01",
+      "id": "ACT-0DE765D7511C5318",
+      "source_entry": "IA-20260629082935-64DFE8",
+      "status": "open"
+    },
+    {
+      "action": "Build a minimal investor tracking table today: Name, Last Contact, Follow-Up Date, Status, Notes. Enter every current investor and prospect. Set a weekly 15-minute review cadence.",
+      "due_date": "",
+      "id": "ACT-615A578122735179",
+      "source_entry": "IA-20260629082236-206A1C",
+      "status": "open"
+    },
+    {
+      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "due_date": "",
+      "id": "ACT-FD3DC537930758FE",
+      "source_entry": "ESI-SIG-20260623190049-354FFA",
+      "status": "open"
+    },
+    {
+      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "due_date": "",
+      "id": "ACT-3346B6E0263E5DDE",
+      "source_entry": "ESI-SIG-20260623190252-A3F079",
+      "status": "open"
+    },
+    {
+      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "due_date": "",
+      "id": "ACT-D122F6BFBA7B5952",
+      "source_entry": "ESI-SIG-20260624085026-DA9748",
+      "status": "open"
+    },
+    {
+      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "due_date": "",
+      "id": "ACT-C2103715C33A540A",
+      "source_entry": "ESI-SIG-20260624085028-E7B2AB",
+      "status": "open"
+    },
+    {
+      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "due_date": "",
+      "id": "ACT-9A0B21BAFEC95CD1",
+      "source_entry": "ESI-SIG-20260624085028-EECDDA",
+      "status": "open"
+    },
+    {
+      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "due_date": "",
+      "id": "ACT-5849FBD3A16E5693",
+      "source_entry": "ESI-SIG-20260624090005-AF084D",
+      "status": "open"
+    },
+    {
+      "action": "Review Apple Inc. economics and update the monitor metric",
+      "due_date": "",
+      "id": "ACT-7B197CF25025564D",
+      "source_entry": "ESI-SIG-20260624091948-6610AA",
+      "status": "open"
+    },
+    {
+      "action": "Build a trackable sales follow-up loop for SALES",
+      "due_date": "",
+      "id": "ACT-8FA9896B3B2D598D",
+      "source_entry": "IA-20260627220144-8F931A",
+      "status": "open"
+    },
+    {
+      "action": "Build a trackable sales follow-up loop for SALES",
+      "due_date": "",
+      "id": "ACT-594383BF2F045FB1",
+      "source_entry": "IA-20260627220152-60F6BB",
+      "status": "open"
+    },
+    {
+      "action": "Build a trackable sales follow-up loop for SALES",
+      "due_date": "",
+      "id": "ACT-6DD489BC5A1B598B",
+      "source_entry": "IA-20260627220159-A8D267",
+      "status": "open"
+    },
+    {
+      "action": "Build a trackable sales follow-up loop for SALES",
+      "due_date": "",
+      "id": "ACT-65585207D03C5EAB",
+      "source_entry": "IA-20260627220329-8A5467",
+      "status": "open"
+    }
+  ],
+  "projects": [],
+  "recent_accountability": [
+    {
+      "action": "After every sales call, create a CRM row with: Lead name, date, what they said, objection, next step, and follow-up date.",
+      "id": "ACT-9D143F9B474F5FB6",
+      "result": "Created a Google Sheet with columns: Lead, Date, What They Said, Objection, Next Step, Follow-Up Date. Used it after the very next call. Follow-up sent same day. Lead replied next morning.",
+      "status": "done"
+    },
+    {
+      "action": "Click Track Signal or archive the item.",
+      "id": "ACT-DBA2E5DA09E1597B",
+      "result": null,
+      "status": "cancelled"
+    },
+    {
+      "action": "Click Track Signal or archive the item.",
+      "id": "ACT-6EC5362D6C875241",
+      "result": null,
+      "status": "cancelled"
+    },
+    {
+      "action": "Click Track Signal or archive the item.",
+      "id": "ACT-8DE3D9857AA65996",
+      "result": null,
+      "status": "cancelled"
+    },
+    {
+      "action": "Click Track Signal or archive the item.",
+      "id": "ACT-0BE657FD2E165DD4",
+      "result": null,
+      "status": "cancelled"
+    },
+    {
+      "action": "Click Track Signal or archive the item.",
+      "id": "ACT-BD3779C1C3A35259",
+      "result": null,
+      "status": "cancelled"
+    },
+    {
+      "action": "Click Track Signal or archive the item.",
+      "id": "ACT-DB18EA81C097527C",
+      "result": null,
+      "status": "cancelled"
+    },
+    {
+      "action": "Click Track Signal or archive the item.",
+      "id": "ACT-1AD602A9B31E5E57",
+      "result": null,
+      "status": "cancelled"
+    },
+    {
+      "action": "Click Track Signal or archive the item.",
+      "id": "ACT-4F5F53F200BF53BF",
+      "result": null,
+      "status": "cancelled"
+    },
+    {
+      "action": "Click Track Signal or archive the item.",
+      "id": "ACT-E1C3CE8CC9F254D0",
+      "result": null,
+      "status": "cancelled"
+    },
+    {
+      "action": "Click Track Signal or archive the item.",
+      "id": "ACT-24D0F7667116507B",
+      "result": null,
+      "status": "cancelled"
+    },
+    {
+      "action": "Click Track Signal or archive the item.",
+      "id": "ACT-BE3EDCD7551957B5",
+      "result": null,
+      "status": "cancelled"
+    }
+  ],
+  "recent_lessons": [
+    {
+      "domain": "Business",
+      "entity": "How You Define the Problem Determines Whether You Solve It",
+      "id": "IA-20260622010849-B76C8B",
+      "lesson": "A business rep becomes valuable when it turns observation into offer, test, and measured outcome."
+    },
+    {
+      "domain": "AI Project",
+      "entity": "Routing Intelligence Framework",
+      "id": "IA-20260626083952-82B4E9",
+      "lesson": "Data turns vague feeling into measurable signal. Without data you say 'I feel stronger.' With data you know Exercise A produced 0.18 inches, Exercise B 0.05. Without data you say 'sales are down.' With data you know repeat customers fell from 41% to 23%. Data gives the map. Feedback updates the map. Reps train the driver. Intelligence is how well you route."
+    },
+    {
+      "domain": "Lab",
+      "entity": "The No. 1 Business Skill You\u2019ll Need in 2025",
+      "id": "IA-20260626173926-8C2DC8",
+      "lesson": "Training system is infrastructure. Clean reps require clear standards, feedback, and repeatable process."
+    },
+    {
+      "domain": "Business",
+      "entity": "The Secret to Having More Energy as an Entrepreneur",
+      "id": "IA-20260626174001-612071",
+      "lesson": "A business rep becomes valuable when it turns observation into offer, test, and measured outcome."
+    },
+    {
+      "domain": "Business",
+      "entity": "The Art of the Elevator Pitch",
+      "id": "IA-20260626174059-11B276",
+      "lesson": "A business rep becomes valuable when it turns observation into offer, test, and measured outcome."
+    },
+    {
+      "domain": "Lab",
+      "entity": "Become a Millionaire in 5 Years or Less",
+      "id": "IA-20260626174148-FE7E1D",
+      "lesson": "Training system is infrastructure. Clean reps require clear standards, feedback, and repeatable process."
+    },
+    {
+      "domain": "Lab",
+      "entity": "MBA Case Studies Articles 3",
+      "id": "IA-20260626174226-BCB8B7",
+      "lesson": "Training system is infrastructure. Clean reps require clear standards, feedback, and repeatable process."
+    },
+    {
+      "domain": "Lab",
+      "entity": "Using Mathematical Optimization to Solve Complex Business Challenges",
+      "id": "IA-20260627203810-2067CE",
+      "lesson": "Non-trackable signal is not actionable. Every saved signal needs proof, metric, trigger, or next review."
+    }
+  ],
+  "top_patterns": [
+    {
+      "confidence": "High",
+      "created_at": "2026-06-27T21:53:54+00:00",
+      "domains": [
+        "Investing"
+      ],
+      "entry_count": 90,
+      "id": "PAT-5D15EA5FFF5C5C2C",
+      "last_entry_id": "ESI-ACT-AE58C7C4349ADA",
+      "metadata": {},
+      "pattern": "Economic action: Track",
+      "tags": [
+        "investing",
+        "economic-action",
+        "track",
+        "memory",
+        "context",
+        "action",
+        "risk",
+        "osi",
+        "opportunity"
+      ],
+      "updated_at": "2026-07-03T23:25:32+00:00"
+    },
+    {
+      "confidence": "High",
+      "created_at": "2026-06-27T22:01:44+00:00",
+      "domains": [
+        "Network+",
+        "Lab",
+        "Other",
+        "Investing",
+        "Business"
+      ],
+      "entry_count": 27,
+      "id": "PAT-6C91A980E32458F0",
+      "last_entry_id": "IA-20260630203259-CFFDF0",
+      "metadata": {},
+      "pattern": "Non-trackable signal is useless; every signal needs a metric, trigger, action, or review loop.",
+      "tags": [
+        "network+",
+        "training",
+        "sop",
+        "operator",
+        "quality",
+        "failure mode",
+        "dashboard",
+        "metric",
+        "revenue",
+        "margin",
+        "inventory",
+        "cash flow",
+        "valuation",
+        "customer",
+        "pricing",
+        "osi",
+        "router",
+        "switch",
+        "security",
+        "resume",
+        "lab",
+        "skill",
+        "database",
+        "action",
+        "risk",
+        "other",
+        "recategorized",
+        "investing",
+        "portfolio",
+        "tcp",
+        "subnet",
+        "memory",
+        "context",
+        "pattern",
+        "arms",
+        "extracted-action",
+        "business",
+        "sales",
+        "pipeline",
+        "test-v045"
+      ],
+      "updated_at": "2026-06-30T20:32:59+00:00"
+    },
+    {
+      "confidence": "High",
+      "created_at": "2026-07-12T05:16:45+00:00",
+      "domains": [
+        "AI Project"
+      ],
+      "entry_count": 14,
+      "id": "PAT-6F4C139A1CFC52D5",
+      "last_entry_id": "IA-20260715194134-68DB93",
+      "metadata": {},
+      "pattern": "Signals become more powerful when they are broken into labeled assets with metrics, examples, and resurfacing triggers.",
+      "tags": [
+        "ai project",
+        "asset-lab",
+        "signal-breakdown",
+        "signal",
+        "action",
+        "metric",
+        "customer",
+        "extraction",
+        "proof",
+        "context",
+        "pattern"
+      ],
+      "updated_at": "2026-07-15T19:41:34+00:00"
+    },
+    {
+      "confidence": "High",
+      "created_at": "2026-07-12T16:13:15+00:00",
+      "domains": [
+        "Business"
+      ],
+      "entry_count": 13,
+      "id": "PAT-E593EACF1E255B53",
+      "last_entry_id": "IA-20260715194131-75662D",
+      "metadata": {},
+      "pattern": "When repeated objections cluster around one offer, test clarity before adding more traffic.",
+      "tags": [
+        "business",
+        "decision-qa",
+        "1783872794",
+        "customer",
+        "1783872879",
+        "1783920257",
+        "1783920282",
+        "1783920437",
+        "1783926747",
+        "1783930395",
+        "1783930870",
+        "1783931121",
+        "1783967126",
+        "1783967873",
+        "1783968142",
+        "1784144491"
+      ],
+      "updated_at": "2026-07-15T19:41:32+00:00"
+    },
+    {
+      "confidence": "High",
+      "created_at": "2026-06-27T21:53:54+00:00",
+      "domains": [
+        "Investing"
+      ],
+      "entry_count": 9,
+      "id": "PAT-7FF041F359415C4D",
+      "last_entry_id": "ESI-ACT-08A906C6C06187",
+      "metadata": {},
+      "pattern": "Economic action: Analyze",
+      "tags": [
+        "investing",
+        "economic-action",
+        "analyze",
+        "quality",
+        "revenue",
+        "customer",
+        "pricing",
+        "action",
+        "risk",
+        "inventory"
+      ],
+      "updated_at": "2026-06-27T21:53:54+00:00"
+    },
+    {
+      "confidence": "High",
+      "created_at": "2026-06-27T21:53:54+00:00",
+      "domains": [
+        "Investing"
+      ],
+      "entry_count": 8,
+      "id": "PAT-2B2522B576045BAB",
+      "last_entry_id": "ESI-SIG-20260624091948-EFDB7C",
+      "metadata": {},
+      "pattern": "Economic signal: demand",
+      "tags": [
+        "investing",
+        "sec",
+        "demand",
+        "revenue",
+        "backend-sourced",
+        "economic-signal",
+        "quality",
+        "customer",
+        "pricing"
+      ],
+      "updated_at": "2026-06-27T21:53:54+00:00"
+    },
+    {
+      "confidence": "High",
+      "created_at": "2026-06-27T21:53:54+00:00",
+      "domains": [
+        "Investing"
+      ],
+      "entry_count": 8,
+      "id": "PAT-468B40419D495A95",
+      "last_entry_id": "ESI-SIG-20260624091948-C91F3F",
+      "metadata": {},
+      "pattern": "Economic signal: profit",
+      "tags": [
+        "investing",
+        "sec",
+        "profit",
+        "margin",
+        "backend-sourced",
+        "economic-signal",
+        "revenue"
+      ],
+      "updated_at": "2026-06-27T21:53:54+00:00"
+    },
+    {
+      "confidence": "High",
+      "created_at": "2026-06-27T21:53:54+00:00",
+      "domains": [
+        "Investing"
+      ],
+      "entry_count": 8,
+      "id": "PAT-1C3E62B9FEFC5303",
+      "last_entry_id": "ESI-SIG-20260624091948-6610AA",
+      "metadata": {},
+      "pattern": "Economic signal: cash",
+      "tags": [
+        "investing",
+        "sec",
+        "cash-quality",
+        "cfo",
+        "backend-sourced",
+        "economic-signal",
+        "quality",
+        "revenue",
+        "inventory",
+        "cash flow"
+      ],
+      "updated_at": "2026-06-27T21:53:54+00:00"
+    },
+    {
+      "confidence": "High",
+      "created_at": "2026-06-27T21:53:54+00:00",
+      "domains": [
+        "Investing"
+      ],
+      "entry_count": 8,
+      "id": "PAT-0A40B0F1E56F5D8A",
+      "last_entry_id": "ESI-SIG-20260624091948-8CE6D5",
+      "metadata": {},
+      "pattern": "Economic signal: balance-sheet",
+      "tags": [
+        "investing",
+        "sec",
+        "balance-sheet",
+        "liquidity",
+        "backend-sourced",
+        "economic-signal",
+        "quality",
+        "inventory"
+      ],
+      "updated_at": "2026-06-27T21:53:54+00:00"
+    },
+    {
+      "confidence": "High",
+      "created_at": "2026-07-05T02:21:40+00:00",
+      "domains": [
+        "Business",
+        "Career",
+        "Lab",
+        "AI Project"
+      ],
+      "entry_count": 5,
+      "id": "PAT-40F3D07979E65BB6",
+      "last_entry_id": "IA-20260629083209-754D78",
+      "metadata": {},
+      "pattern": "Recurring risk signal pattern",
+      "tags": [
+        "business",
+        "sales",
+        "pipeline",
+        "follow-up",
+        "crm",
+        "conversion",
+        "resume",
+        "career",
+        "job search",
+        "interview",
+        "proof",
+        "outcomes",
+        "switch",
+        "calibration",
+        "sop",
+        "operator",
+        "robot",
+        "error rate",
+        "lab",
+        "ai project",
+        "database",
+        "balance",
+        "retrieval",
+        "pull engine",
+        "domain",
+        "context",
+        "value proposition",
+        "pitch",
+        "differentiation",
+        "quality",
+        "customer"
+      ],
+      "updated_at": "2026-07-05T02:34:35+00:00"
+    },
+    {
+      "confidence": "High",
+      "created_at": "2026-06-27T21:53:54+00:00",
+      "domains": [
+        "Lab"
+      ],
+      "entry_count": 5,
+      "id": "PAT-442F1A31CB3D5D4F",
+      "last_entry_id": "IA-20260627203830-8A487F",
+      "metadata": {},
+      "pattern": "Scaling exposes weak process; training, SOPs, and feedback loops are infrastructure.",
+      "tags": [
+        "lab",
+        "training",
+        "operator",
+        "ai",
+        "pattern",
+        "customer",
+        "skill",
+        "action",
+        "music",
+        "fitness",
+        "revenue",
+        "osi",
+        "arms",
+        "job",
+        "context",
+        "metric",
+        "sop",
+        "risk",
+        "recovery",
+        "emotion",
+        "dashboard",
+        "stock",
+        "margin",
+        "inventory",
+        "security",
+        "volume",
+        "quality",
+        "pricing",
+        "portfolio",
+        "database"
+      ],
+      "updated_at": "2026-06-27T21:53:54+00:00"
+    },
+    {
+      "confidence": "Medium",
+      "created_at": "2026-07-05T02:35:29+00:00",
+      "domains": [
+        "AI Project"
+      ],
+      "entry_count": 4,
+      "id": "PAT-830A67330898572B",
+      "last_entry_id": "IA-20260704004254-09AD65",
+      "metadata": {},
+      "pattern": "Recurring action signal pattern",
+      "tags": [
+        "ai project",
+        "v060",
+        "test"
+      ],
+      "updated_at": "2026-07-05T02:35:50+00:00"
+    }
+  ],
+  "upcoming_deadlines": [
+    {
+      "action": "Monitor whether NVIDIA reroutes China demand through partners or loses it permanently. Update thesis if H20 ban becomes permanent.",
+      "due_date": "2026-08-01",
+      "id": "ACT-0DE765D7511C5318",
+      "priority": "High"
+    },
+    {
+      "action": "Compare acquisition cost, sell-through, and gross margin for the top five phone models, then add the best two to today's sourcing list.",
+      "due_date": "2026-07-11",
+      "id": "ACT-9D0055443B125DFE",
+      "priority": "Medium"
+    },
+    {
+      "action": "Define trigger condition and review date. Resurface when triggered.",
+      "due_date": "2026-07-06",
+      "id": "ACT-162E099D6ED95D15",
+      "priority": "Medium"
+    }
+  ],
+  "watchlist": [
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "Paypal",
+      "id": "WLI-20260704190327-1714AB",
+      "industry": "",
+      "note": "",
+      "price": 95.82,
+      "return_potential": 28.63,
+      "sector": "",
+      "support_price": null,
+      "target_price": 1128.36,
+      "ticker": ""
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "DWT",
+      "id": "WLI-20260704190327-6C7ACB",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": null,
+      "sector": "Oil Bears",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "DWT"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "TREE",
+      "id": "WLI-20260704190327-B98D94",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "TREE"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "Kraft",
+      "id": "WLI-20260704190327-E28AB5",
+      "industry": "",
+      "note": "",
+      "price": 19.71,
+      "return_potential": 14.07,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": ""
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "MNST",
+      "id": "WLI-20260704190327-6BE1E1",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "MNST"
+    },
+    {
+      "catalyst": "sell off",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "IGC",
+      "id": "WLI-20260704190327-99ADEE",
+      "industry": "",
+      "note": "",
+      "price": 5.08,
+      "return_potential": 17.71653543,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "IGC"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "TSLA",
+      "id": "WLI-20260704190327-91FB31",
+      "industry": "",
+      "note": "",
+      "price": 258.5,
+      "return_potential": null,
+      "sector": "",
+      "support_price": 250.56,
+      "target_price": null,
+      "ticker": "TSLA"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "Monster",
+      "id": "WLI-20260704190327-8BF165",
+      "industry": "",
+      "note": "",
+      "price": 57.36,
+      "return_potential": 13.16,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": ""
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "ETSY",
+      "id": "WLI-20260704190327-AB8BB7",
+      "industry": "",
+      "note": "IPO, new, pot hih gwth",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "ETSY"
+    },
+    {
+      "catalyst": "sell off",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "VTVT",
+      "id": "WLI-20260704190327-D46C73",
+      "industry": "",
+      "note": "",
+      "price": 3.37,
+      "return_potential": 21.06824926,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "VTVT"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "NVDA",
+      "id": "WLI-20260704190327-E1E4BB",
+      "industry": "",
+      "note": "",
+      "price": 247.0,
+      "return_potential": null,
+      "sector": "",
+      "support_price": 235.13,
+      "target_price": null,
+      "ticker": "NVDA"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "Apple",
+      "id": "WLI-20260704190327-9D821D",
+      "industry": "",
+      "note": "",
+      "price": 243.0,
+      "return_potential": 84.85,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": ""
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "CLH",
+      "id": "WLI-20260704190327-022025",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "CLH"
+    },
+    {
+      "catalyst": "sell off",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "OGEN",
+      "id": "WLI-20260704190327-7CB689",
+      "industry": "",
+      "note": "",
+      "price": 1.62,
+      "return_potential": 6.790123457,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "OGEN"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "NFLX",
+      "id": "WLI-20260704190327-F25E51",
+      "industry": "",
+      "note": "",
+      "price": 340.0,
+      "return_potential": null,
+      "sector": "",
+      "support_price": 321.1,
+      "target_price": null,
+      "ticker": "NFLX"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "Microsoft",
+      "id": "WLI-20260704190327-51DCD0",
+      "industry": "",
+      "note": "",
+      "price": 137.0,
+      "return_potential": 53.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": ""
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "DKS",
+      "id": "WLI-20260704190327-AA128D",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "DKS"
+    },
+    {
+      "catalyst": "sell off",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "TSLA",
+      "id": "WLI-20260704190327-A899F3",
+      "industry": "",
+      "note": "",
+      "price": 255.0,
+      "return_potential": 1.568627451,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "TSLA"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "Disney",
+      "id": "WLI-20260704190327-E9C6A6",
+      "industry": "",
+      "note": "",
+      "price": 90.8,
+      "return_potential": 62.61,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": ""
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "KFY",
+      "id": "WLI-20260704190327-C6A6CD",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "KFY"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "TRVN",
+      "id": "WLI-20260704190327-B7847C",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": null,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "TRVN"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "JPM",
+      "id": "WLI-20260704190327-9E3926",
+      "industry": "",
+      "note": "",
+      "price": 86.85,
+      "return_potential": 54.25,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "JPM"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "POOL",
+      "id": "WLI-20260704190327-D09ACD",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "POOL"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "SQ",
+      "id": "WLI-20260704190327-46122A",
+      "industry": "",
+      "note": "",
+      "price": 51.05,
+      "return_potential": 36.2,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "SQ"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "SEDG",
+      "id": "WLI-20260704190327-AB0D14",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "SEDG"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "EWZ",
+      "id": "WLI-20260704190327-E68D83",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": null,
+      "sector": "Brazil Bull",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "EWZ"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "NVDA",
+      "id": "WLI-20260704190327-7028EF",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "NVDA"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "YUM",
+      "id": "WLI-20260704190327-5DE531",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "YUM"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "MCD",
+      "id": "WLI-20260704190327-66E804",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "MCD"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "ALLE",
+      "id": "WLI-20260704190327-8A6CDD",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "ALLE"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "QQQ",
+      "id": "WLI-20260704190327-CB7181",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": null,
+      "sector": "Nasdaq Top",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "QQQ"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "VVNT",
+      "id": "WLI-20260704190327-B30261",
+      "industry": "",
+      "note": "IPO, new, pot hih gwth",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "VVNT"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "DGRS",
+      "id": "WLI-20260704190327-D3E8F8",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": null,
+      "sector": "SmallCap Quality Dividend Growth",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "DGRS"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "LEN",
+      "id": "WLI-20260704190327-CB270A",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "LEN"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "HomeBuilders Bull",
+      "id": "WLI-20260704190327-5A029D",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": null,
+      "sector": "HomeBuilders Bull",
+      "support_price": null,
+      "target_price": null,
+      "ticker": ""
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "TFC",
+      "id": "WLI-20260704190327-8A4900",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "TFC"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "UMPQ",
+      "id": "WLI-20260704190327-F579E3",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "UMPQ"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "USB",
+      "id": "WLI-20260704190327-20DAF0",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "USB"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "RMAX",
+      "id": "WLI-20260704190327-602090",
+      "industry": "",
+      "note": "IPO, pot hih gwth",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "RMAX"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "JLL",
+      "id": "WLI-20260704190327-7ACA03",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "JLL"
+    }
+  ],
+  "weekend_goals": [
+    "Define the failure mode, mitigation step, and metric to watch.",
+    "Compare against old belief. Update confidence with evidence.",
+    "Identify failure mode. Define mitigation and metric to watch.",
+    "Compare against old belief. Update confidence with evidence.",
+    "Identify failure mode. Define mitigation and metric to watch."
+  ]
+}

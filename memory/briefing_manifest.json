@@ -1,0 +1,241 @@
+{
+  "daily_watch_items": [
+    {
+      "action": "insights",
+      "domain": "Investing",
+      "id": "ESI-SIG-20260623190049-354FFA",
+      "signal": "Cash conversion signal"
+    },
+    {
+      "action": "insights",
+      "domain": "Investing",
+      "id": "ESI-SIG-20260623190252-A3F079",
+      "signal": "Cash conversion signal"
+    },
+    {
+      "action": "insights",
+      "domain": "Investing",
+      "id": "ESI-SIG-20260624085026-DA9748",
+      "signal": "Cash conversion signal"
+    },
+    {
+      "action": "insights",
+      "domain": "Investing",
+      "id": "ESI-SIG-20260624085028-E7B2AB",
+      "signal": "Cash conversion signal"
+    },
+    {
+      "action": "insights",
+      "domain": "Investing",
+      "id": "ESI-SIG-20260624085028-EECDDA",
+      "signal": "Cash conversion signal"
+    }
+  ],
+  "generated_at": "2026-07-15T19:41:45Z",
+  "pattern_count": 56,
+  "projects_requiring_attention": [],
+  "questions_still_unanswered": [
+    "Which open action creates the highest leverage if completed today?",
+    "Which watchlist item crossed a trigger since the last briefing?",
+    "Which repeated pattern should become a reusable playbook rule?"
+  ],
+  "quick_action_count": 75,
+  "suggested_accountability_prompts": [
+    "What action did you complete, and what result should be logged?",
+    "Which signal changed a decision today?",
+    "Which open loop should be closed, delegated, or archived?"
+  ],
+  "things_to_ignore_today": [
+    "Closed actions unless the result created a new decision rule.",
+    "Raw historical entries without an open action, watch trigger, or contradiction."
+  ],
+  "todays_highest_priorities": [
+    {
+      "action": "Define the failure mode, mitigation step, and metric to watch.",
+      "domain": "Business",
+      "entity": "Customer Retention",
+      "id": "ACT-B46138D689A950CC",
+      "priority": "High",
+      "track": "Units sold, conversion rate, margin, customer response, time to sale",
+      "why": "Repeat purchases declining 15%"
+    },
+    {
+      "action": "Compare against old belief. Update confidence with evidence.",
+      "domain": "Business",
+      "entity": "Info Analyzer Intelligence Ledger Raw Data",
+      "id": "ACT-CC94C1BB6CF652CD",
+      "priority": "High",
+      "track": "Signal tracked and acted upon",
+      "why": "Contradiction in Business: Info Analyzer Intelligence Ledger Raw Data: Raw Signals: South Korean..."
+    },
+    {
+      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "domain": "AI Project",
+      "entity": "Info Analyzer database",
+      "id": "ACT-F5E1265B954159AA",
+      "priority": "High",
+      "track": "Signal tracked and acted upon",
+      "why": "Risk in AI Project: The pull engine keeps surfacing Investing entries when I query..."
+    },
+    {
+      "action": "Compare against old belief. Update confidence with evidence.",
+      "domain": "Fitness",
+      "entity": "Arm training",
+      "id": "ACT-E24BB7F781B75408",
+      "priority": "High",
+      "track": "Signal tracked and acted upon",
+      "why": "Contradiction in Fitness: Been training arms 2x per week for 6 weeks. Arm..."
+    },
+    {
+      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "domain": "Business",
+      "entity": "Value proposition",
+      "id": "ACT-54D7A8AB94EA5BA7",
+      "priority": "High",
+      "track": "Signal tracked and acted upon",
+      "why": "Risk in Business: Potential customer asked: what makes you different from competitors? I..."
+    }
+  ],
+  "weekly_watch_items": [
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "Paypal",
+      "id": "WLI-20260704190327-1714AB",
+      "industry": "",
+      "note": "",
+      "price": 95.82,
+      "return_potential": 28.63,
+      "sector": "",
+      "support_price": null,
+      "target_price": 1128.36,
+      "ticker": ""
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "DWT",
+      "id": "WLI-20260704190327-6C7ACB",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": null,
+      "sector": "Oil Bears",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "DWT"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "TREE",
+      "id": "WLI-20260704190327-B98D94",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "TREE"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "Kraft",
+      "id": "WLI-20260704190327-E28AB5",
+      "industry": "",
+      "note": "",
+      "price": 19.71,
+      "return_potential": 14.07,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": ""
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "MNST",
+      "id": "WLI-20260704190327-6BE1E1",
+      "industry": "",
+      "note": "",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "MNST"
+    },
+    {
+      "catalyst": "sell off",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "IGC",
+      "id": "WLI-20260704190327-99ADEE",
+      "industry": "",
+      "note": "",
+      "price": 5.08,
+      "return_potential": 17.71653543,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "IGC"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "TSLA",
+      "id": "WLI-20260704190327-91FB31",
+      "industry": "",
+      "note": "",
+      "price": 258.5,
+      "return_potential": null,
+      "sector": "",
+      "support_price": 250.56,
+      "target_price": null,
+      "ticker": "TSLA"
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "Monster",
+      "id": "WLI-20260704190327-8BF165",
+      "industry": "",
+      "note": "",
+      "price": 57.36,
+      "return_potential": 13.16,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": ""
+    },
+    {
+      "catalyst": "",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "ETSY",
+      "id": "WLI-20260704190327-AB8BB7",
+      "industry": "",
+      "note": "IPO, new, pot hih gwth",
+      "price": null,
+      "return_potential": 0.0,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "ETSY"
+    },
+    {
+      "catalyst": "sell off",
+      "created_at": "2026-07-04T19:03:27+00:00",
+      "display_name": "VTVT",
+      "id": "WLI-20260704190327-D46C73",
+      "industry": "",
+      "note": "",
+      "price": 3.37,
+      "return_potential": 21.06824926,
+      "sector": "",
+      "support_price": null,
+      "target_price": null,
+      "ticker": "VTVT"
+    }
+  ]
+}

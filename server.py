@@ -54,8 +54,19 @@ WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "info_analyzer.db"
 
-APP_VERSION = "v0.82-ui-cockpit-hardening"
+APP_VERSION = "v0.83-memory-manager"
 APP_VERSIONS = [
+    {
+        "version": "v0.83",
+        "name": "Intelligence Ledger Memory Manager",
+        "features": [
+            "SQLite remains the source of truth while GitHub memory files become the ChatGPT transport layer",
+            "Added deterministic memory/index.json for agent bootstrapping",
+            "Added latest operating-state snapshot, briefing manifest, health report, activity feed, and JSONL exports",
+            "Added chat_inbox.jsonl import path for ChatGPT-produced memory candidates",
+            "Exporter validates required files, JSON, broken relationships, orphan actions, and orphan decisions before push",
+        ],
+    },
     {
         "version": "v0.82",
         "name": "UI Cockpit Hardening",

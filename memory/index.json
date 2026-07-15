@@ -1,0 +1,16 @@
+{
+  "actions": "memory/actions.jsonl",
+  "activity": "memory/activity.jsonl",
+  "chat_inbox": "memory/chat_inbox.jsonl",
+  "decisions": "memory/decisions.jsonl",
+  "entries": "memory/entries.jsonl",
+  "export_status": "memory/export_status.json",
+  "generated_at": "2026-07-15T19:41:45Z",
+  "health": "memory/system_health.json",
+  "manifest": "memory/briefing_manifest.json",
+  "patterns": "memory/patterns.jsonl",
+  "projects": "memory/projects.jsonl",
+  "snapshot": "memory/snapshots/latest.json",
+  "version": "1.0",
+  "watchlist": "memory/watchlist.jsonl"
+}
