@@ -31,9 +31,196 @@
       "signal": "Cash conversion signal"
     }
   ],
-  "generated_at": "2026-07-15T19:41:45Z",
+  "generated_at": "2026-07-15T19:57:30Z",
   "pattern_count": 56,
-  "projects_requiring_attention": [],
+  "projects_requiring_attention": [
+    {
+      "aliases": [
+        "Nashville",
+        "move to Nashville",
+        "transition readiness"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-07-15T19:57:30Z",
+      "current_blocker": "Needs consolidated plan, cash runway view, and trigger dates.",
+      "current_milestone": "Define readiness checklist and weekly decision gates.",
+      "domain": "Personal Operations",
+      "entity": "Nashville Transition",
+      "id": "project-nashville-transition",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "Create transition readiness checklist with go/no-go criteria.",
+      "related_query": "Nashville transition job search cash runway housing family",
+      "status": "active",
+      "summary": "Coordinate relocation readiness, cash runway, job search, housing, and family logistics as one operating project.",
+      "title": "Nashville Transition",
+      "updated_at": "2026-07-15T19:57:30Z"
+    },
+    {
+      "aliases": [
+        "career search",
+        "applications",
+        "interviews",
+        "resume"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-07-15T19:57:30Z",
+      "current_blocker": "Needs response-rate tracking and sharper proof artifacts.",
+      "current_milestone": "Turn applications into a measurable pipeline.",
+      "domain": "Career",
+      "entity": "Job Search",
+      "id": "project-job-search",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "Log applications with role, date, follow-up date, response, and proof used.",
+      "related_query": "job search resume interview applications proof outcomes",
+      "status": "active",
+      "summary": "Track applications, interviews, proof artifacts, role targeting, and follow-up cadence.",
+      "title": "Job Search",
+      "updated_at": "2026-07-15T19:57:30Z"
+    },
+    {
+      "aliases": [
+        "Sales OS",
+        "liquidation",
+        "resale",
+        "trending items"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-07-15T19:57:30Z",
+      "current_blocker": "Needs consistent unit economics by item type.",
+      "current_milestone": "Convert sales signals into inventory and listing actions.",
+      "domain": "Business",
+      "entity": "Sales OS Liquidation",
+      "id": "project-sales-os-liquidation",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "Track acquisition cost, listing price, objection, sale price, margin, and days-to-sale.",
+      "related_query": "sales liquidation resale pricing objections sell-through margin",
+      "status": "active",
+      "summary": "Build a sourcing, pricing, listing, objection, and sell-through loop for liquidation/resale operations.",
+      "title": "Sales OS Liquidation",
+      "updated_at": "2026-07-15T19:57:30Z"
+    },
+    {
+      "aliases": [
+        "Info Analyzer",
+        "Intelligence Ledger",
+        "memory bridge",
+        "Sales OS memory"
+      ],
+      "confidence": "High",
+      "created_at": "2026-07-15T19:57:30Z",
+      "current_blocker": "Needs verified write-import-export-read loop.",
+      "current_milestone": "Prove bidirectional ChatGPT-GitHub-SQLite synchronization.",
+      "domain": "Info Analyzer OS",
+      "entity": "Info Analyzer / Intelligence Ledger",
+      "id": "project-info-analyzer-intelligence-ledger",
+      "kind": "canonical_project",
+      "lifecycle": "building",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "Run bridge acceptance test and verify raw GitHub visibility.",
+      "related_query": "info analyzer intelligence ledger github memory bridge bidirectional sync",
+      "status": "active",
+      "summary": "Maintain the decision intelligence system that converts raw inputs into tracked memory, actions, and briefings.",
+      "title": "Info Analyzer / Intelligence Ledger",
+      "updated_at": "2026-07-15T19:57:30Z"
+    },
+    {
+      "aliases": [
+        "Groove",
+        "music intelligence",
+        "asset lab music"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-07-15T19:57:30Z",
+      "current_blocker": "Needs repeatable library schema and examples.",
+      "current_milestone": "Clarify asset extraction and labeling workflow.",
+      "domain": "Music",
+      "entity": "Groove OS",
+      "id": "project-groove-os",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "Break one audio asset into section map, glossary, sound example, and reuse notes.",
+      "related_query": "groove os music asset lab extraction emotional commercial reuse",
+      "status": "active",
+      "summary": "Develop a music intelligence system for extracting emotional, structural, sync, and reuse value from audio assets.",
+      "title": "Groove OS",
+      "updated_at": "2026-07-15T19:57:30Z"
+    },
+    {
+      "aliases": [
+        "home monitoring",
+        "sentinel",
+        "home signals"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-07-15T19:57:30Z",
+      "current_blocker": "Needs clear sensor/event list and decision rules.",
+      "current_milestone": "Define minimum viable monitoring scope.",
+      "domain": "AI Project",
+      "entity": "Home Sentinel",
+      "id": "project-home-sentinel",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "List monitored events, thresholds, alert levels, and response actions.",
+      "related_query": "home sentinel monitoring threshold alert action loop",
+      "status": "active",
+      "summary": "Build a home/system monitoring concept around signals, thresholds, alerts, and action loops.",
+      "title": "Home Sentinel",
+      "updated_at": "2026-07-15T19:57:30Z"
+    },
+    {
+      "aliases": [
+        "operator training",
+        "concept library",
+        "SOP library",
+        "lab training"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-07-15T19:57:30Z",
+      "current_blocker": "Needs extraction labels and reusable examples.",
+      "current_milestone": "Turn lab patterns into concept cards and checklists.",
+      "domain": "Lab",
+      "entity": "Operator Training Concept Library",
+      "id": "project-operator-training-concept-library",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "Create concept cards for calibration drift, setup errors, SOP gaps, and usable data hours.",
+      "related_query": "operator training SOP calibration quality feedback loop usable data",
+      "status": "active",
+      "summary": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets.",
+      "title": "Operator Training Concept Library",
+      "updated_at": "2026-07-15T19:57:30Z"
+    }
+  ],
   "questions_still_unanswered": [
     "Which open action creates the highest leverage if completed today?",
     "Which watchlist item crossed a trigger since the last briefing?",

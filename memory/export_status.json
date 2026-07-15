@@ -12,18 +12,25 @@
     "memory/system_health.json",
     "memory/activity.jsonl",
     "memory/decisions.jsonl",
-    "memory/projects.jsonl"
+    "memory/projects.jsonl",
+    "memory/entity_aliases.json"
   ],
   "counts": {
     "actions": 120,
-    "decisions": 0,
+    "decisions": 4,
+    "entity_aliases": 9,
     "entries": 100,
     "patterns": 56,
-    "projects": 0,
+    "projects": 7,
     "watchlist": 126
   },
+  "entity_aliases": {
+    "duplicate_groups_detected": 9,
+    "duplicate_groups_reconciled": 9,
+    "unresolved_duplicate_entities": 0
+  },
   "export_success": true,
-  "generated_at": "2026-07-15T19:41:45Z",
+  "generated_at": "2026-07-15T19:57:30Z",
   "import_result": {
     "archived": "",
     "duplicates": 0,
@@ -34,7 +41,9 @@
   "source_of_truth": "data/info_analyzer.db",
   "validation": {
     "broken_links": 0,
-    "duplicate_entities": 9,
+    "duplicate_entities": 0,
+    "duplicate_groups_detected": 9,
+    "duplicate_groups_reconciled": 9,
     "errors": [],
     "missing_required_files": [],
     "ok": true,

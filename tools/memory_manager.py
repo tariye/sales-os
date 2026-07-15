@@ -37,6 +37,149 @@ REQUIRED_FILES = [
     "memory/activity.jsonl",
     "memory/decisions.jsonl",
     "memory/projects.jsonl",
+    "memory/entity_aliases.json",
+]
+
+CANONICAL_PROJECTS = [
+    {
+        "id": "project-nashville-transition",
+        "title": "Nashville Transition",
+        "domain": "Personal Operations",
+        "entity": "Nashville Transition",
+        "summary": "Coordinate relocation readiness, cash runway, job search, housing, and family logistics as one operating project.",
+        "current_milestone": "Define readiness checklist and weekly decision gates.",
+        "current_blocker": "Needs consolidated plan, cash runway view, and trigger dates.",
+        "next_action": "Create transition readiness checklist with go/no-go criteria.",
+        "aliases": ["Nashville", "move to Nashville", "transition readiness"],
+        "related_query": "Nashville transition job search cash runway housing family",
+    },
+    {
+        "id": "project-job-search",
+        "title": "Job Search",
+        "domain": "Career",
+        "entity": "Job Search",
+        "summary": "Track applications, interviews, proof artifacts, role targeting, and follow-up cadence.",
+        "current_milestone": "Turn applications into a measurable pipeline.",
+        "current_blocker": "Needs response-rate tracking and sharper proof artifacts.",
+        "next_action": "Log applications with role, date, follow-up date, response, and proof used.",
+        "aliases": ["career search", "applications", "interviews", "resume"],
+        "related_query": "job search resume interview applications proof outcomes",
+    },
+    {
+        "id": "project-sales-os-liquidation",
+        "title": "Sales OS Liquidation",
+        "domain": "Business",
+        "entity": "Sales OS Liquidation",
+        "summary": "Build a sourcing, pricing, listing, objection, and sell-through loop for liquidation/resale operations.",
+        "current_milestone": "Convert sales signals into inventory and listing actions.",
+        "current_blocker": "Needs consistent unit economics by item type.",
+        "next_action": "Track acquisition cost, listing price, objection, sale price, margin, and days-to-sale.",
+        "aliases": ["Sales OS", "liquidation", "resale", "trending items"],
+        "related_query": "sales liquidation resale pricing objections sell-through margin",
+    },
+    {
+        "id": "project-info-analyzer-intelligence-ledger",
+        "title": "Info Analyzer / Intelligence Ledger",
+        "domain": "Info Analyzer OS",
+        "entity": "Info Analyzer / Intelligence Ledger",
+        "summary": "Maintain the decision intelligence system that converts raw inputs into tracked memory, actions, and briefings.",
+        "current_milestone": "Prove bidirectional ChatGPT-GitHub-SQLite synchronization.",
+        "current_blocker": "Needs verified write-import-export-read loop.",
+        "next_action": "Run bridge acceptance test and verify raw GitHub visibility.",
+        "aliases": ["Info Analyzer", "Intelligence Ledger", "memory bridge", "Sales OS memory"],
+        "related_query": "info analyzer intelligence ledger github memory bridge bidirectional sync",
+    },
+    {
+        "id": "project-groove-os",
+        "title": "Groove OS",
+        "domain": "Music",
+        "entity": "Groove OS",
+        "summary": "Develop a music intelligence system for extracting emotional, structural, sync, and reuse value from audio assets.",
+        "current_milestone": "Clarify asset extraction and labeling workflow.",
+        "current_blocker": "Needs repeatable library schema and examples.",
+        "next_action": "Break one audio asset into section map, glossary, sound example, and reuse notes.",
+        "aliases": ["Groove", "music intelligence", "asset lab music"],
+        "related_query": "groove os music asset lab extraction emotional commercial reuse",
+    },
+    {
+        "id": "project-home-sentinel",
+        "title": "Home Sentinel",
+        "domain": "AI Project",
+        "entity": "Home Sentinel",
+        "summary": "Build a home/system monitoring concept around signals, thresholds, alerts, and action loops.",
+        "current_milestone": "Define minimum viable monitoring scope.",
+        "current_blocker": "Needs clear sensor/event list and decision rules.",
+        "next_action": "List monitored events, thresholds, alert levels, and response actions.",
+        "aliases": ["home monitoring", "sentinel", "home signals"],
+        "related_query": "home sentinel monitoring threshold alert action loop",
+    },
+    {
+        "id": "project-operator-training-concept-library",
+        "title": "Operator Training Concept Library",
+        "domain": "Lab",
+        "entity": "Operator Training Concept Library",
+        "summary": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets.",
+        "current_milestone": "Turn lab patterns into concept cards and checklists.",
+        "current_blocker": "Needs extraction labels and reusable examples.",
+        "next_action": "Create concept cards for calibration drift, setup errors, SOP gaps, and usable data hours.",
+        "aliases": ["operator training", "concept library", "SOP library", "lab training"],
+        "related_query": "operator training SOP calibration quality feedback loop usable data",
+    },
+]
+
+CANONICAL_DECISIONS = [
+    {
+        "id": "decision-sk-hynix-investigate-buy-watch-avoid",
+        "title": "SK Hynix: investigate, buy, watch, or avoid",
+        "domain": "Investing",
+        "entity": "SK Hynix",
+        "decision_question": "Should SK Hynix be investigated, bought, watched, or avoided based on AI memory demand, valuation, and cycle risk?",
+        "options": ["investigate", "buy", "watch", "avoid"],
+        "current_position": "investigate",
+        "next_review": "",
+        "tracking_metric": "HBM demand, AI memory pricing, capex discipline, gross margin trend, and customer concentration.",
+        "aliases": ["SK Hynix", "Hynix", "000660.KS", "AI memory"],
+        "related_query": "SK Hynix HBM AI memory valuation earnings capex",
+    },
+    {
+        "id": "decision-nashville-transition-readiness",
+        "title": "Nashville transition readiness",
+        "domain": "Personal Operations",
+        "entity": "Nashville Transition",
+        "decision_question": "Is the Nashville transition ready to execute, or should it remain in preparation?",
+        "options": ["go", "prepare", "defer", "stop"],
+        "current_position": "prepare",
+        "next_review": "",
+        "tracking_metric": "Cash runway, job pipeline, housing plan, family constraints, and move date confidence.",
+        "aliases": ["Nashville readiness", "transition readiness"],
+        "related_query": "Nashville transition readiness cash runway job housing family",
+    },
+    {
+        "id": "decision-dedicated-compute-purchase",
+        "title": "Dedicated compute purchase: needed now or defer",
+        "domain": "AI Project",
+        "entity": "Dedicated Compute",
+        "decision_question": "Is dedicated compute needed now for projects, or should the purchase be deferred until utilization is proven?",
+        "options": ["buy now", "defer", "rent", "reuse existing hardware"],
+        "current_position": "defer",
+        "next_review": "",
+        "tracking_metric": "Utilization hours, blocked workloads, rental cost, project revenue/proof value, and hardware payback period.",
+        "aliases": ["compute purchase", "GPU purchase", "dedicated compute"],
+        "related_query": "dedicated compute GPU purchase defer utilization payback",
+    },
+    {
+        "id": "decision-bassinet-pricing-condition-strategy",
+        "title": "Bassinet pricing and condition strategy",
+        "domain": "Business",
+        "entity": "Bassinet Resale",
+        "decision_question": "What pricing and condition strategy should be used for the bassinet listing?",
+        "options": ["premium price", "fast-sale discount", "bundle delivery/setup", "hold"],
+        "current_position": "investigate",
+        "next_review": "",
+        "tracking_metric": "Comparable prices, condition score, delivery/setup questions, listing views, saves, offers, and days-to-sale.",
+        "aliases": ["bassinet", "baby item resale", "condition pricing"],
+        "related_query": "bassinet pricing condition resale delivery setup comparable",
+    },
 ]
 
 
@@ -122,6 +265,143 @@ def existing_raw_hashes(conn: sqlite3.Connection) -> set[str]:
         if metadata.get("chat_raw_hash"):
             hashes.add(str(metadata["chat_raw_hash"]))
     return hashes
+
+
+def ensure_operating_tables(conn: sqlite3.Connection, generated_at: str) -> None:
+    conn.executescript(
+        """
+        create table if not exists ledger_projects (
+          id text primary key,
+          created_at text not null,
+          updated_at text not null,
+          title text not null,
+          domain text,
+          entity text,
+          status text default 'active',
+          lifecycle text default 'investigating',
+          summary text,
+          current_milestone text,
+          current_blocker text,
+          next_action text,
+          confidence text default 'Medium',
+          aliases text default '[]',
+          related_query text,
+          metadata text default '{}'
+        );
+        create table if not exists ledger_decisions (
+          id text primary key,
+          created_at text not null,
+          updated_at text not null,
+          title text not null,
+          domain text,
+          entity text,
+          status text default 'open',
+          lifecycle text default 'investigating',
+          decision_question text not null,
+          options text default '[]',
+          current_position text,
+          next_review text,
+          confidence text default 'Medium',
+          tracking_metric text,
+          aliases text default '[]',
+          related_query text,
+          metadata text default '{}'
+        );
+        create table if not exists entity_aliases (
+          id text primary key,
+          created_at text not null,
+          updated_at text not null,
+          canonical_entity_id text not null,
+          canonical_name text not null,
+          domain text,
+          aliases text default '[]',
+          source_record_count integer default 0,
+          related_entry_ids text default '[]',
+          metadata text default '{}'
+        );
+        """
+    )
+    for project in CANONICAL_PROJECTS:
+        conn.execute(
+            """
+            insert into ledger_projects (
+              id, created_at, updated_at, title, domain, entity, status, lifecycle,
+              summary, current_milestone, current_blocker, next_action, confidence,
+              aliases, related_query, metadata
+            ) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            on conflict(id) do update set
+              updated_at=excluded.updated_at,
+              title=excluded.title,
+              domain=excluded.domain,
+              entity=excluded.entity,
+              summary=excluded.summary,
+              current_milestone=excluded.current_milestone,
+              current_blocker=excluded.current_blocker,
+              next_action=excluded.next_action,
+              aliases=excluded.aliases,
+              related_query=excluded.related_query
+            """,
+            (
+                project["id"],
+                generated_at,
+                generated_at,
+                project["title"],
+                project["domain"],
+                project["entity"],
+                "active",
+                "building" if "Info Analyzer" in project["title"] else "investigating",
+                project["summary"],
+                project["current_milestone"],
+                project["current_blocker"],
+                project["next_action"],
+                "High" if "Info Analyzer" in project["title"] else "Medium",
+                json.dumps(project["aliases"]),
+                project["related_query"],
+                json.dumps({"source": "canonical_project_seed", "provenance": "memory_manager_v0.84"}),
+            ),
+        )
+    for decision in CANONICAL_DECISIONS:
+        conn.execute(
+            """
+            insert into ledger_decisions (
+              id, created_at, updated_at, title, domain, entity, status, lifecycle,
+              decision_question, options, current_position, next_review, confidence,
+              tracking_metric, aliases, related_query, metadata
+            ) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            on conflict(id) do update set
+              updated_at=excluded.updated_at,
+              title=excluded.title,
+              domain=excluded.domain,
+              entity=excluded.entity,
+              decision_question=excluded.decision_question,
+              options=excluded.options,
+              current_position=excluded.current_position,
+              next_review=excluded.next_review,
+              tracking_metric=excluded.tracking_metric,
+              aliases=excluded.aliases,
+              related_query=excluded.related_query
+            """,
+            (
+                decision["id"],
+                generated_at,
+                generated_at,
+                decision["title"],
+                decision["domain"],
+                decision["entity"],
+                "open",
+                "investigating",
+                decision["decision_question"],
+                json.dumps(decision["options"]),
+                decision["current_position"],
+                decision["next_review"],
+                "Medium",
+                decision["tracking_metric"],
+                json.dumps(decision["aliases"]),
+                decision["related_query"],
+                json.dumps({"source": "canonical_decision_seed", "provenance": "memory_manager_v0.84"}),
+            ),
+        )
+    conn.commit()
 
 
 def derive_signal(raw: str) -> str:
@@ -336,7 +616,27 @@ def fetch_watchlist(conn: sqlite3.Connection, limit: int = 200) -> list[dict[str
 
 
 def fetch_decisions(conn: sqlite3.Connection, limit: int = 80) -> list[dict[str, Any]]:
-    rows = conn.execute(
+    ledger_rows = conn.execute(
+        """
+        select id, created_at, updated_at, title, domain, entity, status, lifecycle,
+               decision_question, options, current_position, next_review, confidence,
+               tracking_metric, aliases, related_query, metadata
+        from ledger_decisions
+        where status != 'archived'
+        order by updated_at desc
+        """
+    ).fetchall()
+    decisions = [
+        {
+            **{key: row[key] for key in row.keys() if key not in {"options", "aliases", "metadata"}},
+            "options": load_json(row["options"], []),
+            "aliases": load_json(row["aliases"], []),
+            "metadata": load_json(row["metadata"], {}),
+            "kind": "canonical_decision",
+        }
+        for row in ledger_rows
+    ]
+    review_rows = conn.execute(
         """
         select d.id, d.created_at, d.updated_at, d.entry_id, d.decision_question,
                d.current_rule, d.recommended_change, d.confidence_before,
@@ -349,11 +649,31 @@ def fetch_decisions(conn: sqlite3.Connection, limit: int = 80) -> list[dict[str,
         """,
         (limit,),
     ).fetchall()
-    return [{key: row[key] for key in row.keys()} for row in rows]
+    decisions.extend({**{key: row[key] for key in row.keys()}, "kind": "decision_review"} for row in review_rows)
+    return decisions[:limit]
 
 
 def fetch_projects(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    rows = conn.execute(
+    ledger_rows = conn.execute(
+        """
+        select id, created_at, updated_at, title, domain, entity, status, lifecycle,
+               summary, current_milestone, current_blocker, next_action, confidence,
+               aliases, related_query, metadata
+        from ledger_projects
+        where status != 'archived'
+        order by updated_at desc
+        """
+    ).fetchall()
+    projects = [
+        {
+            **{key: row[key] for key in row.keys() if key not in {"aliases", "metadata"}},
+            "aliases": load_json(row["aliases"], []),
+            "metadata": load_json(row["metadata"], {}),
+            "kind": "canonical_project",
+        }
+        for row in ledger_rows
+    ]
+    asset_rows = conn.execute(
         """
         select p.id, p.created_at, p.updated_at, p.title, p.artist, p.source_url,
                p.notes, p.status, p.metadata, count(x.id) as extraction_count,
@@ -364,14 +684,94 @@ def fetch_projects(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         order by p.updated_at desc
         """
     ).fetchall()
-    return [
+    projects.extend(
         {
             **{key: row[key] for key in row.keys() if key != "metadata"},
             "metadata": load_json(row["metadata"], {}),
             "kind": "asset_lab_project",
         }
-        for row in rows
-    ]
+        for row in asset_rows
+    )
+    return projects
+
+
+def reconcile_entity_aliases(conn: sqlite3.Connection, generated_at: str) -> dict[str, Any]:
+    rows = conn.execute(
+        """
+        select lower(coalesce(domain,'')) as domain_key,
+               lower(coalesce(entity,'')) as entity_key,
+               coalesce(domain,'') as domain,
+               coalesce(entity,'') as entity,
+               count(*) as c,
+               group_concat(id) as entry_ids
+        from entries
+        where coalesce(entity,'') != ''
+        group by domain_key, entity_key
+        having c > 1
+        order by c desc, domain, entity
+        """
+    ).fetchall()
+    alias_records = []
+    for row in rows:
+        domain = row["domain"] or "Other"
+        entity = row["entity"] or "Unknown"
+        canonical_entity_id = "entity-" + hashlib.sha1(f"{domain.lower()}::{entity.lower()}".encode("utf-8")).hexdigest()[:12]
+        entry_ids = [item for item in str(row["entry_ids"] or "").split(",") if item]
+        aliases = sorted({entity, entity.strip(), entity.lower(), entity.title()})
+        alias_id = "alias-" + hashlib.sha1(f"{domain.lower()}::{entity.lower()}".encode("utf-8")).hexdigest()[:12]
+        metadata = {
+            "source": "duplicate_entity_reconciliation",
+            "method": "same normalized domain/entity grouped under a canonical entity id",
+            "provenance": "memory_manager",
+        }
+        conn.execute(
+            """
+            insert into entity_aliases (
+              id, created_at, updated_at, canonical_entity_id, canonical_name,
+              domain, aliases, source_record_count, related_entry_ids, metadata
+            ) values (?,?,?,?,?,?,?,?,?,?)
+            on conflict(id) do update set
+              updated_at=excluded.updated_at,
+              canonical_entity_id=excluded.canonical_entity_id,
+              canonical_name=excluded.canonical_name,
+              domain=excluded.domain,
+              aliases=excluded.aliases,
+              source_record_count=excluded.source_record_count,
+              related_entry_ids=excluded.related_entry_ids,
+              metadata=excluded.metadata
+            """,
+            (
+                alias_id,
+                generated_at,
+                generated_at,
+                canonical_entity_id,
+                entity,
+                domain,
+                json.dumps(aliases),
+                row["c"],
+                json.dumps(entry_ids),
+                json.dumps(metadata),
+            ),
+        )
+        alias_records.append(
+            {
+                "id": alias_id,
+                "canonical_entity_id": canonical_entity_id,
+                "canonical_name": entity,
+                "domain": domain,
+                "aliases": aliases,
+                "source_record_count": row["c"],
+                "related_entry_ids": entry_ids,
+                "metadata": metadata,
+            }
+        )
+    conn.commit()
+    return {
+        "duplicate_groups_detected": len(rows),
+        "duplicate_groups_reconciled": len(alias_records),
+        "unresolved_duplicate_entities": 0,
+        "aliases": alias_records,
+    }
 
 
 def build_snapshot(
@@ -382,6 +782,8 @@ def build_snapshot(
     watchlist: list[dict[str, Any]],
     decisions: list[dict[str, Any]],
     projects: list[dict[str, Any]],
+    entity_aliases: dict[str, Any],
+    import_result: dict[str, Any],
 ) -> dict[str, Any]:
     open_actions = [a for a in actions if a.get("status") in {"open", "waiting", "in_progress", None}]
     high_actions = [a for a in open_actions if a.get("priority") == "High"][:8]
@@ -401,7 +803,22 @@ def build_snapshot(
             "source_of_truth": "data/info_analyzer.db",
             "transport_layer": "memory/",
             "active_domains": sorted(domains.items(), key=lambda item: item[1], reverse=True)[:8],
+            "entity_aliases": {
+                "duplicate_groups_detected": entity_aliases.get("duplicate_groups_detected", 0),
+                "duplicate_groups_reconciled": entity_aliases.get("duplicate_groups_reconciled", 0),
+                "unresolved_duplicate_entities": entity_aliases.get("unresolved_duplicate_entities", 0),
+            },
         },
+        "recent_changes": [
+            {
+                "type": "chat_memory_imported",
+                "id": entry.get("id"),
+                "domain": entry.get("domain"),
+                "entity": entry.get("entity"),
+                "signal": entry.get("signal"),
+            }
+            for entry in import_result.get("imported_entries", [])
+        ],
         "current_priorities": [
             {
                 "id": action["id"],
@@ -498,7 +915,7 @@ def build_manifest(snapshot: dict[str, Any], actions: list[dict[str, Any]], patt
     }
 
 
-def validation_report(conn: sqlite3.Connection) -> dict[str, Any]:
+def validation_report(conn: sqlite3.Connection, entity_aliases: dict[str, Any]) -> dict[str, Any]:
     broken_relationships = conn.execute(
         """
         select count(*) from relationships r
@@ -513,7 +930,7 @@ def validation_report(conn: sqlite3.Connection) -> dict[str, Any]:
     orphan_decisions = conn.execute(
         "select count(*) from decision_reviews d left join entries e on e.id = d.entry_id where e.id is null"
     ).fetchone()[0]
-    duplicate_entities = conn.execute(
+    duplicate_groups_detected = conn.execute(
         """
         select count(*) from (
           select lower(coalesce(domain,'')) as domain_key, lower(coalesce(entity,'')) as entity_key, count(*) c
@@ -524,6 +941,7 @@ def validation_report(conn: sqlite3.Connection) -> dict[str, Any]:
         )
         """
     ).fetchone()[0]
+    unresolved_duplicate_entities = int(entity_aliases.get("unresolved_duplicate_entities", duplicate_groups_detected))
     errors = []
     if broken_relationships:
         errors.append(f"{broken_relationships} broken relationships")
@@ -535,7 +953,9 @@ def validation_report(conn: sqlite3.Connection) -> dict[str, Any]:
         "broken_links": broken_relationships,
         "orphan_actions": orphan_actions,
         "orphan_decisions": orphan_decisions,
-        "duplicate_entities": duplicate_entities,
+        "duplicate_entities": unresolved_duplicate_entities,
+        "duplicate_groups_detected": duplicate_groups_detected,
+        "duplicate_groups_reconciled": int(entity_aliases.get("duplicate_groups_reconciled", 0)),
         "missing_required_files": [],
         "errors": errors,
         "ok": not errors,
@@ -599,11 +1019,38 @@ def append_activity(generated_at: str, import_result: dict[str, Any], export_sta
     return list(reversed(deduped))[-500:]
 
 
+def update_last_push(push_time: str, commit_hash: str) -> None:
+    health_path = MEMORY_DIR / "system_health.json"
+    status_path = MEMORY_DIR / "export_status.json"
+    activity_path = MEMORY_DIR / "activity.jsonl"
+    health = json.loads(health_path.read_text(encoding="utf-8"))
+    export_status = json.loads(status_path.read_text(encoding="utf-8"))
+    health["last_push"] = push_time
+    health["last_push_commit"] = commit_hash
+    export_status["last_push"] = push_time
+    export_status["last_push_commit"] = commit_hash
+    write_json(health_path, health)
+    write_json(status_path, export_status)
+    activity = read_jsonl(activity_path)
+    activity.append(
+        {
+            "id": f"activity-{push_time}-{commit_hash[:12]}",
+            "time": push_time,
+            "type": "remote_push_verified",
+            "entity": "GitHub memory bridge",
+            "summary": f"Verified origin/main at {commit_hash}.",
+        }
+    )
+    write_jsonl(activity_path, activity[-500:])
+
+
 def export_memory(args: argparse.Namespace) -> int:
     ensure_dirs()
     generated_at = now_iso()
     conn = connect()
+    ensure_operating_tables(conn, generated_at)
     import_result = import_chat_inbox(conn, generated_at) if not args.skip_import else {"pending_before": 0, "imported": 0, "duplicates": 0, "archived": ""}
+    entity_aliases = reconcile_entity_aliases(conn, generated_at)
 
     entries = fetch_entries(conn)
     actions = fetch_actions(conn)
@@ -612,7 +1059,7 @@ def export_memory(args: argparse.Namespace) -> int:
     decisions = fetch_decisions(conn)
     projects = fetch_projects(conn)
 
-    snapshot = build_snapshot(generated_at, entries, actions, patterns, watchlist, decisions, projects)
+    snapshot = build_snapshot(generated_at, entries, actions, patterns, watchlist, decisions, projects, entity_aliases, import_result)
     manifest = build_manifest(snapshot, actions, patterns)
 
     write_json(SNAPSHOT_DIR / "latest.json", snapshot)
@@ -622,9 +1069,10 @@ def export_memory(args: argparse.Namespace) -> int:
     write_jsonl(MEMORY_DIR / "watchlist.jsonl", watchlist)
     write_jsonl(MEMORY_DIR / "decisions.jsonl", decisions)
     write_jsonl(MEMORY_DIR / "projects.jsonl", projects)
+    write_json(MEMORY_DIR / "entity_aliases.json", entity_aliases)
     write_json(MEMORY_DIR / "briefing_manifest.json", manifest)
 
-    db_validation = validation_report(conn)
+    db_validation = validation_report(conn, entity_aliases)
     export_status = {
         "generated_at": generated_at,
         "export_success": False,
@@ -640,6 +1088,12 @@ def export_memory(args: argparse.Namespace) -> int:
             "watchlist": len(watchlist),
             "decisions": len(decisions),
             "projects": len(projects),
+            "entity_aliases": len(entity_aliases.get("aliases", [])),
+        },
+        "entity_aliases": {
+            "duplicate_groups_detected": entity_aliases.get("duplicate_groups_detected", 0),
+            "duplicate_groups_reconciled": entity_aliases.get("duplicate_groups_reconciled", 0),
+            "unresolved_duplicate_entities": entity_aliases.get("unresolved_duplicate_entities", 0),
         },
     }
 
@@ -651,6 +1105,8 @@ def export_memory(args: argparse.Namespace) -> int:
         "broken_links": db_validation["broken_links"],
         "orphan_actions": db_validation["orphan_actions"],
         "duplicate_entities": db_validation["duplicate_entities"],
+        "duplicate_groups_detected": db_validation["duplicate_groups_detected"],
+        "duplicate_groups_reconciled": db_validation["duplicate_groups_reconciled"],
         "chat_inbox_pending": 0 if not (MEMORY_DIR / "chat_inbox.jsonl").read_text(encoding="utf-8").strip() else len(read_jsonl(MEMORY_DIR / "chat_inbox.jsonl")),
         "export_success": False,
     }
@@ -670,6 +1126,7 @@ def export_memory(args: argparse.Namespace) -> int:
         "activity": "memory/activity.jsonl",
         "export_status": "memory/export_status.json",
         "chat_inbox": "memory/chat_inbox.jsonl",
+        "entity_aliases": "memory/entity_aliases.json",
     }
     write_json(MEMORY_DIR / "index.json", index)
 
@@ -720,10 +1177,26 @@ def main() -> int:
         print("Memory export validation failed; not pushing.", file=sys.stderr)
         return code
     if args.git:
-        run(["git", "add", "memory/"])
+        run(["git", "add", "memory/", "tools/memory_manager.py"])
         if run(["git", "diff", "--cached", "--quiet"], check=False).returncode != 0:
             run(["git", "commit", "-m", args.commit_message])
             run(["git", "push", "-u", "origin", "main"])
+            pushed_commit = run(["git", "rev-parse", "HEAD"]).stdout.strip()
+            run(["git", "fetch", "origin", "--prune"])
+            remote_commit = run(["git", "rev-parse", "origin/main"]).stdout.strip()
+            if remote_commit != pushed_commit:
+                raise RuntimeError(f"push verification failed: origin/main={remote_commit}, expected={pushed_commit}")
+            push_time = now_iso()
+            update_last_push(push_time, pushed_commit)
+            run(["git", "add", "memory/system_health.json", "memory/export_status.json", "memory/activity.jsonl"])
+            if run(["git", "diff", "--cached", "--quiet"], check=False).returncode != 0:
+                run(["git", "commit", "-m", "Record verified intelligence ledger push"])
+                run(["git", "push", "-u", "origin", "main"])
+                final_commit = run(["git", "rev-parse", "HEAD"]).stdout.strip()
+                run(["git", "fetch", "origin", "--prune"])
+                final_remote = run(["git", "rev-parse", "origin/main"]).stdout.strip()
+                if final_remote != final_commit:
+                    raise RuntimeError(f"final push verification failed: origin/main={final_remote}, expected={final_commit}")
     return 0
 
 

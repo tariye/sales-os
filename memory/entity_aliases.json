@@ -1,0 +1,324 @@
+{
+  "aliases": [
+    {
+      "aliases": [
+        "Apple Inc.",
+        "apple inc."
+      ],
+      "canonical_entity_id": "entity-a1a51dc4fb29",
+      "canonical_name": "Apple Inc.",
+      "domain": "Investing",
+      "id": "alias-a1a51dc4fb29",
+      "metadata": {
+        "method": "same normalized domain/entity grouped under a canonical entity id",
+        "provenance": "memory_manager",
+        "source": "duplicate_entity_reconciliation"
+      },
+      "related_entry_ids": [
+        "ESI-SIG-20260624091948-EFDB7C",
+        "ESI-SIG-20260624091948-C91F3F",
+        "ESI-SIG-20260624091948-6610AA",
+        "ESI-SIG-20260624091948-8CE6D5",
+        "ESI-ACT-0DFF9F6B03E16A",
+        "ESI-ACT-5EF664CB229390",
+        "ESI-ACT-08A906C6C06187",
+        "ESI-ACT-80F56E93A43D76",
+        "ESI-ACT-9C0E2C6E739844",
+        "ESI-ACT-938172D1BF0E95",
+        "ESI-ACT-875760DA13636A",
+        "ESI-ACT-0B5A4CBF6522E6",
+        "ESI-ACT-9776A51B181418",
+        "ESI-ACT-C540A343093461",
+        "ESI-ACT-AE58C7C4349ADA",
+        "ESI-ACT-37CA6E0E20F7B6",
+        "ESI-ACT-10C442B53F1574",
+        "ESI-ACT-84C887663B9E43",
+        "ESI-ACT-284527CBBA5871",
+        "ESI-ACT-81B5834848782F",
+        "ESI-ACT-70E940D518317A",
+        "ESI-ACT-3164D01B7650DD",
+        "ESI-ACT-E1F4F33D29DBBB",
+        "ESI-ACT-4652A11BA96C2C",
+        "ESI-ACT-942BEBC52E4208",
+        "ESI-ACT-F6B82FDAA1AB4A",
+        "ESI-ACT-2201797C2ECE9F",
+        "ESI-ACT-62E8BD8B280618",
+        "ESI-ACT-01F90EE88C02EA",
+        "ESI-ACT-327BCABF16678D",
+        "ESI-ACT-AC8C9A69F07801",
+        "ESI-ACT-7DB0E06E313ED6",
+        "ESI-ACT-ADE3C5AC13468C",
+        "ESI-ACT-6CEC73E5979D0C",
+        "ESI-ACT-82DEE3F127FF12",
+        "ESI-ACT-47694F37A929D1",
+        "ESI-ACT-AD172FADE30159",
+        "ESI-ACT-499ED3EDC135E0",
+        "ESI-ACT-C56DAF57B1B09C",
+        "ESI-ACT-7092FC1FF74A8B",
+        "ESI-ACT-C1A2728EFB4209",
+        "ESI-ACT-915AACF1F6C29D",
+        "ESI-ACT-B86A43CBB70723",
+        "ESI-ACT-3A99B5E1AF5576",
+        "ESI-ACT-E2095350F5C108",
+        "ESI-ACT-19C38501716A41",
+        "ESI-ACT-097233E50B36DD",
+        "ESI-ACT-FB0CD1CC657357",
+        "ESI-ACT-FD2B1DF96BFA83"
+      ],
+      "source_record_count": 49
+    },
+    {
+      "aliases": [
+        "NVIDIA CORP",
+        "Nvidia Corp",
+        "nvidia corp"
+      ],
+      "canonical_entity_id": "entity-d429735b713d",
+      "canonical_name": "NVIDIA CORP",
+      "domain": "Investing",
+      "id": "alias-d429735b713d",
+      "metadata": {
+        "method": "same normalized domain/entity grouped under a canonical entity id",
+        "provenance": "memory_manager",
+        "source": "duplicate_entity_reconciliation"
+      },
+      "related_entry_ids": [
+        "ESI-SIG-20260623190049-F52B64",
+        "ESI-SIG-20260623190049-444AF4",
+        "ESI-SIG-20260623190049-354FFA",
+        "ESI-SIG-20260623190049-D43879",
+        "ESI-SIG-20260623190252-396E0C",
+        "ESI-SIG-20260623190252-468865",
+        "ESI-SIG-20260623190252-A3F079",
+        "ESI-SIG-20260623190252-D642BF",
+        "ESI-SIG-20260624085026-94888B",
+        "ESI-SIG-20260624085026-47DE43",
+        "ESI-SIG-20260624085026-DA9748",
+        "ESI-SIG-20260624085026-29F6EE",
+        "ESI-SIG-20260624085028-D092E1",
+        "ESI-SIG-20260624085028-DC115C",
+        "ESI-SIG-20260624085028-E7B2AB",
+        "ESI-SIG-20260624085028-C7DC05",
+        "ESI-SIG-20260624085028-0F07F2",
+        "ESI-SIG-20260624085028-808A77",
+        "ESI-SIG-20260624085028-EECDDA",
+        "ESI-SIG-20260624085028-109AB4",
+        "ESI-SIG-20260624090005-5E7A0D",
+        "ESI-SIG-20260624090005-5345D7",
+        "ESI-SIG-20260624090005-AF084D",
+        "ESI-SIG-20260624090005-00D7F6",
+        "ESI-SIG-20260624091505-37E908",
+        "ESI-ACT-FF23306E4E0065",
+        "ESI-ACT-8A488FA2A559E3",
+        "ESI-ACT-D99D83BF60EF6B",
+        "ESI-ACT-457B817ED6E279",
+        "ESI-ACT-BD5471E1B575C3",
+        "ESI-ACT-655B0A61644C75",
+        "ESI-ACT-77D19ED2940575",
+        "ESI-ACT-7010B515E4444F",
+        "ESI-ACT-0D94A8DC01278D",
+        "ESI-ACT-3A2E77A3228639",
+        "ESI-ACT-30D572CEC1E768",
+        "ESI-ACT-F7760C5FF945FF"
+      ],
+      "source_record_count": 37
+    },
+    {
+      "aliases": [
+        "ABBOTT LABORATORIES",
+        "Abbott Laboratories",
+        "abbott laboratories"
+      ],
+      "canonical_entity_id": "entity-f9f1e4ff1264",
+      "canonical_name": "ABBOTT LABORATORIES",
+      "domain": "Investing",
+      "id": "alias-f9f1e4ff1264",
+      "metadata": {
+        "method": "same normalized domain/entity grouped under a canonical entity id",
+        "provenance": "memory_manager",
+        "source": "duplicate_entity_reconciliation"
+      },
+      "related_entry_ids": [
+        "ESI-SIG-20260624090155-8BBC1D",
+        "ESI-SIG-20260624090155-B7B123",
+        "ESI-SIG-20260624090155-D1581E",
+        "ESI-SIG-20260624090155-C52310",
+        "ESI-ACT-2E69135F2414C2",
+        "ESI-ACT-B49B2C049885A8",
+        "ESI-ACT-01AC8B210AAA7C",
+        "ESI-ACT-C5E324C9658837",
+        "ESI-ACT-9054D4C493845A",
+        "ESI-ACT-A2C51C45201C2C",
+        "ESI-ACT-923331773DC2C0",
+        "ESI-ACT-D6AD23F42FBCAF",
+        "ESI-ACT-420C325D16E255",
+        "ESI-ACT-6B09666E47BAAA",
+        "ESI-ACT-689A0CC457BDB5",
+        "ESI-ACT-15A8594BB46D92",
+        "ESI-ACT-CC85F1BA6F23EA",
+        "ESI-ACT-372A19F13E04A8",
+        "ESI-ACT-B6FAF5303E40CC",
+        "ESI-ACT-12137C0DE1CA1F",
+        "ESI-ACT-0EF63A37C71F8D",
+        "ESI-ACT-CBA020EFC49B1A",
+        "ESI-ACT-666616C0FA23F1",
+        "ESI-ACT-809493AE722A20",
+        "ESI-ACT-D9A6304BD70760",
+        "ESI-ACT-25C99F0241536D",
+        "ESI-ACT-C59621931338D9"
+      ],
+      "source_record_count": 27
+    },
+    {
+      "aliases": [
+        "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD",
+        "Taiwan Semiconductor Manufacturing Co Ltd",
+        "taiwan semiconductor manufacturing co ltd"
+      ],
+      "canonical_entity_id": "entity-ec808d1e6ef8",
+      "canonical_name": "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD",
+      "domain": "Investing",
+      "id": "alias-ec808d1e6ef8",
+      "metadata": {
+        "method": "same normalized domain/entity grouped under a canonical entity id",
+        "provenance": "memory_manager",
+        "source": "duplicate_entity_reconciliation"
+      },
+      "related_entry_ids": [
+        "ESI-ACT-4A25AE48BF4AE2",
+        "ESI-ACT-3AC0CC59082DBA",
+        "ESI-ACT-7303D3D8E67894",
+        "ESI-ACT-6A606B8F4EB279",
+        "ESI-ACT-CB483366026B98",
+        "ESI-ACT-E6A10A15CA3947",
+        "ESI-ACT-2C32914D3B985C",
+        "ESI-ACT-4510DB4E0F62BE",
+        "ESI-ACT-03E7FE0D08BEE4",
+        "ESI-ACT-1ACCFBAAAE1D07",
+        "ESI-ACT-8C8AA235A98371",
+        "ESI-ACT-AE8422523D834F",
+        "ESI-ACT-C1E3DCE55E8E92",
+        "ESI-ACT-2C32B47E731498",
+        "ESI-ACT-00113EBB1BB46D",
+        "ESI-ACT-6C7AC5BCCAAF23",
+        "ESI-ACT-02C5226D218581",
+        "ESI-ACT-697D4533BBCB76",
+        "ESI-ACT-4FAE5CB955639B"
+      ],
+      "source_record_count": 19
+    },
+    {
+      "aliases": [
+        "Info Analyzer OS",
+        "Info Analyzer Os",
+        "info analyzer os"
+      ],
+      "canonical_entity_id": "entity-74dd557bff7c",
+      "canonical_name": "Info Analyzer OS",
+      "domain": "AI Project",
+      "id": "alias-74dd557bff7c",
+      "metadata": {
+        "method": "same normalized domain/entity grouped under a canonical entity id",
+        "provenance": "memory_manager",
+        "source": "duplicate_entity_reconciliation"
+      },
+      "related_entry_ids": [
+        "IA-20260701182115-FBE99A",
+        "IA-20260701182132-985E7A",
+        "IA-20260701182151-8A607A",
+        "IA-20260701182207-DA84AF",
+        "IA-20260705020134-F88520"
+      ],
+      "source_record_count": 5
+    },
+    {
+      "aliases": [
+        "SALES",
+        "Sales",
+        "sales"
+      ],
+      "canonical_entity_id": "entity-aa5caa29bf2d",
+      "canonical_name": "SALES",
+      "domain": "Network+",
+      "id": "alias-aa5caa29bf2d",
+      "metadata": {
+        "method": "same normalized domain/entity grouped under a canonical entity id",
+        "provenance": "memory_manager",
+        "source": "duplicate_entity_reconciliation"
+      },
+      "related_entry_ids": [
+        "IA-20260627220144-8F931A",
+        "IA-20260627220152-60F6BB",
+        "IA-20260627220159-A8D267",
+        "IA-20260627220329-8A5467"
+      ],
+      "source_record_count": 4
+    },
+    {
+      "aliases": [
+        "Using Mathematical Optimization To Solve Complex Business Challenges",
+        "Using Mathematical Optimization to Solve Complex Business Challenges",
+        "using mathematical optimization to solve complex business challenges"
+      ],
+      "canonical_entity_id": "entity-9b3bf86bdd50",
+      "canonical_name": "Using Mathematical Optimization to Solve Complex Business Challenges",
+      "domain": "Lab",
+      "id": "alias-9b3bf86bdd50",
+      "metadata": {
+        "method": "same normalized domain/entity grouped under a canonical entity id",
+        "provenance": "memory_manager",
+        "source": "duplicate_entity_reconciliation"
+      },
+      "related_entry_ids": [
+        "IA-20260627203810-2067CE",
+        "IA-20260627203827-042081",
+        "IA-20260627203830-8A487F"
+      ],
+      "source_record_count": 3
+    },
+    {
+      "aliases": [
+        "Info Analyzer Intelligence Ledger Raw Data",
+        "info analyzer intelligence ledger raw data"
+      ],
+      "canonical_entity_id": "entity-61f7122676f3",
+      "canonical_name": "Info Analyzer Intelligence Ledger Raw Data",
+      "domain": "Business",
+      "id": "alias-61f7122676f3",
+      "metadata": {
+        "method": "same normalized domain/entity grouped under a canonical entity id",
+        "provenance": "memory_manager",
+        "source": "duplicate_entity_reconciliation"
+      },
+      "related_entry_ids": [
+        "IA-20260703232608-03AAD5",
+        "IA-20260703232609-15CA52"
+      ],
+      "source_record_count": 2
+    },
+    {
+      "aliases": [
+        "Using Mathematical Optimization To Solve Complex Business Challenges",
+        "Using Mathematical Optimization to Solve Complex Business Challenges",
+        "using mathematical optimization to solve complex business challenges"
+      ],
+      "canonical_entity_id": "entity-fb1dd8e69053",
+      "canonical_name": "Using Mathematical Optimization to Solve Complex Business Challenges",
+      "domain": "Investing",
+      "id": "alias-fb1dd8e69053",
+      "metadata": {
+        "method": "same normalized domain/entity grouped under a canonical entity id",
+        "provenance": "memory_manager",
+        "source": "duplicate_entity_reconciliation"
+      },
+      "related_entry_ids": [
+        "ESI-ACT-0DB415EBD9A0D1",
+        "ESI-ACT-7EE099D2D74488"
+      ],
+      "source_record_count": 2
+    }
+  ],
+  "duplicate_groups_detected": 9,
+  "duplicate_groups_reconciled": 9,
+  "unresolved_duplicate_entities": 0
+}

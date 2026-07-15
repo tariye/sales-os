@@ -54,8 +54,18 @@ WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "info_analyzer.db"
 
-APP_VERSION = "v0.83-memory-manager"
+APP_VERSION = "v0.84-bidirectional-memory-bridge"
 APP_VERSIONS = [
+    {
+        "version": "v0.84",
+        "name": "Bidirectional Memory Bridge",
+        "features": [
+            "Canonical project and decision exports are seeded into SQLite and surfaced in GitHub memory files",
+            "Duplicate entity groups are reconciled into canonical entity IDs with alias provenance instead of deleting records",
+            "ChatGPT inbox imports now produce visible entries, activity records, snapshot updates, and archived raw inbox evidence",
+            "system_health.json records verified GitHub push timestamps after remote branch confirmation",
+        ],
+    },
     {
         "version": "v0.83",
         "name": "Intelligence Ledger Memory Manager",
