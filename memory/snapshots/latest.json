@@ -52,7 +52,7 @@
     "active_domains": [
       [
         "Investing",
-        90
+        89
       ],
       [
         "Lab",
@@ -61,6 +61,10 @@
       [
         "Business",
         3
+      ],
+      [
+        "Info Analyzer OS",
+        1
       ],
       [
         "AI Project",
@@ -182,7 +186,7 @@
       "status": "open",
       "title": "SK Hynix: investigate, buy, watch, or avoid",
       "tracking_metric": "HBM demand, AI memory pricing, capex discipline, gross margin trend, and customer concentration.",
-      "updated_at": "2026-07-15T19:57:30Z"
+      "updated_at": "2026-07-15T19:58:55Z"
     },
     {
       "aliases": [
@@ -213,7 +217,7 @@
       "status": "open",
       "title": "Nashville transition readiness",
       "tracking_metric": "Cash runway, job pipeline, housing plan, family constraints, and move date confidence.",
-      "updated_at": "2026-07-15T19:57:30Z"
+      "updated_at": "2026-07-15T19:58:55Z"
     },
     {
       "aliases": [
@@ -245,7 +249,7 @@
       "status": "open",
       "title": "Dedicated compute purchase: needed now or defer",
       "tracking_metric": "Utilization hours, blocked workloads, rental cost, project revenue/proof value, and hardware payback period.",
-      "updated_at": "2026-07-15T19:57:30Z"
+      "updated_at": "2026-07-15T19:58:55Z"
     },
     {
       "aliases": [
@@ -277,10 +281,10 @@
       "status": "open",
       "title": "Bassinet pricing and condition strategy",
       "tracking_metric": "Comparable prices, condition score, delivery/setup questions, listing views, saves, offers, and days-to-sale.",
-      "updated_at": "2026-07-15T19:57:30Z"
+      "updated_at": "2026-07-15T19:58:55Z"
     }
   ],
-  "generated_at": "2026-07-15T19:57:30Z",
+  "generated_at": "2026-07-15T19:58:55Z",
   "open_loops": [
     {
       "action": "Define the failure mode, mitigation step, and metric to watch.",
@@ -448,7 +452,7 @@
       "status": "active",
       "summary": "Coordinate relocation readiness, cash runway, job search, housing, and family logistics as one operating project.",
       "title": "Nashville Transition",
-      "updated_at": "2026-07-15T19:57:30Z"
+      "updated_at": "2026-07-15T19:58:55Z"
     },
     {
       "aliases": [
@@ -475,7 +479,7 @@
       "status": "active",
       "summary": "Track applications, interviews, proof artifacts, role targeting, and follow-up cadence.",
       "title": "Job Search",
-      "updated_at": "2026-07-15T19:57:30Z"
+      "updated_at": "2026-07-15T19:58:55Z"
     },
     {
       "aliases": [
@@ -502,7 +506,7 @@
       "status": "active",
       "summary": "Build a sourcing, pricing, listing, objection, and sell-through loop for liquidation/resale operations.",
       "title": "Sales OS Liquidation",
-      "updated_at": "2026-07-15T19:57:30Z"
+      "updated_at": "2026-07-15T19:58:55Z"
     },
     {
       "aliases": [
@@ -529,7 +533,7 @@
       "status": "active",
       "summary": "Maintain the decision intelligence system that converts raw inputs into tracked memory, actions, and briefings.",
       "title": "Info Analyzer / Intelligence Ledger",
-      "updated_at": "2026-07-15T19:57:30Z"
+      "updated_at": "2026-07-15T19:58:55Z"
     },
     {
       "aliases": [
@@ -555,7 +559,7 @@
       "status": "active",
       "summary": "Develop a music intelligence system for extracting emotional, structural, sync, and reuse value from audio assets.",
       "title": "Groove OS",
-      "updated_at": "2026-07-15T19:57:30Z"
+      "updated_at": "2026-07-15T19:58:55Z"
     },
     {
       "aliases": [
@@ -581,7 +585,7 @@
       "status": "active",
       "summary": "Build a home/system monitoring concept around signals, thresholds, alerts, and action loops.",
       "title": "Home Sentinel",
-      "updated_at": "2026-07-15T19:57:30Z"
+      "updated_at": "2026-07-15T19:58:55Z"
     },
     {
       "aliases": [
@@ -608,7 +612,7 @@
       "status": "active",
       "summary": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets.",
       "title": "Operator Training Concept Library",
-      "updated_at": "2026-07-15T19:57:30Z"
+      "updated_at": "2026-07-15T19:58:55Z"
     }
   ],
   "recent_accountability": [
@@ -685,7 +689,15 @@
       "status": "cancelled"
     }
   ],
-  "recent_changes": [],
+  "recent_changes": [
+    {
+      "domain": "Info Analyzer OS",
+      "entity": "Intelligence Ledger Memory Bridge",
+      "id": "IA-20260715195855-6CAB2B",
+      "signal": "The read-side GitHub memory contract is operational; the next required proof is a complete write-import-export-read loop.",
+      "type": "chat_memory_imported"
+    }
+  ],
   "recent_lessons": [
     {
       "domain": "Business",

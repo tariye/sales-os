@@ -1171,7 +1171,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.git:
-        run(["git", "pull", "--rebase"])
+        run(["git", "pull", "--rebase", "--autostash"])
     code = export_memory(args)
     if code != 0:
         print("Memory export validation failed; not pushing.", file=sys.stderr)

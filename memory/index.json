@@ -6,7 +6,7 @@
   "entity_aliases": "memory/entity_aliases.json",
   "entries": "memory/entries.jsonl",
   "export_status": "memory/export_status.json",
-  "generated_at": "2026-07-15T19:57:30Z",
+  "generated_at": "2026-07-15T19:58:55Z",
   "health": "memory/system_health.json",
   "manifest": "memory/briefing_manifest.json",
   "patterns": "memory/patterns.jsonl",

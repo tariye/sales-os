@@ -30,12 +30,20 @@
     "unresolved_duplicate_entities": 0
   },
   "export_success": true,
-  "generated_at": "2026-07-15T19:57:30Z",
+  "generated_at": "2026-07-15T19:58:55Z",
   "import_result": {
-    "archived": "",
+    "archived": "memory/archive/chat_inbox_20260715T195855Z.jsonl",
     "duplicates": 0,
-    "imported": 0,
-    "pending_before": 0
+    "imported": 1,
+    "imported_entries": [
+      {
+        "domain": "Info Analyzer OS",
+        "entity": "Intelligence Ledger Memory Bridge",
+        "id": "IA-20260715195855-6CAB2B",
+        "signal": "The read-side GitHub memory contract is operational; the next required proof is a complete write-import-export-read loop."
+      }
+    ],
+    "pending_before": 1
   },
   "json_errors": [],
   "source_of_truth": "data/info_analyzer.db",
