@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: info-analyzer-api
+    runtime: python
+    plan: starter
+    branch: main
+    buildCommand: "pip install -r requirements.txt && python -m py_compile server.py"
+    startCommand: "python server.py --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /api/health
+    envVars:
+      - key: INFO_ANALYZER_API_KEY
+        sync: false
+      - key: INFO_ANALYZER_DB_PATH
+        value: /var/data/info_analyzer.db
+    disk:
+      name: info-analyzer-data
+      mountPath: /var/data
+      sizeGB: 1

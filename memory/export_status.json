@@ -30,7 +30,7 @@
     "unresolved_duplicate_entities": 0
   },
   "export_success": true,
-  "generated_at": "2026-07-16T20:21:59Z",
+  "generated_at": "2026-07-16T20:28:09Z",
   "import_result": {
     "archived": "",
     "duplicates": 0,
@@ -38,8 +38,6 @@
     "pending_before": 0
   },
   "json_errors": [],
-  "last_push": "2026-07-16T20:22:56Z",
-  "last_push_commit": "f165ba920d984ebb517f0ba8f1878fccbbf8283c",
   "source_of_truth": "data/info_analyzer.db",
   "validation": {
     "broken_links": 0,

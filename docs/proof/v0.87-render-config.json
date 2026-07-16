@@ -1,0 +1,60 @@
+{
+  "generated_at": "2026-07-16T20:28:03Z",
+  "render_yaml": "render.yaml",
+  "summary": {
+    "passed": 12,
+    "failed": 0,
+    "total": 12
+  },
+  "checks": [
+    {
+      "name": "type: web",
+      "ok": true
+    },
+    {
+      "name": "runtime: python",
+      "ok": true
+    },
+    {
+      "name": "branch: main",
+      "ok": true
+    },
+    {
+      "name": "startCommand: \"python server.py --host 0.0.0.0 --port $PORT\"",
+      "ok": true
+    },
+    {
+      "name": "healthCheckPath: /api/health",
+      "ok": true
+    },
+    {
+      "name": "INFO_ANALYZER_API_KEY",
+      "ok": true
+    },
+    {
+      "name": "sync: false",
+      "ok": true
+    },
+    {
+      "name": "INFO_ANALYZER_DB_PATH",
+      "ok": true
+    },
+    {
+      "name": "value: /var/data/info_analyzer.db",
+      "ok": true
+    },
+    {
+      "name": "disk:",
+      "ok": true
+    },
+    {
+      "name": "mountPath: /var/data",
+      "ok": true
+    },
+    {
+      "name": "does_not_use_authenticated_v1_health_for_render_health_check",
+      "ok": true
+    }
+  ],
+  "status": "pass"
+}

@@ -192,7 +192,7 @@
       "status": "open",
       "title": "SK Hynix: investigate, buy, watch, or avoid",
       "tracking_metric": "HBM demand, AI memory pricing, capex discipline, gross margin trend, and customer concentration.",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -223,7 +223,7 @@
       "status": "open",
       "title": "Nashville transition readiness",
       "tracking_metric": "Cash runway, job pipeline, housing plan, family constraints, and move date confidence.",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -255,7 +255,7 @@
       "status": "open",
       "title": "Dedicated compute purchase: needed now or defer",
       "tracking_metric": "Utilization hours, blocked workloads, rental cost, project revenue/proof value, and hardware payback period.",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -287,7 +287,7 @@
       "status": "open",
       "title": "Bassinet pricing and condition strategy",
       "tracking_metric": "Comparable prices, condition score, delivery/setup questions, listing views, saves, offers, and days-to-sale.",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "confidence_after": 0.65,
@@ -404,7 +404,7 @@
       "updated_at": "2026-07-16T18:47:56+00:00"
     }
   ],
-  "generated_at": "2026-07-16T20:21:59Z",
+  "generated_at": "2026-07-16T20:28:09Z",
   "open_loops": [
     {
       "action": "Define the failure mode, mitigation step, and metric to watch.",
@@ -572,7 +572,7 @@
       "status": "active",
       "summary": "Coordinate relocation readiness, cash runway, job search, housing, and family logistics as one operating project.",
       "title": "Nashville Transition",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -599,7 +599,7 @@
       "status": "active",
       "summary": "Track applications, interviews, proof artifacts, role targeting, and follow-up cadence.",
       "title": "Job Search",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -626,7 +626,7 @@
       "status": "active",
       "summary": "Build a sourcing, pricing, listing, objection, and sell-through loop for liquidation/resale operations.",
       "title": "Sales OS Liquidation",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -653,7 +653,7 @@
       "status": "active",
       "summary": "Maintain the decision intelligence system that converts raw inputs into tracked memory, actions, and briefings.",
       "title": "Info Analyzer / Intelligence Ledger",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -679,7 +679,7 @@
       "status": "active",
       "summary": "Develop a music intelligence system for extracting emotional, structural, sync, and reuse value from audio assets.",
       "title": "Groove OS",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -705,7 +705,7 @@
       "status": "active",
       "summary": "Build a home/system monitoring concept around signals, thresholds, alerts, and action loops.",
       "title": "Home Sentinel",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -732,7 +732,7 @@
       "status": "active",
       "summary": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets.",
       "title": "Operator Training Concept Library",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     }
   ],
   "recent_accountability": [

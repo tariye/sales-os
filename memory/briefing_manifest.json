@@ -31,7 +31,7 @@
       "signal": "Cash conversion signal"
     }
   ],
-  "generated_at": "2026-07-16T20:21:59Z",
+  "generated_at": "2026-07-16T20:28:09Z",
   "pattern_count": 59,
   "projects_requiring_attention": [
     {
@@ -58,7 +58,7 @@
       "status": "active",
       "summary": "Coordinate relocation readiness, cash runway, job search, housing, and family logistics as one operating project.",
       "title": "Nashville Transition",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -85,7 +85,7 @@
       "status": "active",
       "summary": "Track applications, interviews, proof artifacts, role targeting, and follow-up cadence.",
       "title": "Job Search",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -112,7 +112,7 @@
       "status": "active",
       "summary": "Build a sourcing, pricing, listing, objection, and sell-through loop for liquidation/resale operations.",
       "title": "Sales OS Liquidation",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -139,7 +139,7 @@
       "status": "active",
       "summary": "Maintain the decision intelligence system that converts raw inputs into tracked memory, actions, and briefings.",
       "title": "Info Analyzer / Intelligence Ledger",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -165,7 +165,7 @@
       "status": "active",
       "summary": "Develop a music intelligence system for extracting emotional, structural, sync, and reuse value from audio assets.",
       "title": "Groove OS",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -191,7 +191,7 @@
       "status": "active",
       "summary": "Build a home/system monitoring concept around signals, thresholds, alerts, and action loops.",
       "title": "Home Sentinel",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     },
     {
       "aliases": [
@@ -218,7 +218,7 @@
       "status": "active",
       "summary": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets.",
       "title": "Operator Training Concept Library",
-      "updated_at": "2026-07-16T20:21:59Z"
+      "updated_at": "2026-07-16T20:28:09Z"
     }
   ],
   "questions_still_unanswered": [
