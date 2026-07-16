@@ -1,6 +1,12 @@
 {
   "critical_alerts": [
     {
+      "action": "Complete the authenticated API cross-chat loop and record the result.",
+      "domain": "Info Analyzer OS",
+      "id": "IA-20260716184905-639A12",
+      "signal": "Authenticated API can write structured chat memory into the Intelligence Ledger."
+    },
+    {
       "action": "insights",
       "domain": "Investing",
       "id": "ESI-SIG-20260623190049-354FFA",
@@ -186,7 +192,7 @@
       "status": "open",
       "title": "SK Hynix: investigate, buy, watch, or avoid",
       "tracking_metric": "HBM demand, AI memory pricing, capex discipline, gross margin trend, and customer concentration.",
-      "updated_at": "2026-07-15T19:58:55Z"
+      "updated_at": "2026-07-16T18:49:49Z"
     },
     {
       "aliases": [
@@ -217,7 +223,7 @@
       "status": "open",
       "title": "Nashville transition readiness",
       "tracking_metric": "Cash runway, job pipeline, housing plan, family constraints, and move date confidence.",
-      "updated_at": "2026-07-15T19:58:55Z"
+      "updated_at": "2026-07-16T18:49:49Z"
     },
     {
       "aliases": [
@@ -249,7 +255,7 @@
       "status": "open",
       "title": "Dedicated compute purchase: needed now or defer",
       "tracking_metric": "Utilization hours, blocked workloads, rental cost, project revenue/proof value, and hardware payback period.",
-      "updated_at": "2026-07-15T19:58:55Z"
+      "updated_at": "2026-07-16T18:49:49Z"
     },
     {
       "aliases": [
@@ -281,10 +287,48 @@
       "status": "open",
       "title": "Bassinet pricing and condition strategy",
       "tracking_metric": "Comparable prices, condition score, delivery/setup questions, listing views, saves, offers, and days-to-sale.",
-      "updated_at": "2026-07-15T19:58:55Z"
+      "updated_at": "2026-07-16T18:49:49Z"
+    },
+    {
+      "confidence_after": 0.65,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-16T18:49:05+00:00",
+      "current_rule": "The API is the correct live connection layer for cross-chat intelligence.",
+      "decision_question": "What decision should change for Authenticated Ledger API?",
+      "domain": "Info Analyzer OS",
+      "entity": "Authenticated Ledger API",
+      "entry_id": "IA-20260716184905-639A12",
+      "feedback_metric": "Entry saved, retrieved, alert acknowledged, feedback logged.",
+      "id": "DREV-D13CF3299EE45935",
+      "kind": "decision_review",
+      "recommended_change": "Complete the authenticated API cross-chat loop and record the result.",
+      "result": null,
+      "rule_update": null,
+      "signal": "Authenticated API can write structured chat memory into the Intelligence Ledger.",
+      "status": "open",
+      "updated_at": "2026-07-16T18:49:06+00:00"
+    },
+    {
+      "confidence_after": 0.65,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-16T18:47:56+00:00",
+      "current_rule": "The API is the correct live connection layer for cross-chat intelligence.",
+      "decision_question": "What decision should change for Authenticated Ledger API?",
+      "domain": "Other",
+      "entity": "Authenticated Ledger API",
+      "entry_id": "IA-20260716184756-B07F55",
+      "feedback_metric": "Entry saved, retrieved, alert acknowledged, feedback logged.",
+      "id": "DREV-50D5E9E7EA3358D1",
+      "kind": "decision_review",
+      "recommended_change": "Complete the authenticated API cross-chat loop and record the result.",
+      "result": null,
+      "rule_update": null,
+      "signal": "Authenticated API can write structured chat memory into the Intelligence Ledger.",
+      "status": "open",
+      "updated_at": "2026-07-16T18:47:56+00:00"
     }
   ],
-  "generated_at": "2026-07-15T19:58:55Z",
+  "generated_at": "2026-07-16T18:49:49Z",
   "open_loops": [
     {
       "action": "Define the failure mode, mitigation step, and metric to watch.",
@@ -452,7 +496,7 @@
       "status": "active",
       "summary": "Coordinate relocation readiness, cash runway, job search, housing, and family logistics as one operating project.",
       "title": "Nashville Transition",
-      "updated_at": "2026-07-15T19:58:55Z"
+      "updated_at": "2026-07-16T18:49:49Z"
     },
     {
       "aliases": [
@@ -479,7 +523,7 @@
       "status": "active",
       "summary": "Track applications, interviews, proof artifacts, role targeting, and follow-up cadence.",
       "title": "Job Search",
-      "updated_at": "2026-07-15T19:58:55Z"
+      "updated_at": "2026-07-16T18:49:49Z"
     },
     {
       "aliases": [
@@ -506,7 +550,7 @@
       "status": "active",
       "summary": "Build a sourcing, pricing, listing, objection, and sell-through loop for liquidation/resale operations.",
       "title": "Sales OS Liquidation",
-      "updated_at": "2026-07-15T19:58:55Z"
+      "updated_at": "2026-07-16T18:49:49Z"
     },
     {
       "aliases": [
@@ -533,7 +577,7 @@
       "status": "active",
       "summary": "Maintain the decision intelligence system that converts raw inputs into tracked memory, actions, and briefings.",
       "title": "Info Analyzer / Intelligence Ledger",
-      "updated_at": "2026-07-15T19:58:55Z"
+      "updated_at": "2026-07-16T18:49:49Z"
     },
     {
       "aliases": [
@@ -559,7 +603,7 @@
       "status": "active",
       "summary": "Develop a music intelligence system for extracting emotional, structural, sync, and reuse value from audio assets.",
       "title": "Groove OS",
-      "updated_at": "2026-07-15T19:58:55Z"
+      "updated_at": "2026-07-16T18:49:49Z"
     },
     {
       "aliases": [
@@ -585,7 +629,7 @@
       "status": "active",
       "summary": "Build a home/system monitoring concept around signals, thresholds, alerts, and action loops.",
       "title": "Home Sentinel",
-      "updated_at": "2026-07-15T19:58:55Z"
+      "updated_at": "2026-07-16T18:49:49Z"
     },
     {
       "aliases": [
@@ -612,10 +656,22 @@
       "status": "active",
       "summary": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets.",
       "title": "Operator Training Concept Library",
-      "updated_at": "2026-07-15T19:58:55Z"
+      "updated_at": "2026-07-16T18:49:49Z"
     }
   ],
   "recent_accountability": [
+    {
+      "action": "Complete the authenticated API cross-chat loop and record the result.",
+      "id": "ACT-D13CF3299EE45935",
+      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
+      "status": "done"
+    },
+    {
+      "action": "Complete the authenticated API cross-chat loop and record the result.",
+      "id": "ACT-50D5E9E7EA3358D1",
+      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
+      "status": "done"
+    },
     {
       "action": "After every sales call, create a CRM row with: Lead name, date, what they said, objection, next step, and follow-up date.",
       "id": "ACT-9D143F9B474F5FB6",
@@ -675,30 +731,16 @@
       "id": "ACT-E1C3CE8CC9F254D0",
       "result": null,
       "status": "cancelled"
-    },
-    {
-      "action": "Click Track Signal or archive the item.",
-      "id": "ACT-24D0F7667116507B",
-      "result": null,
-      "status": "cancelled"
-    },
-    {
-      "action": "Click Track Signal or archive the item.",
-      "id": "ACT-BE3EDCD7551957B5",
-      "result": null,
-      "status": "cancelled"
     }
   ],
-  "recent_changes": [
+  "recent_changes": [],
+  "recent_lessons": [
     {
       "domain": "Info Analyzer OS",
-      "entity": "Intelligence Ledger Memory Bridge",
-      "id": "IA-20260715195855-6CAB2B",
-      "signal": "The read-side GitHub memory contract is operational; the next required proof is a complete write-import-export-read loop.",
-      "type": "chat_memory_imported"
-    }
-  ],
-  "recent_lessons": [
+      "entity": "Authenticated Ledger API",
+      "id": "IA-20260716184905-639A12",
+      "lesson": "The API is the correct live connection layer for cross-chat intelligence."
+    },
     {
       "domain": "Business",
       "entity": "How You Define the Problem Determines Whether You Solve It",
@@ -740,12 +782,6 @@
       "entity": "MBA Case Studies Articles 3",
       "id": "IA-20260626174226-BCB8B7",
       "lesson": "Training system is infrastructure. Clean reps require clear standards, feedback, and repeatable process."
-    },
-    {
-      "domain": "Lab",
-      "entity": "Using Mathematical Optimization to Solve Complex Business Challenges",
-      "id": "IA-20260627203810-2067CE",
-      "lesson": "Non-trackable signal is not actionable. Every saved signal needs proof, metric, trigger, or next review."
     }
   ],
   "top_patterns": [
@@ -838,9 +874,9 @@
       "domains": [
         "AI Project"
       ],
-      "entry_count": 14,
+      "entry_count": 15,
       "id": "PAT-6F4C139A1CFC52D5",
-      "last_entry_id": "IA-20260715194134-68DB93",
+      "last_entry_id": "IA-20260716184943-A125A8",
       "metadata": {},
       "pattern": "Signals become more powerful when they are broken into labeled assets with metrics, examples, and resurfacing triggers.",
       "tags": [
@@ -856,7 +892,7 @@
         "context",
         "pattern"
       ],
-      "updated_at": "2026-07-15T19:41:34+00:00"
+      "updated_at": "2026-07-16T18:49:43+00:00"
     },
     {
       "confidence": "High",
@@ -864,9 +900,9 @@
       "domains": [
         "Business"
       ],
-      "entry_count": 13,
+      "entry_count": 14,
       "id": "PAT-E593EACF1E255B53",
-      "last_entry_id": "IA-20260715194131-75662D",
+      "last_entry_id": "IA-20260716184941-3CEE85",
       "metadata": {},
       "pattern": "When repeated objections cluster around one offer, test clarity before adding more traffic.",
       "tags": [
@@ -885,9 +921,10 @@
         "1783967126",
         "1783967873",
         "1783968142",
-        "1784144491"
+        "1784144491",
+        "1784227781"
       ],
-      "updated_at": "2026-07-15T19:41:32+00:00"
+      "updated_at": "2026-07-16T18:49:41+00:00"
     },
     {
       "confidence": "High",

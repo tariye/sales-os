@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -49,13 +50,27 @@ def _get_anthropic_client():
     except Exception:
         return None
 
+
+def configured_api_key() -> str:
+    return os.environ.get("INFO_ANALYZER_API_KEY", "").strip()
+
 BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "info_analyzer.db"
 
-APP_VERSION = "v0.84-bidirectional-memory-bridge"
+APP_VERSION = "v0.85-authenticated-ledger-api"
 APP_VERSIONS = [
+    {
+        "version": "v0.85",
+        "name": "Authenticated Ledger API",
+        "features": [
+            "Added INFO_ANALYZER_API_KEY authentication for /api/v1 cross-chat memory endpoints",
+            "Added v1 write, retrieve, critical alert, acknowledge, feedback, action queue, and decision update routes",
+            "Cross-chat clients can now use the API without directly editing SQLite or GitHub memory exports",
+            "Existing browser UI endpoints remain unchanged for local cockpit use",
+        ],
+    },
     {
         "version": "v0.84",
         "name": "Bidirectional Memory Bridge",
@@ -474,7 +489,7 @@ ACTIONABILITY_LEVELS = {"now", "next", "watch", "review", "link_only", "proof", 
 PULL_TRIGGER_TYPES = {"tag", "entity", "domain", "review_date", "threshold", "repetition", "contradiction", "action", "preference", "reference"}
 CARD_TYPES = {"Action Card", "Watch Card", "Pattern Card", "Risk Card", "Opportunity Card", "Contradiction Card", "Proof Card", "Review Card", "Preference Card", "Reference Card", "Archive Card"}
 REL_TYPES = {"connects", "validates", "contradicts", "expands", "refines", "supersedes", "produces", "repeats"}
-DOMAINS = ["Lab", "Investing", "Business", "Career", "Fitness", "Network+", "Music", "AI Project", "Personal Finance", "Personal Preference", "Other"]
+DOMAINS = ["Lab", "Investing", "Business", "Career", "Fitness", "Network+", "Music", "AI Project", "Info Analyzer OS", "Personal Finance", "Personal Preference", "Other"]
 
 
 def now_iso() -> str:
@@ -2765,7 +2780,7 @@ Return ONLY valid JSON — no markdown, no explanation. Use empty string "" for 
 Schema to return:
 {
   "title": "short descriptive title (max 12 words)",
-  "domain": "one of: Lab | Investing | Business | Career | Fitness | Network+ | Music | AI Project | Personal Finance | Personal Preference | Other",
+  "domain": "one of: Lab | Investing | Business | Career | Fitness | Network+ | Music | AI Project | Info Analyzer OS | Personal Finance | Personal Preference | Other",
   "entity": "company, system, person, role, song, protocol, product — or empty",
   "signal_role": "one of: action | watch | pattern | risk | opportunity | contradiction | proof | preference | reference | archive",
   "confidence": "one of: Low | Medium | High",
@@ -5321,6 +5336,202 @@ def update_action(action_id: str, payload: dict) -> dict:
         return row_to_action(conn.execute("SELECT * FROM actions WHERE id=?", (action_id,)).fetchone())
 
 
+def api_v1_save_entry(payload: dict) -> dict:
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    metadata = {
+        **metadata,
+        "api_version": "v1",
+        "source_chat": clean_text(payload.get("source_chat") or metadata.get("source_chat") or "external_chat"),
+        "source_input": clean_text(payload.get("source_input") or metadata.get("source_input") or "api_v1_save_entry"),
+    }
+    entry_payload = {**payload, "metadata": metadata}
+    result = create_entry(entry_payload)
+    return {
+        "success": True,
+        "entry_id": result["entry"]["id"],
+        "entry": result["entry"],
+        "action": result.get("action"),
+        "decision": result.get("decision"),
+        "context_packet": result.get("context_packet"),
+    }
+
+
+def api_v1_search_entries(params: dict) -> dict:
+    entries = search_entries(params)
+    return {"entries": entries, "count": len(entries)}
+
+
+def api_v1_related_context(payload: dict) -> dict:
+    raw = payload.get("raw_input") or payload.get("q") or payload.get("query") or ""
+    return resurface_context(
+        raw_input=raw,
+        domain=payload.get("domain") or "",
+        entity=payload.get("entity") or "",
+        tags=payload.get("tags"),
+        signal_role=payload.get("signal_role") or "",
+        triggered_by_entry_id=payload.get("triggered_by_entry_id") or "",
+        save_cards=bool(payload.get("save_cards")),
+    )
+
+
+def api_v1_action_queue(params: dict) -> dict:
+    if not params.get("status"):
+        params = {**params, "status": ["open"]}
+    actions = list_actions(params)
+    return {"actions": actions, "count": len(actions)}
+
+
+def api_v1_critical_alerts(params: dict) -> dict:
+    limit_raw = clean_text((params.get("limit") or ["10"])[0]) if isinstance(params, dict) else "10"
+    try:
+        limit = max(1, min(50, int(limit_raw)))
+    except ValueError:
+        limit = 10
+    alerts = []
+    with connect() as conn:
+        action_rows = conn.execute(
+            """
+            SELECT a.*, e.domain AS source_domain, e.entity AS source_entity, e.signal AS source_signal,
+                   e.card_type AS source_card_type, e.title AS source_title
+            FROM actions a
+            LEFT JOIN entries e ON e.id = a.entry_id
+            WHERE a.status IN ('open','in_progress','waiting')
+              AND (a.priority='High' OR e.signal_role IN ('risk','contradiction') OR e.card_type IN ('Risk Card','Contradiction Card'))
+            ORDER BY CASE a.priority WHEN 'High' THEN 0 WHEN 'Medium' THEN 1 ELSE 2 END, a.updated_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        for row in action_rows:
+            action = row_to_action(row)
+            alerts.append({
+                "id": action["id"],
+                "type": "action",
+                "severity": "warning" if action.get("priority") == "High" else "caution",
+                "title": action.get("action_title"),
+                "why": action.get("why") or row["source_signal"],
+                "domain": row["source_domain"],
+                "entity": row["source_entity"],
+                "source_entry_id": action.get("entry_id"),
+                "recommended_action": action.get("action_title"),
+                "tracking_metric": action.get("track_metric"),
+                "status": action.get("status"),
+            })
+        remaining = max(0, limit - len(alerts))
+        if remaining:
+            card_rows = conn.execute(
+                """
+                SELECT * FROM surfaced_cards
+                WHERE status='open' AND score >= 10
+                ORDER BY score DESC, updated_at DESC
+                LIMIT ?
+                """,
+                (remaining,),
+            ).fetchall()
+            for row in card_rows:
+                card = row_to_card(row)
+                action_card = card.get("action_card") or {}
+                alerts.append({
+                    "id": card["id"],
+                    "type": "surfaced_card",
+                    "severity": "caution",
+                    "title": action_card.get("resurfaced_memory") or card.get("reason") or "Surfaced memory",
+                    "why": card.get("reason"),
+                    "source_entry_id": card.get("source_entry_id"),
+                    "recommended_action": action_card.get("returned_action") or action_card.get("next_step"),
+                    "tracking_metric": action_card.get("track"),
+                    "status": card.get("status"),
+                })
+    return {"alerts": alerts, "count": len(alerts)}
+
+
+def api_v1_acknowledge_alert(alert_id: str, payload: dict) -> dict:
+    note = clean_text(payload.get("note") or payload.get("result") or "Acknowledged through API v1.")
+    now = now_iso()
+    with connect() as conn:
+        action = conn.execute("SELECT * FROM actions WHERE id=?", (alert_id,)).fetchone()
+        if action:
+            updated = update_action(alert_id, {"status": payload.get("status") or "waiting", "result": note})
+            return {"success": True, "alert_id": alert_id, "type": "action", "action": updated}
+        card = conn.execute("SELECT * FROM surfaced_cards WHERE id=?", (alert_id,)).fetchone()
+        if card:
+            conn.execute("UPDATE surfaced_cards SET status='acknowledged', updated_at=? WHERE id=?", (now, alert_id))
+            audit(conn, "acknowledge", "surfaced_card", alert_id, {"note": note})
+            conn.commit()
+            return {"success": True, "alert_id": alert_id, "type": "surfaced_card", "status": "acknowledged"}
+        entry = conn.execute("SELECT * FROM entries WHERE id=?", (alert_id,)).fetchone()
+        if entry:
+            updated = update_entry(alert_id, {"last_resurfaced": now, "metadata": {**json_loads(entry["metadata"], {}), "last_acknowledged": now, "acknowledge_note": note}})
+            return {"success": True, "alert_id": alert_id, "type": "entry", "entry": updated}
+    raise KeyError("alert not found")
+
+
+def api_v1_log_feedback(payload: dict) -> dict:
+    entry_id = clean_text(payload.get("entry_id"))
+    action_id = clean_text(payload.get("action_id"))
+    result = clean_text(payload.get("result"))
+    lesson = clean_text(payload.get("lesson") or payload.get("lesson_update"))
+    confidence = clean_text(payload.get("confidence"))
+    playbook_relationship = clean_text(payload.get("playbook_relationship") or payload.get("relationship_type"))
+    if not result and not lesson:
+        raise ValueError("feedback requires result or lesson")
+    response: dict[str, object] = {"success": True}
+    if action_id:
+        response["action"] = update_action(action_id, {
+            "status": payload.get("status") or "done",
+            "result": result,
+            "lesson_update": lesson,
+        })
+        entry_id = entry_id or response["action"].get("entry_id")  # type: ignore[union-attr]
+    if entry_id:
+        updates = {
+            "result": result,
+            "lesson": lesson,
+            "action_status": payload.get("entry_action_status") or payload.get("status") or "done",
+            "status": payload.get("entry_status") or "validated",
+        }
+        if confidence:
+            updates["confidence"] = confidence
+        response["entry"] = update_entry(entry_id, updates)
+        if playbook_relationship:
+            with connect() as conn:
+                audit(conn, "feedback", "entry", entry_id, {
+                    "result": result,
+                    "lesson": lesson,
+                    "playbook_relationship": playbook_relationship,
+                    "source": "api_v1_log_feedback",
+                })
+                conn.commit()
+    return response
+
+
+def api_v1_update_decision(decision_id: str, payload: dict) -> dict:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM decision_reviews WHERE id=?", (decision_id,)).fetchone()
+        if row:
+            return {"success": True, **update_decision_feedback(decision_id, payload)}
+        ledger = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ledger_decisions'").fetchone()
+        if ledger:
+            existing = conn.execute("SELECT * FROM ledger_decisions WHERE id=?", (decision_id,)).fetchone()
+            if existing:
+                allowed = {"status", "lifecycle", "current_position", "next_review", "confidence", "tracking_metric", "related_query"}
+                updates = {k: clean_text(payload[k]) for k in payload if k in allowed}
+                if not updates:
+                    raise ValueError("no updatable decision fields provided")
+                updates["updated_at"] = now_iso()
+                set_sql = ", ".join([f"{k}=?" for k in updates])
+                conn.execute(f"UPDATE ledger_decisions SET {set_sql} WHERE id=?", tuple(updates.values()) + (decision_id,))
+                audit(conn, "update", "ledger_decision", decision_id, {"updated_fields": list(updates.keys()), "source": "api_v1_update_decision"})
+                conn.commit()
+                updated = conn.execute("SELECT * FROM ledger_decisions WHERE id=?", (decision_id,)).fetchone()
+                data = dict(updated)
+                data["options"] = json_loads(data.get("options"), [])
+                data["aliases"] = json_loads(data.get("aliases"), [])
+                data["metadata"] = json_loads(data.get("metadata"), {})
+                return {"success": True, "decision": data}
+    raise KeyError("decision not found")
+
+
 def get_sales_trends(days: int = 30) -> dict:
     """Return time-series sales data for trend visualization."""
     try:
@@ -6256,7 +6467,7 @@ class Handler(SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Info-Analyzer-Key")
         super().end_headers()
 
     def do_OPTIONS(self):
@@ -6293,11 +6504,42 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as e:
             raise ValueError(f"invalid JSON: {e}")
 
+    def require_api_auth(self) -> bool:
+        expected = configured_api_key()
+        if not expected:
+            self.send_json({
+                "error": "INFO_ANALYZER_API_KEY is not configured",
+                "hint": "Set INFO_ANALYZER_API_KEY before starting the server to use /api/v1 endpoints.",
+            }, 503)
+            return False
+        provided = clean_text(self.headers.get("X-Info-Analyzer-Key") or "")
+        auth = clean_text(self.headers.get("Authorization") or "")
+        if auth.lower().startswith("bearer "):
+            provided = auth.split(" ", 1)[1].strip()
+        if not provided or not hmac.compare_digest(provided, expected):
+            self.send_json({"error": "unauthorized"}, 401)
+            return False
+        return True
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
         params = parse_qs(parsed.query)
         try:
+            if path.startswith("/api/v1/"):
+                if not self.require_api_auth():
+                    return
+                if path == "/api/v1/health":
+                    return self.send_json({"ok": True, "version": APP_VERSION, "api": "v1"})
+                if path == "/api/v1/entries/search":
+                    return self.send_json(api_v1_search_entries(params))
+                if path == "/api/v1/action_queue":
+                    return self.send_json(api_v1_action_queue(params))
+                if path == "/api/v1/critical_alerts":
+                    return self.send_json(api_v1_critical_alerts(params))
+                if path == "/api/v1/decisions":
+                    return self.send_json(list_decision_queue(params))
+                return self.send_json({"error": "not found"}, 404)
             if path in {"/", "/index.html"}:
                 return self.send_file(WEB_DIR / "index.html", "text/html; charset=utf-8")
             if path == "/app.js":
@@ -6449,6 +6691,16 @@ class Handler(SimpleHTTPRequestHandler):
         path = parsed.path
         try:
             payload = self.read_json()
+            if path.startswith("/api/v1/"):
+                if not self.require_api_auth():
+                    return
+                if path == "/api/v1/entries":
+                    return self.send_json(api_v1_save_entry(payload), 201)
+                if path == "/api/v1/context":
+                    return self.send_json(api_v1_related_context(payload), 201)
+                if path == "/api/v1/feedback":
+                    return self.send_json(api_v1_log_feedback(payload), 201)
+                return self.send_json({"error": "not found"}, 404)
             if path == "/api/codify":
                 return self.send_json({"draft": codify_payload(payload)})
             if path == "/api/translate/ai":
@@ -6544,6 +6796,19 @@ class Handler(SimpleHTTPRequestHandler):
         path = parsed.path
         try:
             payload = self.read_json()
+            if path.startswith("/api/v1/"):
+                if not self.require_api_auth():
+                    return
+                if path.startswith("/api/v1/alerts/") and path.endswith("/acknowledge"):
+                    alert_id = unquote(path.split("/api/v1/alerts/", 1)[1].rsplit("/acknowledge", 1)[0])
+                    return self.send_json(api_v1_acknowledge_alert(alert_id, payload))
+                if path.startswith("/api/v1/actions/") and path.endswith("/feedback"):
+                    action_id = unquote(path.split("/api/v1/actions/", 1)[1].rsplit("/feedback", 1)[0])
+                    return self.send_json(api_v1_log_feedback({**payload, "action_id": action_id}))
+                if path.startswith("/api/v1/decisions/"):
+                    decision_id = unquote(path.split("/api/v1/decisions/", 1)[1])
+                    return self.send_json(api_v1_update_decision(decision_id, payload))
+                return self.send_json({"error": "not found"}, 404)
             if path.startswith("/api/live-signals/"):
                 signal_id = unquote(path.split("/api/live-signals/", 1)[1])
                 return self.send_json({"success": True, **update_live_signal(signal_id, payload)})

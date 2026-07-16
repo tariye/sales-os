@@ -17,10 +17,10 @@
   ],
   "counts": {
     "actions": 120,
-    "decisions": 4,
+    "decisions": 6,
     "entity_aliases": 9,
     "entries": 100,
-    "patterns": 56,
+    "patterns": 57,
     "projects": 7,
     "watchlist": 126
   },
@@ -30,24 +30,14 @@
     "unresolved_duplicate_entities": 0
   },
   "export_success": true,
-  "generated_at": "2026-07-15T19:58:55Z",
+  "generated_at": "2026-07-16T18:49:49Z",
   "import_result": {
-    "archived": "memory/archive/chat_inbox_20260715T195855Z.jsonl",
+    "archived": "",
     "duplicates": 0,
-    "imported": 1,
-    "imported_entries": [
-      {
-        "domain": "Info Analyzer OS",
-        "entity": "Intelligence Ledger Memory Bridge",
-        "id": "IA-20260715195855-6CAB2B",
-        "signal": "The read-side GitHub memory contract is operational; the next required proof is a complete write-import-export-read loop."
-      }
-    ],
-    "pending_before": 1
+    "imported": 0,
+    "pending_before": 0
   },
   "json_errors": [],
-  "last_push": "2026-07-15T19:58:57Z",
-  "last_push_commit": "45e382841fd5f8ba89c39c3b98d569d7c488a3dd",
   "source_of_truth": "data/info_analyzer.db",
   "validation": {
     "broken_links": 0,
