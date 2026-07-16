@@ -1,0 +1,121 @@
+{
+  "generated_at": "2026-07-16T19:58:19Z",
+  "base_url": "http://127.0.0.1:8010",
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7
+  },
+  "entry_id": "IA-20260716195818-53DB20",
+  "action_id": "ACT-1F2A1D42FE9850A7",
+  "checks": [
+    {
+      "name": "health",
+      "status": 200,
+      "ok": true,
+      "evidence": {
+        "success": true,
+        "data": {
+          "ok": true,
+          "version": "v0.86-chatgpt-action-contract",
+          "api": "v1"
+        },
+        "error": null,
+        "request_id": "REQ-e548134d-0bc0-4615-894a-17c9d4b3af90"
+      }
+    },
+    {
+      "name": "write",
+      "status": 201,
+      "ok": true,
+      "evidence": {
+        "entry_id": "IA-20260716195818-53DB20",
+        "action_id": "ACT-1F2A1D42FE9850A7",
+        "envelope_request_id": "REQ-f1edb486-ed43-48b6-a18a-b4a35cc19ab4"
+      }
+    },
+    {
+      "name": "idempotency_replay",
+      "status": 201,
+      "ok": true,
+      "evidence": {
+        "entry_id": "IA-20260716195818-53DB20",
+        "replay_entry_id": "IA-20260716195818-53DB20"
+      }
+    },
+    {
+      "name": "retrieve",
+      "status": 200,
+      "ok": true,
+      "evidence": {
+        "count": 1,
+        "entry_id": "IA-20260716195818-53DB20"
+      }
+    },
+    {
+      "name": "critical_alert",
+      "status": 200,
+      "ok": true,
+      "evidence": {
+        "id": "ACT-1F2A1D42FE9850A7",
+        "type": "action",
+        "severity": "warning",
+        "title": "Complete the authenticated API cross-chat loop and record the result.",
+        "why": "Authenticated API can write structured chat memory into the Intelligence Ledger.",
+        "domain": "Info Analyzer OS",
+        "entity": "Authenticated Ledger API",
+        "source_entry_id": "IA-20260716195818-53DB20",
+        "recommended_action": "Complete the authenticated API cross-chat loop and record the result.",
+        "tracking_metric": "Entry saved, retrieved, alert acknowledged, feedback logged.",
+        "status": "open"
+      }
+    },
+    {
+      "name": "acknowledge",
+      "status": 200,
+      "ok": true,
+      "evidence": {
+        "success": true,
+        "data": {
+          "success": true,
+          "alert_id": "ACT-1F2A1D42FE9850A7",
+          "type": "action",
+          "action": {
+            "id": "ACT-1F2A1D42FE9850A7",
+            "created_at": "2026-07-16T19:58:18+00:00",
+            "updated_at": "2026-07-16T19:58:19+00:00",
+            "entry_id": "IA-20260716195818-53DB20",
+            "action_title": "Complete the authenticated API cross-chat loop and record the result.",
+            "why": "Authenticated API can write structured chat memory into the Intelligence Ledger.",
+            "track_metric": "Entry saved, retrieved, alert acknowledged, feedback logged.",
+            "due_date": "",
+            "priority": "High",
+            "status": "waiting",
+            "result": "Acknowledged by API v1 loop check; feedback result pending.",
+            "lesson_update": null,
+            "metadata": {
+              "signal_role": "risk",
+              "actionability": "now",
+              "card_type": "Risk Card",
+              "trigger_condition": "Resurface until the returned action is completed with a result: Authenticated Ledger API.",
+              "result_to_track": "Entry saved, retrieved, alert acknowledged, feedback logged."
+            }
+          }
+        },
+        "error": null,
+        "request_id": "REQ-eea4311d-ec19-4e54-b167-a3ae831b9ed2"
+      }
+    },
+    {
+      "name": "learn",
+      "status": 201,
+      "ok": true,
+      "evidence": {
+        "entry_id": "IA-20260716195818-53DB20",
+        "action_id": "ACT-1F2A1D42FE9850A7",
+        "request_id": "REQ-2d66a45e-3015-4891-85c3-4d6982af3be4"
+      }
+    }
+  ],
+  "status": "pass"
+}

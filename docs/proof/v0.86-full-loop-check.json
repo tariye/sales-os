@@ -1,0 +1,121 @@
+{
+  "generated_at": "2026-07-16T19:58:37+00:00",
+  "base_url": "http://127.0.0.1:8010",
+  "stock_symbol": "AAPL",
+  "principle": "No feature ships until it survives the live user loop.",
+  "summary": {
+    "passed": 10,
+    "failed": 0,
+    "total": 10
+  },
+  "checks": [
+    {
+      "name": "health",
+      "status": "pass",
+      "detail": "Live app responds with a version.",
+      "evidence": {
+        "version": "v0.86-chatgpt-action-contract"
+      }
+    },
+    {
+      "name": "command_center_resolvers",
+      "status": "pass",
+      "detail": "Command Center callouts expose resolver buttons.",
+      "evidence": {
+        "callouts": 13,
+        "buttons": 26
+      }
+    },
+    {
+      "name": "actions_source_context",
+      "status": "pass",
+      "detail": "Actions endpoint supports domain filtering and source context.",
+      "evidence": {
+        "actions_checked": 8
+      }
+    },
+    {
+      "name": "pull_sales",
+      "status": "pass",
+      "detail": "Pull Engine returns an actionable sales card.",
+      "evidence": {
+        "card_count": 6,
+        "top_title": "Compare acquisition cost, sell-through, and gross margin for the top five phone models, then add the best two to today's sourcing list.",
+        "top_metric": "Sell-through rate, acquisition cost, gross margin, days-to-sale, inventory turns, and result logged."
+      }
+    },
+    {
+      "name": "live_ingest",
+      "status": "pass",
+      "detail": "Manual sales source produced a live signal, linked memory, accepted Watch/Act status updates, and cleaned up.",
+      "evidence": {
+        "source_id": "SRC-20260716195833-691CEF",
+        "signal_id": "LIVE-20260716195834-3F39E9",
+        "entry_id": "IA-20260716195833-D9B3DB",
+        "recommended_action": "Update the offer/listing copy to clarify total cost, setup, and delivery, then compare objection count and conversion rate.",
+        "cleanup": {
+          "success": true,
+          "deleted": true,
+          "source_id": "SRC-20260716195833-691CEF",
+          "linked_entries_deleted": 1
+        }
+      }
+    },
+    {
+      "name": "pattern_to_action",
+      "status": "pass",
+      "detail": "Pattern was recontextualized into an action queue item with source context.",
+      "evidence": {
+        "entry_id": "IA-20260716195834-ECA97D",
+        "action_id": "ACT-8328455B65155818"
+      }
+    },
+    {
+      "name": "decision_layer",
+      "status": "pass",
+      "detail": "Signal created a decision review and feedback updated the rule loop.",
+      "evidence": {
+        "entry_id": "IA-20260716195834-08A7F7",
+        "review_id": "DREV-3020029F429357D3"
+      }
+    },
+    {
+      "name": "stock_intel",
+      "status": "pass",
+      "detail": "Stock Intel returns financials and extracted signals.",
+      "evidence": {
+        "symbol": "AAPL",
+        "quarter_revenue": "$111.18B",
+        "signal_types": [
+          "demand",
+          "profit",
+          "earnings",
+          "cash",
+          "market",
+          "news",
+          "memory"
+        ],
+        "errors": []
+      }
+    },
+    {
+      "name": "asset_lab",
+      "status": "pass",
+      "detail": "Temporary asset was opened, broken down, saved to library, labeled, and fully deleted.",
+      "evidence": {
+        "extraction_id": "LEX-20260716195836-84DEB8",
+        "linked_entry_id": "IA-20260716195836-64FC04"
+      }
+    },
+    {
+      "name": "memory_loop",
+      "status": "pass",
+      "detail": "Temporary entry was saved, pulled, result-logged, and cleaned up.",
+      "evidence": {
+        "entry_id": "IA-20260716195836-FB90A2",
+        "pull_cards": 5
+      }
+    }
+  ],
+  "status": "pass"
+}

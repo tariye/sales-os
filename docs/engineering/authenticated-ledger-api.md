@@ -25,6 +25,48 @@ X-Info-Analyzer-Key: <INFO_ANALYZER_API_KEY>
 
 Only `/api/v1/*` requires this key. Existing local browser endpoints remain unchanged.
 
+## Stable Envelope
+
+Every `/api/v1/*` response uses the same envelope:
+
+```json
+{
+  "success": true,
+  "data": {},
+  "error": null,
+  "request_id": "REQ-..."
+}
+```
+
+Errors keep the same shape:
+
+```json
+{
+  "success": false,
+  "data": {},
+  "error": {
+    "code": "unauthorized",
+    "message": "Invalid or missing API key."
+  },
+  "request_id": "REQ-..."
+}
+```
+
+Write endpoints support replay-safe requests with:
+
+```text
+Idempotency-Key: <unique-client-key>
+```
+
+If the same key is replayed against the same method and path with the same body, the API returns the stored response. If the body differs, the API returns `409 idempotency_conflict`.
+
+Every authenticated v1 request records audit metadata without logging the API key:
+
+- `source_client`
+- `source_chat`
+- `request_id`
+- `created_at`
+
 ## First Cross-Chat Loop
 
 The minimum intelligence loop is:
@@ -35,6 +77,12 @@ The minimum intelligence loop is:
 4. **Learn**: `POST /api/v1/feedback` or `PATCH /api/v1/actions/{id}/feedback`
 
 ## Endpoints
+
+The formal OpenAPI 3.1 schema lives at:
+
+```text
+docs/openapi/info-analyzer-v1.yaml
+```
 
 ### Health
 

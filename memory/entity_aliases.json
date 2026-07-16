@@ -256,6 +256,28 @@
     },
     {
       "aliases": [
+        "Authenticated Ledger API",
+        "Authenticated Ledger Api",
+        "authenticated ledger api"
+      ],
+      "canonical_entity_id": "entity-79d6755f090c",
+      "canonical_name": "Authenticated Ledger API",
+      "domain": "Info Analyzer OS",
+      "id": "alias-79d6755f090c",
+      "metadata": {
+        "method": "same normalized domain/entity grouped under a canonical entity id",
+        "provenance": "memory_manager",
+        "source": "duplicate_entity_reconciliation"
+      },
+      "related_entry_ids": [
+        "IA-20260716184905-639A12",
+        "IA-20260716195816-0C8DB8",
+        "IA-20260716195818-53DB20"
+      ],
+      "source_record_count": 3
+    },
+    {
+      "aliases": [
         "Using Mathematical Optimization To Solve Complex Business Challenges",
         "Using Mathematical Optimization to Solve Complex Business Challenges",
         "using mathematical optimization to solve complex business challenges"
@@ -318,7 +340,7 @@
       "source_record_count": 2
     }
   ],
-  "duplicate_groups_detected": 9,
-  "duplicate_groups_reconciled": 9,
+  "duplicate_groups_detected": 10,
+  "duplicate_groups_reconciled": 10,
   "unresolved_duplicate_entities": 0
 }

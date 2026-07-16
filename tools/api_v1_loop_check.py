@@ -6,24 +6,38 @@ import argparse
 import json
 from pathlib import Path
 import time
+import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
 
 
-def request(base_url: str, method: str, path: str, api_key: str, payload=None):
+def request(base_url: str, method: str, path: str, api_key: str, payload=None, idempotency_key: str = ""):
     url = base_url.rstrip("/") + path
     data = None
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "X-Source-Client": "api-v1-loop-check",
+        "X-Source-Chat": "loop-check-chat",
+        "X-Request-ID": f"REQ-{uuid.uuid4()}",
     }
+    if idempotency_key:
+        headers["Idempotency-Key"] = idempotency_key
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     with urllib.request.urlopen(req, timeout=20) as res:
         body = res.read().decode("utf-8")
         return res.status, json.loads(body or "{}")
+
+
+def data_from(envelope: dict) -> dict:
+    if not {"success", "data", "error", "request_id"}.issubset(envelope):
+        raise AssertionError(f"response is not a stable v1 envelope: {envelope}")
+    if envelope.get("success") is not True:
+        raise AssertionError(f"v1 request failed: {envelope}")
+    return envelope.get("data") or {}
 
 
 def main() -> int:
@@ -39,7 +53,8 @@ def main() -> int:
         "acknowledges the returned alert, then logs feedback so the original entry becomes stronger."
     )
     status, health = request(args.base_url, "GET", "/api/v1/health", args.api_key)
-    checks = [{"name": "health", "status": status, "ok": health.get("ok") is True, "evidence": health}]
+    health_data = data_from(health)
+    checks = [{"name": "health", "status": status, "ok": health_data.get("ok") is True, "evidence": health}]
 
     entry_payload = {
         "title": f"API v1 cross-chat loop test {nonce}",
@@ -61,25 +76,32 @@ def main() -> int:
         "feedback_to_capture": "Whether write, retrieve, act, and learn all completed.",
         "tags": ["api-v1", "cross-chat", "acceptance-test", "memory-bridge"],
     }
-    status, saved = request(args.base_url, "POST", "/api/v1/entries", args.api_key, entry_payload)
-    entry_id = saved.get("entry_id")
-    action_id = (saved.get("action") or {}).get("id")
-    checks.append({"name": "write", "status": status, "ok": bool(entry_id and action_id), "evidence": {"entry_id": entry_id, "action_id": action_id}})
+    status, saved = request(args.base_url, "POST", "/api/v1/entries", args.api_key, entry_payload, f"entry-{nonce}")
+    saved_data = data_from(saved)
+    status, replay = request(args.base_url, "POST", "/api/v1/entries", args.api_key, entry_payload, f"entry-{nonce}")
+    replay_data = data_from(replay)
+    entry_id = saved_data.get("entry_id")
+    action_id = (saved_data.get("action") or {}).get("id")
+    checks.append({"name": "write", "status": status, "ok": bool(entry_id and action_id), "evidence": {"entry_id": entry_id, "action_id": action_id, "envelope_request_id": saved.get("request_id")}})
+    checks.append({"name": "idempotency_replay", "status": status, "ok": replay_data.get("entry_id") == entry_id, "evidence": {"entry_id": entry_id, "replay_entry_id": replay_data.get("entry_id")}})
 
     query = urllib.parse.urlencode({"q": nonce, "domain": "Info Analyzer OS", "limit": 10})
     status, search = request(args.base_url, "GET", f"/api/v1/entries/search?{query}", args.api_key)
-    found = any(row.get("id") == entry_id for row in search.get("entries", []))
-    checks.append({"name": "retrieve", "status": status, "ok": found, "evidence": {"count": search.get("count"), "entry_id": entry_id}})
+    search_data = data_from(search)
+    found = any(row.get("id") == entry_id for row in search_data.get("entries", []))
+    checks.append({"name": "retrieve", "status": status, "ok": found, "evidence": {"count": search_data.get("count"), "entry_id": entry_id}})
 
     status, alerts = request(args.base_url, "GET", "/api/v1/critical_alerts?limit=20", args.api_key)
-    alert = next((item for item in alerts.get("alerts", []) if item.get("id") == action_id), None)
+    alerts_data = data_from(alerts)
+    alert = next((item for item in alerts_data.get("alerts", []) if item.get("id") == action_id), None)
     checks.append({"name": "critical_alert", "status": status, "ok": bool(alert), "evidence": alert or alerts})
 
     status, ack = request(args.base_url, "PATCH", f"/api/v1/alerts/{action_id}/acknowledge", args.api_key, {
         "status": "waiting",
         "note": "Acknowledged by API v1 loop check; feedback result pending.",
-    })
-    checks.append({"name": "acknowledge", "status": status, "ok": ack.get("success") is True, "evidence": ack})
+    }, f"ack-{nonce}")
+    ack_data = data_from(ack)
+    checks.append({"name": "acknowledge", "status": status, "ok": bool(ack_data.get("alert_id")), "evidence": ack})
 
     status, feedback = request(args.base_url, "POST", "/api/v1/feedback", args.api_key, {
         "entry_id": entry_id,
@@ -89,8 +111,9 @@ def main() -> int:
         "lesson": "The API is the correct live connection layer for cross-chat intelligence.",
         "confidence": "High",
         "playbook_relationship": "validates",
-    })
-    checks.append({"name": "learn", "status": status, "ok": feedback.get("success") is True, "evidence": {"entry_id": entry_id, "action_id": action_id}})
+    }, f"feedback-{nonce}")
+    feedback_data = data_from(feedback)
+    checks.append({"name": "learn", "status": status, "ok": bool(feedback_data.get("entry")), "evidence": {"entry_id": entry_id, "action_id": action_id, "request_id": feedback.get("request_id")}})
 
     passed = sum(1 for check in checks if check["ok"])
     result = {

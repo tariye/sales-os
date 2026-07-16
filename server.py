@@ -59,8 +59,19 @@ WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "info_analyzer.db"
 
-APP_VERSION = "v0.85-authenticated-ledger-api"
+APP_VERSION = "v0.86-chatgpt-action-contract"
 APP_VERSIONS = [
+    {
+        "version": "v0.86",
+        "name": "ChatGPT Action Contract",
+        "features": [
+            "Added an OpenAPI 3.1 contract for external ChatGPT Actions",
+            "Wrapped every /api/v1 response in a stable success/data/error/request_id envelope",
+            "Added Idempotency-Key replay support for v1 write endpoints",
+            "Added request audit metadata for source client, source chat, request id, and created timestamp",
+            "Documented HTTPS, persistent SQLite storage, backups, and cross-chat acceptance testing",
+        ],
+    },
     {
         "version": "v0.85",
         "name": "Authenticated Ledger API",
@@ -1001,6 +1012,17 @@ def init_db() -> None:
             payload TEXT DEFAULT '{}'
         );
 
+        CREATE TABLE IF NOT EXISTS api_idempotency (
+            key TEXT NOT NULL,
+            method TEXT NOT NULL,
+            path TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            request_hash TEXT,
+            status_code INTEGER NOT NULL,
+            response_json TEXT NOT NULL,
+            PRIMARY KEY (key, method, path)
+        );
+
         CREATE TABLE IF NOT EXISTS import_batches (
             id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL,
@@ -1307,6 +1329,7 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_pull_rules_active ON pull_rules(active, trigger_type, trigger_value);
         CREATE INDEX IF NOT EXISTS idx_surfaced_status ON surfaced_cards(status, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_pattern_runs_created ON pattern_runs(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_api_idempotency_created ON api_idempotency(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_import_batches_created ON import_batches(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_import_sheets_batch ON import_sheets(batch_id, sheet_index);
         CREATE INDEX IF NOT EXISTS idx_import_rows_batch ON import_rows(batch_id, sheet_name, row_number);
@@ -5336,18 +5359,78 @@ def update_action(action_id: str, payload: dict) -> dict:
         return row_to_action(conn.execute("SELECT * FROM actions WHERE id=?", (action_id,)).fetchone())
 
 
-def api_v1_save_entry(payload: dict) -> dict:
+def api_v1_request_hash(payload: dict | None) -> str:
+    normalized = json.dumps(payload or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def api_v1_request_meta(headers, payload: dict | None = None, request_id: str | None = None) -> dict:
+    payload = payload if isinstance(payload, dict) else {}
+    rid = clean_text(request_id or headers.get("X-Request-ID") or make_id("REQ"))
+    return {
+        "source_client": clean_text(headers.get("X-Source-Client") or payload.get("source_client") or "chatgpt-action"),
+        "source_chat": clean_text(headers.get("X-Source-Chat") or payload.get("source_chat") or "external_chat"),
+        "request_id": rid,
+        "created_at": now_iso(),
+    }
+
+
+def api_v1_audit(event_type: str, method: str, path: str, status_code: int, request_meta: dict, entity_id: str = "", payload: dict | None = None) -> None:
+    clean_payload = {
+        "method": method,
+        "path": path,
+        "status_code": status_code,
+        "source_client": request_meta.get("source_client") or "",
+        "source_chat": request_meta.get("source_chat") or "",
+        "request_id": request_meta.get("request_id") or "",
+        "created_at": request_meta.get("created_at") or now_iso(),
+    }
+    if payload:
+        clean_payload.update(payload)
+    with connect() as conn:
+        audit(conn, event_type, "api_v1_request", entity_id or None, clean_payload)
+        conn.commit()
+
+
+def api_v1_idempotency_get(key: str, method: str, path: str) -> sqlite3.Row | None:
+    if not key:
+        return None
+    with connect() as conn:
+        return conn.execute(
+            "SELECT * FROM api_idempotency WHERE key=? AND method=? AND path=?",
+            (key, method, path),
+        ).fetchone()
+
+
+def api_v1_idempotency_store(key: str, method: str, path: str, request_hash: str, status_code: int, response: dict) -> None:
+    if not key:
+        return
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO api_idempotency (key, method, path, created_at, request_hash, status_code, response_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (key, method, path, now_iso(), request_hash, status_code, json.dumps(response, ensure_ascii=False, sort_keys=True)),
+        )
+        conn.commit()
+
+
+def api_v1_save_entry(payload: dict, request_meta: dict | None = None) -> dict:
+    request_meta = request_meta or {}
     metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
     metadata = {
         **metadata,
         "api_version": "v1",
-        "source_chat": clean_text(payload.get("source_chat") or metadata.get("source_chat") or "external_chat"),
+        "source_client": clean_text(payload.get("source_client") or metadata.get("source_client") or request_meta.get("source_client") or "chatgpt-action"),
+        "source_chat": clean_text(payload.get("source_chat") or metadata.get("source_chat") or request_meta.get("source_chat") or "external_chat"),
+        "request_id": clean_text(payload.get("request_id") or metadata.get("request_id") or request_meta.get("request_id") or ""),
+        "api_created_at": clean_text(metadata.get("api_created_at") or request_meta.get("created_at") or now_iso()),
         "source_input": clean_text(payload.get("source_input") or metadata.get("source_input") or "api_v1_save_entry"),
     }
-    entry_payload = {**payload, "metadata": metadata}
+    entry_payload = {**payload, "metadata": metadata, "source_chat": metadata["source_chat"]}
     result = create_entry(entry_payload)
     return {
-        "success": True,
         "entry_id": result["entry"]["id"],
         "entry": result["entry"],
         "action": result.get("action"),
@@ -6467,7 +6550,7 @@ class Handler(SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Info-Analyzer-Key")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Info-Analyzer-Key, Idempotency-Key, X-Request-ID, X-Source-Client, X-Source-Chat")
         super().end_headers()
 
     def do_OPTIONS(self):
@@ -6481,6 +6564,20 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def v1_envelope(self, data=None, error=None, request_id: str = "") -> dict:
+        return {
+            "success": error is None,
+            "data": data if data is not None else {},
+            "error": error,
+            "request_id": request_id or make_id("REQ"),
+        }
+
+    def send_v1(self, data=None, status=200, request_id: str = "", error=None):
+        return self.send_json(self.v1_envelope(data=data, error=error, request_id=request_id), status)
+
+    def send_v1_error(self, code: str, message: str, status=400, request_id: str = ""):
+        return self.send_v1(error={"code": code, "message": message}, status=status, request_id=request_id)
 
     def send_file(self, path: Path, ctype: str):
         if not path.exists():
@@ -6504,22 +6601,119 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as e:
             raise ValueError(f"invalid JSON: {e}")
 
-    def require_api_auth(self) -> bool:
+    def require_api_auth(self, request_id: str = "") -> bool:
         expected = configured_api_key()
         if not expected:
-            self.send_json({
-                "error": "INFO_ANALYZER_API_KEY is not configured",
-                "hint": "Set INFO_ANALYZER_API_KEY before starting the server to use /api/v1 endpoints.",
-            }, 503)
+            self.send_v1_error(
+                "api_key_not_configured",
+                "INFO_ANALYZER_API_KEY is not configured on the server.",
+                503,
+                request_id,
+            )
             return False
         provided = clean_text(self.headers.get("X-Info-Analyzer-Key") or "")
         auth = clean_text(self.headers.get("Authorization") or "")
         if auth.lower().startswith("bearer "):
             provided = auth.split(" ", 1)[1].strip()
         if not provided or not hmac.compare_digest(provided, expected):
-            self.send_json({"error": "unauthorized"}, 401)
+            self.send_v1_error("unauthorized", "Invalid or missing API key.", 401, request_id)
             return False
         return True
+
+    def handle_v1_read(self, path: str, params: dict, method: str = "GET"):
+        request_meta = api_v1_request_meta(self.headers)
+        request_id = request_meta["request_id"]
+        if not self.require_api_auth(request_id):
+            api_v1_audit("auth_failed", method, path, 401, request_meta)
+            return
+        try:
+            if path == "/api/v1/health":
+                data = {"ok": True, "version": APP_VERSION, "api": "v1"}
+            elif path == "/api/v1/entries/search":
+                data = api_v1_search_entries(params)
+            elif path == "/api/v1/action_queue":
+                data = api_v1_action_queue(params)
+            elif path == "/api/v1/critical_alerts":
+                data = api_v1_critical_alerts(params)
+            elif path == "/api/v1/decisions":
+                data = list_decision_queue(params)
+            else:
+                api_v1_audit("not_found", method, path, 404, request_meta)
+                return self.send_v1_error("not_found", "API v1 endpoint not found.", 404, request_id)
+            api_v1_audit("read", method, path, 200, request_meta)
+            return self.send_v1(data, 200, request_id)
+        except KeyError as e:
+            api_v1_audit("not_found", method, path, 404, request_meta, payload={"error": str(e)})
+            return self.send_v1_error("not_found", str(e), 404, request_id)
+        except ValueError as e:
+            api_v1_audit("bad_request", method, path, 400, request_meta, payload={"error": str(e)})
+            return self.send_v1_error("bad_request", str(e), 400, request_id)
+        except Exception as e:
+            api_v1_audit("server_error", method, path, 500, request_meta, payload={"error": str(e)})
+            return self.send_v1_error("server_error", str(e), 500, request_id)
+
+    def handle_v1_write(self, method: str, path: str, payload: dict):
+        request_meta = api_v1_request_meta(self.headers, payload)
+        request_id = request_meta["request_id"]
+        if not self.require_api_auth(request_id):
+            api_v1_audit("auth_failed", method, path, 401, request_meta)
+            return
+        idem_key = clean_text(self.headers.get("Idempotency-Key") or "")
+        request_hash = api_v1_request_hash(payload)
+        if idem_key:
+            cached = api_v1_idempotency_get(idem_key, method, path)
+            if cached:
+                if cached["request_hash"] != request_hash:
+                    api_v1_audit("idempotency_conflict", method, path, 409, request_meta)
+                    return self.send_v1_error(
+                        "idempotency_conflict",
+                        "Idempotency-Key was already used for a different request body on this endpoint.",
+                        409,
+                        request_id,
+                    )
+                return self.send_json(json_loads(cached["response_json"], {}), int(cached["status_code"]))
+        status = 200
+        entity_id = ""
+        try:
+            if method == "POST" and path == "/api/v1/entries":
+                data = api_v1_save_entry(payload, request_meta)
+                entity_id = clean_text(data.get("entry_id") or "")
+                status = 201
+            elif method == "POST" and path == "/api/v1/context":
+                data = api_v1_related_context(payload)
+                status = 201
+            elif method == "POST" and path == "/api/v1/feedback":
+                data = api_v1_log_feedback(payload)
+                entity_id = clean_text(payload.get("entry_id") or payload.get("action_id") or "")
+                status = 201
+            elif method == "PATCH" and path.startswith("/api/v1/alerts/") and path.endswith("/acknowledge"):
+                alert_id = unquote(path.split("/api/v1/alerts/", 1)[1].rsplit("/acknowledge", 1)[0])
+                data = api_v1_acknowledge_alert(alert_id, payload)
+                entity_id = alert_id
+            elif method == "PATCH" and path.startswith("/api/v1/actions/") and path.endswith("/feedback"):
+                action_id = unquote(path.split("/api/v1/actions/", 1)[1].rsplit("/feedback", 1)[0])
+                data = api_v1_log_feedback({**payload, "action_id": action_id})
+                entity_id = action_id
+            elif method == "PATCH" and path.startswith("/api/v1/decisions/"):
+                decision_id = unquote(path.split("/api/v1/decisions/", 1)[1])
+                data = api_v1_update_decision(decision_id, payload)
+                entity_id = decision_id
+            else:
+                api_v1_audit("not_found", method, path, 404, request_meta)
+                return self.send_v1_error("not_found", "API v1 endpoint not found.", 404, request_id)
+            envelope = self.v1_envelope(data=data, request_id=request_id)
+            api_v1_idempotency_store(idem_key, method, path, request_hash, status, envelope)
+            api_v1_audit("write", method, path, status, request_meta, entity_id=entity_id)
+            return self.send_json(envelope, status)
+        except KeyError as e:
+            api_v1_audit("not_found", method, path, 404, request_meta, entity_id=entity_id, payload={"error": str(e)})
+            return self.send_v1_error("not_found", str(e), 404, request_id)
+        except ValueError as e:
+            api_v1_audit("bad_request", method, path, 400, request_meta, entity_id=entity_id, payload={"error": str(e)})
+            return self.send_v1_error("bad_request", str(e), 400, request_id)
+        except Exception as e:
+            api_v1_audit("server_error", method, path, 500, request_meta, entity_id=entity_id, payload={"error": str(e)})
+            return self.send_v1_error("server_error", str(e), 500, request_id)
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -6527,19 +6721,7 @@ class Handler(SimpleHTTPRequestHandler):
         params = parse_qs(parsed.query)
         try:
             if path.startswith("/api/v1/"):
-                if not self.require_api_auth():
-                    return
-                if path == "/api/v1/health":
-                    return self.send_json({"ok": True, "version": APP_VERSION, "api": "v1"})
-                if path == "/api/v1/entries/search":
-                    return self.send_json(api_v1_search_entries(params))
-                if path == "/api/v1/action_queue":
-                    return self.send_json(api_v1_action_queue(params))
-                if path == "/api/v1/critical_alerts":
-                    return self.send_json(api_v1_critical_alerts(params))
-                if path == "/api/v1/decisions":
-                    return self.send_json(list_decision_queue(params))
-                return self.send_json({"error": "not found"}, 404)
+                return self.handle_v1_read(path, params)
             if path in {"/", "/index.html"}:
                 return self.send_file(WEB_DIR / "index.html", "text/html; charset=utf-8")
             if path == "/app.js":
@@ -6692,15 +6874,7 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             payload = self.read_json()
             if path.startswith("/api/v1/"):
-                if not self.require_api_auth():
-                    return
-                if path == "/api/v1/entries":
-                    return self.send_json(api_v1_save_entry(payload), 201)
-                if path == "/api/v1/context":
-                    return self.send_json(api_v1_related_context(payload), 201)
-                if path == "/api/v1/feedback":
-                    return self.send_json(api_v1_log_feedback(payload), 201)
-                return self.send_json({"error": "not found"}, 404)
+                return self.handle_v1_write("POST", path, payload)
             if path == "/api/codify":
                 return self.send_json({"draft": codify_payload(payload)})
             if path == "/api/translate/ai":
@@ -6797,18 +6971,7 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             payload = self.read_json()
             if path.startswith("/api/v1/"):
-                if not self.require_api_auth():
-                    return
-                if path.startswith("/api/v1/alerts/") and path.endswith("/acknowledge"):
-                    alert_id = unquote(path.split("/api/v1/alerts/", 1)[1].rsplit("/acknowledge", 1)[0])
-                    return self.send_json(api_v1_acknowledge_alert(alert_id, payload))
-                if path.startswith("/api/v1/actions/") and path.endswith("/feedback"):
-                    action_id = unquote(path.split("/api/v1/actions/", 1)[1].rsplit("/feedback", 1)[0])
-                    return self.send_json(api_v1_log_feedback({**payload, "action_id": action_id}))
-                if path.startswith("/api/v1/decisions/"):
-                    decision_id = unquote(path.split("/api/v1/decisions/", 1)[1])
-                    return self.send_json(api_v1_update_decision(decision_id, payload))
-                return self.send_json({"error": "not found"}, 404)
+                return self.handle_v1_write("PATCH", path, payload)
             if path.startswith("/api/live-signals/"):
                 signal_id = unquote(path.split("/api/live-signals/", 1)[1])
                 return self.send_json({"success": True, **update_live_signal(signal_id, payload)})

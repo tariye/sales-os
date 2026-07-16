@@ -1,0 +1,684 @@
+openapi: 3.1.0
+info:
+  title: Info Analyzer OS Ledger API
+  version: 1.0.0
+  description: |
+    Authenticated API for external ChatGPT Actions to write, retrieve, act on,
+    and improve Intelligence Ledger memory. SQLite remains the source of truth.
+servers:
+  - url: https://api.yourdomain.com
+    description: Production HTTPS endpoint
+  - url: http://localhost:8000
+    description: Local development endpoint
+security:
+  - bearerAuth: []
+  - apiKeyHeader: []
+paths:
+  /api/v1/health:
+    get:
+      operationId: getApiHealth
+      summary: Check API health
+      description: Confirms the API is reachable and returns the running Info Analyzer OS version.
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/SourceClient"
+        - $ref: "#/components/parameters/SourceChat"
+      responses:
+        "200":
+          description: API health state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /api/v1/entries:
+    post:
+      operationId: createLedgerEntry
+      summary: Create a structured ledger entry
+      description: Saves raw chat input plus contextual signal fields into the Intelligence Ledger.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/SourceClient"
+        - $ref: "#/components/parameters/SourceChat"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LedgerEntryCreate"
+      responses:
+        "201":
+          description: Entry created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerEntryEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /api/v1/entries/search:
+    get:
+      operationId: searchLedgerEntries
+      summary: Search contextual ledger entries
+      description: Retrieves structured memory entries by query, domain, status, tags, and other filters.
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/SourceClient"
+        - $ref: "#/components/parameters/SourceChat"
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Keyword or phrase to search.
+        - name: domain
+          in: query
+          schema:
+            type: string
+          description: Optional domain filter.
+        - name: entity
+          in: query
+          schema:
+            type: string
+          description: Optional entity filter.
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Optional lifecycle status filter.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Matching ledger entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /api/v1/context:
+    post:
+      operationId: retrieveContext
+      summary: Retrieve related memory context
+      description: Runs the pull/context engine against structured memory and returns relevant resurfaced context.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/SourceClient"
+        - $ref: "#/components/parameters/SourceChat"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContextRequest"
+      responses:
+        "201":
+          description: Related context generated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /api/v1/action_queue:
+    get:
+      operationId: getActionQueue
+      summary: Get open actions
+      description: Returns the current action queue so a chat can help the user execute or update work.
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/SourceClient"
+        - $ref: "#/components/parameters/SourceChat"
+        - name: status
+          in: query
+          schema:
+            type: string
+            default: open
+        - name: domain
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Action queue.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionQueueEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /api/v1/critical_alerts:
+    get:
+      operationId: getCriticalAlerts
+      summary: Get critical alerts
+      description: Returns high-priority action and surfaced-memory alerts that need operator attention.
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/SourceClient"
+        - $ref: "#/components/parameters/SourceChat"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        "200":
+          description: Critical alerts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertsEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /api/v1/alerts/{alert_id}/acknowledge:
+    patch:
+      operationId: acknowledgeAlert
+      summary: Acknowledge a critical alert
+      description: Moves an alert/action into an acknowledged or waiting state and records the note.
+      parameters:
+        - $ref: "#/components/parameters/AlertId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/SourceClient"
+        - $ref: "#/components/parameters/SourceChat"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcknowledgeAlertRequest"
+      responses:
+        "200":
+          description: Alert acknowledged.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /api/v1/feedback:
+    post:
+      operationId: logFeedback
+      summary: Log outcome feedback
+      description: Records the result of an action and updates the source entry's confidence, lesson, and lifecycle.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/SourceClient"
+        - $ref: "#/components/parameters/SourceChat"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackRequest"
+      responses:
+        "201":
+          description: Feedback logged.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /api/v1/actions/{action_id}/feedback:
+    patch:
+      operationId: updateActionFeedback
+      summary: Update an action with feedback
+      description: Applies execution feedback to a specific action and its linked source entry.
+      parameters:
+        - $ref: "#/components/parameters/ActionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/SourceClient"
+        - $ref: "#/components/parameters/SourceChat"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackRequest"
+      responses:
+        "200":
+          description: Action feedback updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /api/v1/decisions/{decision_id}:
+    patch:
+      operationId: updateDecision
+      summary: Update a decision object
+      description: Updates an active decision review or canonical ledger decision with status, confidence, or review fields.
+      parameters:
+        - $ref: "#/components/parameters/DecisionId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/SourceClient"
+        - $ref: "#/components/parameters/SourceChat"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionUpdateRequest"
+      responses:
+        "200":
+          description: Decision updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/ServerError"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API key
+      description: Use Authorization: Bearer <INFO_ANALYZER_API_KEY>.
+    apiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-Info-Analyzer-Key
+      description: Alternative API key header.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Unique key for replay-safe write requests.
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Client-provided request correlation id.
+    SourceClient:
+      name: X-Source-Client
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Calling client name, such as private-gpt-action.
+    SourceChat:
+      name: X-Source-Chat
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Conversation or chat identifier supplied by the client.
+    AlertId:
+      name: alert_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ActionId:
+      name: action_id
+      in: path
+      required: true
+      schema:
+        type: string
+    DecisionId:
+      name: decision_id
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: The request was malformed or missing required fields.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Unauthorized:
+      description: API key missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    NotFound:
+      description: Requested object was not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Conflict:
+      description: Idempotency key conflict or conflicting state.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    ServerError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+  schemas:
+    EnvelopeBase:
+      type: object
+      required: [success, data, error, request_id]
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        error:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/ErrorObject"
+        request_id:
+          type: string
+    ErrorObject:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    ErrorEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+      examples:
+        - success: false
+          data: {}
+          error:
+            code: unauthorized
+            message: Invalid or missing API key.
+          request_id: REQ-123
+    GenericEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+    HealthEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [ok, version, api]
+              properties:
+                ok:
+                  type: boolean
+                version:
+                  type: string
+                api:
+                  type: string
+    LedgerEntryEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [entry_id, entry]
+              properties:
+                entry_id:
+                  type: string
+                entry:
+                  type: object
+                action:
+                  type: object
+                decision:
+                  type: object
+                context_packet:
+                  type: object
+    SearchEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                entries:
+                  type: array
+                  items:
+                    type: object
+                count:
+                  type: integer
+    ActionQueueEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                actions:
+                  type: array
+                  items:
+                    type: object
+                count:
+                  type: integer
+    AlertsEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/EnvelopeBase"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                alerts:
+                  type: array
+                  items:
+                    type: object
+                count:
+                  type: integer
+    LedgerEntryCreate:
+      type: object
+      required: [raw_input, signal, returned_action]
+      properties:
+        title:
+          type: string
+        raw_input:
+          type: string
+        domain:
+          type: string
+        source_type:
+          type: string
+        entity:
+          type: string
+        signal:
+          type: string
+        signal_role:
+          type: string
+        interpretation:
+          type: string
+        pattern:
+          type: string
+        returned_action:
+          type: string
+        first_step:
+          type: string
+        trackable_as:
+          type: string
+        tracking_metric:
+          type: string
+        impact_metric:
+          type: string
+        resurfacing_trigger:
+          type: string
+        feedback_to_capture:
+          type: string
+        lesson:
+          type: string
+        tags:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        source_client:
+          type: string
+        source_chat:
+          type: string
+        request_id:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+    ContextRequest:
+      type: object
+      properties:
+        raw_input:
+          type: string
+        q:
+          type: string
+        query:
+          type: string
+        domain:
+          type: string
+        entity:
+          type: string
+        tags:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        signal_role:
+          type: string
+        triggered_by_entry_id:
+          type: string
+        save_cards:
+          type: boolean
+    AcknowledgeAlertRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [waiting, acknowledged, in_progress, done, dismissed]
+        note:
+          type: string
+        result:
+          type: string
+        source_client:
+          type: string
+        source_chat:
+          type: string
+    FeedbackRequest:
+      type: object
+      properties:
+        entry_id:
+          type: string
+        action_id:
+          type: string
+        status:
+          type: string
+        result:
+          type: string
+        lesson:
+          type: string
+        confidence:
+          type: string
+        playbook_relationship:
+          type: string
+        source_client:
+          type: string
+        source_chat:
+          type: string
+    DecisionUpdateRequest:
+      type: object
+      properties:
+        status:
+          type: string
+        lifecycle:
+          type: string
+        current_position:
+          type: string
+        next_review:
+          type: string
+        confidence:
+          type: string
+        tracking_metric:
+          type: string
+        related_query:
+          type: string
+        result:
+          type: string
+        rule_update:
+          type: string
+        outcome:
+          type: string
+        source_client:
+          type: string
+        source_chat:
+          type: string
