@@ -7,7 +7,8 @@
   "duplicate_groups_reconciled": 10,
   "export_success": true,
   "last_export": "2026-07-16T19:58:46Z",
-  "last_push": "",
+  "last_push": "2026-07-16T19:59:36Z",
+  "last_push_commit": "efa70687868a2c0e1ab233c33177f9dcf1713244",
   "orphan_actions": 0,
   "snapshot_age_minutes": 0
 }
