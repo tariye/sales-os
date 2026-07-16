@@ -38,6 +38,8 @@
     "pending_before": 0
   },
   "json_errors": [],
+  "last_push": "2026-07-16T18:52:06Z",
+  "last_push_commit": "9f6d79ff7f55a78b7ec3c4fff0ab16f8cda9ebaf",
   "source_of_truth": "data/info_analyzer.db",
   "validation": {
     "broken_links": 0,
