@@ -1,0 +1,8 @@
+{
+  "generated_at": "2026-07-16T20:20:17Z",
+  "backup": "/tmp/info-analyzer-v087-backups/info_analyzer-20260716-202011.db",
+  "target": "/tmp/info-analyzer-v087-restore.db",
+  "safety_copy": "",
+  "integrity_check": "ok",
+  "status": "pass"
+}

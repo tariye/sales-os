@@ -3,14 +3,14 @@
     {
       "action": "Complete the authenticated API cross-chat loop and record the result.",
       "domain": "Info Analyzer OS",
-      "id": "IA-20260716195818-53DB20",
+      "id": "IA-20260716202129-6A81E6",
       "signal": "Authenticated API can write structured chat memory into the Intelligence Ledger."
     },
     {
-      "action": "Complete the authenticated API cross-chat loop and record the result.",
-      "domain": "Info Analyzer OS",
-      "id": "IA-20260716195816-0C8DB8",
-      "signal": "Authenticated API can write structured chat memory into the Intelligence Ledger."
+      "action": "Test a visual setup checklist during the next onboarding rep.",
+      "domain": "Lab",
+      "id": "IA-20260716202127-FC4355",
+      "signal": "The knowledge-transfer system is inconsistent."
     },
     {
       "action": "insights",
@@ -62,7 +62,7 @@
       ],
       [
         "Lab",
-        6
+        7
       ],
       [
         "Business",
@@ -70,7 +70,7 @@
       ],
       [
         "Info Analyzer OS",
-        2
+        1
       ],
       [
         "AI Project",
@@ -192,7 +192,7 @@
       "status": "open",
       "title": "SK Hynix: investigate, buy, watch, or avoid",
       "tracking_metric": "HBM demand, AI memory pricing, capex discipline, gross margin trend, and customer concentration.",
-      "updated_at": "2026-07-16T19:58:46Z"
+      "updated_at": "2026-07-16T20:21:59Z"
     },
     {
       "aliases": [
@@ -223,7 +223,7 @@
       "status": "open",
       "title": "Nashville transition readiness",
       "tracking_metric": "Cash runway, job pipeline, housing plan, family constraints, and move date confidence.",
-      "updated_at": "2026-07-16T19:58:46Z"
+      "updated_at": "2026-07-16T20:21:59Z"
     },
     {
       "aliases": [
@@ -255,7 +255,7 @@
       "status": "open",
       "title": "Dedicated compute purchase: needed now or defer",
       "tracking_metric": "Utilization hours, blocked workloads, rental cost, project revenue/proof value, and hardware payback period.",
-      "updated_at": "2026-07-16T19:58:46Z"
+      "updated_at": "2026-07-16T20:21:59Z"
     },
     {
       "aliases": [
@@ -287,7 +287,45 @@
       "status": "open",
       "title": "Bassinet pricing and condition strategy",
       "tracking_metric": "Comparable prices, condition score, delivery/setup questions, listing views, saves, offers, and days-to-sale.",
-      "updated_at": "2026-07-16T19:58:46Z"
+      "updated_at": "2026-07-16T20:21:59Z"
+    },
+    {
+      "confidence_after": 0.65,
+      "confidence_before": 0.65,
+      "created_at": "2026-07-16T20:21:29+00:00",
+      "current_rule": "The API is the correct live connection layer for cross-chat intelligence.",
+      "decision_question": "What decision should change for Authenticated Ledger API?",
+      "domain": "Info Analyzer OS",
+      "entity": "Authenticated Ledger API",
+      "entry_id": "IA-20260716202129-6A81E6",
+      "feedback_metric": "Entry saved, retrieved, alert acknowledged, feedback logged.",
+      "id": "DREV-76CA417E95775BC2",
+      "kind": "decision_review",
+      "recommended_change": "Complete the authenticated API cross-chat loop and record the result.",
+      "result": null,
+      "rule_update": null,
+      "signal": "Authenticated API can write structured chat memory into the Intelligence Ledger.",
+      "status": "open",
+      "updated_at": "2026-07-16T20:21:29+00:00"
+    },
+    {
+      "confidence_after": 0.65,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-16T20:21:28+00:00",
+      "current_rule": "Visual setup checklists strengthen knowledge transfer when verbal coaching is inconsistent.",
+      "decision_question": "What decision should change for Operator setup training?",
+      "domain": "Lab",
+      "entity": "Operator setup training",
+      "entry_id": "IA-20260716202127-FC4355",
+      "feedback_metric": "Setup errors and independent completion time.",
+      "id": "DREV-4C15D68EC5FE5173",
+      "kind": "decision_review",
+      "recommended_change": "Test a visual setup checklist during the next onboarding rep.",
+      "result": null,
+      "rule_update": null,
+      "signal": "The knowledge-transfer system is inconsistent.",
+      "status": "open",
+      "updated_at": "2026-07-16T20:21:28+00:00"
     },
     {
       "confidence_after": 0.65,
@@ -366,7 +404,7 @@
       "updated_at": "2026-07-16T18:47:56+00:00"
     }
   ],
-  "generated_at": "2026-07-16T19:58:46Z",
+  "generated_at": "2026-07-16T20:21:59Z",
   "open_loops": [
     {
       "action": "Define the failure mode, mitigation step, and metric to watch.",
@@ -534,7 +572,7 @@
       "status": "active",
       "summary": "Coordinate relocation readiness, cash runway, job search, housing, and family logistics as one operating project.",
       "title": "Nashville Transition",
-      "updated_at": "2026-07-16T19:58:46Z"
+      "updated_at": "2026-07-16T20:21:59Z"
     },
     {
       "aliases": [
@@ -561,7 +599,7 @@
       "status": "active",
       "summary": "Track applications, interviews, proof artifacts, role targeting, and follow-up cadence.",
       "title": "Job Search",
-      "updated_at": "2026-07-16T19:58:46Z"
+      "updated_at": "2026-07-16T20:21:59Z"
     },
     {
       "aliases": [
@@ -588,7 +626,7 @@
       "status": "active",
       "summary": "Build a sourcing, pricing, listing, objection, and sell-through loop for liquidation/resale operations.",
       "title": "Sales OS Liquidation",
-      "updated_at": "2026-07-16T19:58:46Z"
+      "updated_at": "2026-07-16T20:21:59Z"
     },
     {
       "aliases": [
@@ -615,7 +653,7 @@
       "status": "active",
       "summary": "Maintain the decision intelligence system that converts raw inputs into tracked memory, actions, and briefings.",
       "title": "Info Analyzer / Intelligence Ledger",
-      "updated_at": "2026-07-16T19:58:46Z"
+      "updated_at": "2026-07-16T20:21:59Z"
     },
     {
       "aliases": [
@@ -641,7 +679,7 @@
       "status": "active",
       "summary": "Develop a music intelligence system for extracting emotional, structural, sync, and reuse value from audio assets.",
       "title": "Groove OS",
-      "updated_at": "2026-07-16T19:58:46Z"
+      "updated_at": "2026-07-16T20:21:59Z"
     },
     {
       "aliases": [
@@ -667,7 +705,7 @@
       "status": "active",
       "summary": "Build a home/system monitoring concept around signals, thresholds, alerts, and action loops.",
       "title": "Home Sentinel",
-      "updated_at": "2026-07-16T19:58:46Z"
+      "updated_at": "2026-07-16T20:21:59Z"
     },
     {
       "aliases": [
@@ -694,10 +732,22 @@
       "status": "active",
       "summary": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets.",
       "title": "Operator Training Concept Library",
-      "updated_at": "2026-07-16T19:58:46Z"
+      "updated_at": "2026-07-16T20:21:59Z"
     }
   ],
   "recent_accountability": [
+    {
+      "action": "Complete the authenticated API cross-chat loop and record the result.",
+      "id": "ACT-76CA417E95775BC2",
+      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
+      "status": "done"
+    },
+    {
+      "action": "Test a visual setup checklist during the next onboarding rep.",
+      "id": "ACT-4C15D68EC5FE5173",
+      "result": "The visual checklist reduced setup errors from three to one and reduced coaching intervention.",
+      "status": "done"
+    },
     {
       "action": "Complete the authenticated API cross-chat loop and record the result.",
       "id": "ACT-1F2A1D42FE9850A7",
@@ -757,18 +807,6 @@
       "id": "ACT-BD3779C1C3A35259",
       "result": null,
       "status": "cancelled"
-    },
-    {
-      "action": "Click Track Signal or archive the item.",
-      "id": "ACT-DB18EA81C097527C",
-      "result": null,
-      "status": "cancelled"
-    },
-    {
-      "action": "Click Track Signal or archive the item.",
-      "id": "ACT-1AD602A9B31E5E57",
-      "result": null,
-      "status": "cancelled"
     }
   ],
   "recent_changes": [],
@@ -776,14 +814,14 @@
     {
       "domain": "Info Analyzer OS",
       "entity": "Authenticated Ledger API",
-      "id": "IA-20260716195818-53DB20",
+      "id": "IA-20260716202129-6A81E6",
       "lesson": "The API is the correct live connection layer for cross-chat intelligence."
     },
     {
-      "domain": "Info Analyzer OS",
-      "entity": "Authenticated Ledger API",
-      "id": "IA-20260716195816-0C8DB8",
-      "lesson": "The API is the correct live connection layer for cross-chat intelligence."
+      "domain": "Lab",
+      "entity": "Operator setup training",
+      "id": "IA-20260716202127-FC4355",
+      "lesson": "Visual setup checklists strengthen knowledge transfer when verbal coaching is inconsistent."
     },
     {
       "domain": "Business",
@@ -912,9 +950,9 @@
       "domains": [
         "AI Project"
       ],
-      "entry_count": 16,
+      "entry_count": 17,
       "id": "PAT-6F4C139A1CFC52D5",
-      "last_entry_id": "IA-20260716195836-64FC04",
+      "last_entry_id": "IA-20260716202147-F1288D",
       "metadata": {},
       "pattern": "Signals become more powerful when they are broken into labeled assets with metrics, examples, and resurfacing triggers.",
       "tags": [
@@ -930,7 +968,7 @@
         "context",
         "pattern"
       ],
-      "updated_at": "2026-07-16T19:58:36+00:00"
+      "updated_at": "2026-07-16T20:21:48+00:00"
     },
     {
       "confidence": "High",
@@ -938,9 +976,9 @@
       "domains": [
         "Business"
       ],
-      "entry_count": 15,
+      "entry_count": 16,
       "id": "PAT-E593EACF1E255B53",
-      "last_entry_id": "IA-20260716195834-08A7F7",
+      "last_entry_id": "IA-20260716202146-EDC8D3",
       "metadata": {},
       "pattern": "When repeated objections cluster around one offer, test clarity before adding more traffic.",
       "tags": [
@@ -961,9 +999,10 @@
         "1783968142",
         "1784144491",
         "1784227781",
-        "1784231914"
+        "1784231914",
+        "1784233306"
       ],
-      "updated_at": "2026-07-16T19:58:34+00:00"
+      "updated_at": "2026-07-16T20:21:46+00:00"
     },
     {
       "confidence": "High",

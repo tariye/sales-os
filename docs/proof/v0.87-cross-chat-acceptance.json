@@ -1,0 +1,115 @@
+{
+  "generated_at": "2026-07-16T20:21:28Z",
+  "base_url": "http://127.0.0.1:8011",
+  "entry_id": "IA-20260716202127-FC4355",
+  "action_id": "ACT-4C15D68EC5FE5173",
+  "summary": {
+    "passed": 9,
+    "failed": 0,
+    "total": 9
+  },
+  "checks": [
+    {
+      "name": "health_runtime",
+      "ok": true,
+      "evidence": {
+        "ok": true,
+        "version": "v0.87-external-runtime-chat-bridge",
+        "api": "v1",
+        "sqlite": {
+          "journal_mode": "wal",
+          "foreign_keys": true,
+          "busy_timeout_ms": 5000,
+          "quick_check": "ok",
+          "persistent_path_configured": false
+        }
+      }
+    },
+    {
+      "name": "cross_chat_write",
+      "ok": true,
+      "evidence": {
+        "entry_id": "IA-20260716202127-FC4355",
+        "action_id": "ACT-4C15D68EC5FE5173"
+      }
+    },
+    {
+      "name": "idempotency_replay",
+      "ok": true,
+      "evidence": {
+        "entry_id": "IA-20260716202127-FC4355",
+        "replay_entry_id": "IA-20260716202127-FC4355"
+      }
+    },
+    {
+      "name": "cross_chat_retrieval",
+      "ok": true,
+      "evidence": {
+        "count": 5,
+        "entry_id": "IA-20260716202127-FC4355",
+        "source_chat": "chat-a"
+      }
+    },
+    {
+      "name": "related_context",
+      "ok": true,
+      "evidence": {
+        "keys": [
+          "cards",
+          "principle",
+          "stats"
+        ]
+      }
+    },
+    {
+      "name": "alert_returned",
+      "ok": true,
+      "evidence": {
+        "id": "ACT-4C15D68EC5FE5173",
+        "type": "action",
+        "severity": "warning",
+        "title": "Test a visual setup checklist during the next onboarding rep.",
+        "why": "The knowledge-transfer system is inconsistent.",
+        "domain": "Lab",
+        "entity": "Operator setup training",
+        "source_entry_id": "IA-20260716202127-FC4355",
+        "recommended_action": "Test a visual setup checklist during the next onboarding rep.",
+        "tracking_metric": "Setup errors and independent completion time.",
+        "status": "open"
+      }
+    },
+    {
+      "name": "alert_acknowledgement",
+      "ok": true,
+      "evidence": {
+        "alert_id": "ACT-4C15D68EC5FE5173",
+        "type": "action"
+      }
+    },
+    {
+      "name": "feedback_loop",
+      "ok": true,
+      "evidence": {
+        "entry_id": "IA-20260716202127-FC4355",
+        "action_id": "ACT-4C15D68EC5FE5173"
+      }
+    },
+    {
+      "name": "security_invalid_key",
+      "ok": true,
+      "evidence": {
+        "status": 401,
+        "body": {
+          "success": false,
+          "data": {},
+          "error": {
+            "code": "unauthorized",
+            "message": "Invalid or missing API key."
+          },
+          "request_id": "REQ-20260716202128-7CF51A"
+        }
+      }
+    }
+  ],
+  "status": "pass"
+}

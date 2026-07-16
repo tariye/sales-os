@@ -1,0 +1,11 @@
+{
+  "db_path": "/tmp/info-analyzer-v087-runtime.db",
+  "sqlite": {
+    "journal_mode": "wal",
+    "foreign_keys": true,
+    "busy_timeout_ms": 5000,
+    "quick_check": "ok",
+    "persistent_path_configured": true
+  },
+  "status": "pass"
+}

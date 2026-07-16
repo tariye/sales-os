@@ -1,0 +1,17 @@
+[Unit]
+Description=Info Analyzer OS API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/info-analyzer
+Environment=INFO_ANALYZER_DB_PATH=/var/lib/info-analyzer/info_analyzer.db
+Environment=INFO_ANALYZER_API_KEY=replace-with-host-secret-manager-value
+ExecStart=/usr/bin/python3 /opt/info-analyzer/server.py --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

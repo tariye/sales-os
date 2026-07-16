@@ -481,6 +481,19 @@ components:
                   type: string
                 api:
                   type: string
+                sqlite:
+                  type: object
+                  properties:
+                    journal_mode:
+                      type: string
+                    foreign_keys:
+                      type: boolean
+                    busy_timeout_ms:
+                      type: integer
+                    quick_check:
+                      type: string
+                    persistent_path_configured:
+                      type: boolean
     LedgerEntryEnvelope:
       allOf:
         - $ref: "#/components/schemas/EnvelopeBase"

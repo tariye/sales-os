@@ -233,6 +233,29 @@
     },
     {
       "aliases": [
+        "Authenticated Ledger API",
+        "Authenticated Ledger Api",
+        "authenticated ledger api"
+      ],
+      "canonical_entity_id": "entity-79d6755f090c",
+      "canonical_name": "Authenticated Ledger API",
+      "domain": "Info Analyzer OS",
+      "id": "alias-79d6755f090c",
+      "metadata": {
+        "method": "same normalized domain/entity grouped under a canonical entity id",
+        "provenance": "memory_manager",
+        "source": "duplicate_entity_reconciliation"
+      },
+      "related_entry_ids": [
+        "IA-20260716184905-639A12",
+        "IA-20260716195816-0C8DB8",
+        "IA-20260716195818-53DB20",
+        "IA-20260716202129-6A81E6"
+      ],
+      "source_record_count": 4
+    },
+    {
+      "aliases": [
         "SALES",
         "Sales",
         "sales"
@@ -253,28 +276,6 @@
         "IA-20260627220329-8A5467"
       ],
       "source_record_count": 4
-    },
-    {
-      "aliases": [
-        "Authenticated Ledger API",
-        "Authenticated Ledger Api",
-        "authenticated ledger api"
-      ],
-      "canonical_entity_id": "entity-79d6755f090c",
-      "canonical_name": "Authenticated Ledger API",
-      "domain": "Info Analyzer OS",
-      "id": "alias-79d6755f090c",
-      "metadata": {
-        "method": "same normalized domain/entity grouped under a canonical entity id",
-        "provenance": "memory_manager",
-        "source": "duplicate_entity_reconciliation"
-      },
-      "related_entry_ids": [
-        "IA-20260716184905-639A12",
-        "IA-20260716195816-0C8DB8",
-        "IA-20260716195818-53DB20"
-      ],
-      "source_record_count": 3
     },
     {
       "aliases": [

@@ -1,0 +1,10 @@
+{
+  "generated_at": "2026-07-16T20:20:11Z",
+  "source": "/Users/admin/Library/Mobile Documents/com~apple~CloudDocs/Downloads/info_analyzer_os_sqlite_v0_3_clean/data/info_analyzer.db",
+  "backup": "/tmp/info-analyzer-v087-backups/info_analyzer-20260716-202011.db",
+  "bytes": 6660096,
+  "integrity_check": "ok",
+  "journal_mode": "wal",
+  "foreign_keys": true,
+  "status": "pass"
+}

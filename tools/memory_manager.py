@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -18,7 +19,10 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DB_PATH = ROOT / "data" / "info_analyzer.db"
+DB_PATH_RAW = os.environ.get("INFO_ANALYZER_DB_PATH", "").strip()
+DB_PATH = Path(DB_PATH_RAW).expanduser() if DB_PATH_RAW else ROOT / "data" / "info_analyzer.db"
+if not DB_PATH.is_absolute():
+    DB_PATH = ROOT / DB_PATH
 MEMORY_DIR = ROOT / "memory"
 SNAPSHOT_DIR = MEMORY_DIR / "snapshots"
 ARCHIVE_DIR = MEMORY_DIR / "archive"
@@ -198,6 +202,9 @@ def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
 def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
 
 

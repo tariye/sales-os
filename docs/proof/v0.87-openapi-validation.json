@@ -1,0 +1,152 @@
+{
+  "generated_at": "2026-07-16T20:19:56+00:00",
+  "schema": "docs/openapi/info-analyzer-v1.yaml",
+  "summary": {
+    "passed": 35,
+    "failed": 0,
+    "total": 35
+  },
+  "checks": [
+    {
+      "name": "path:/api/v1/health",
+      "ok": true
+    },
+    {
+      "name": "path:/api/v1/entries",
+      "ok": true
+    },
+    {
+      "name": "path:/api/v1/entries/search",
+      "ok": true
+    },
+    {
+      "name": "path:/api/v1/context",
+      "ok": true
+    },
+    {
+      "name": "path:/api/v1/action_queue",
+      "ok": true
+    },
+    {
+      "name": "path:/api/v1/critical_alerts",
+      "ok": true
+    },
+    {
+      "name": "path:/api/v1/alerts/{alert_id}/acknowledge",
+      "ok": true
+    },
+    {
+      "name": "path:/api/v1/feedback",
+      "ok": true
+    },
+    {
+      "name": "path:/api/v1/actions/{action_id}/feedback",
+      "ok": true
+    },
+    {
+      "name": "path:/api/v1/decisions/{decision_id}",
+      "ok": true
+    },
+    {
+      "name": "operationId:getApiHealth",
+      "ok": true
+    },
+    {
+      "name": "operationId:createLedgerEntry",
+      "ok": true
+    },
+    {
+      "name": "operationId:searchLedgerEntries",
+      "ok": true
+    },
+    {
+      "name": "operationId:retrieveContext",
+      "ok": true
+    },
+    {
+      "name": "operationId:getActionQueue",
+      "ok": true
+    },
+    {
+      "name": "operationId:getCriticalAlerts",
+      "ok": true
+    },
+    {
+      "name": "operationId:acknowledgeAlert",
+      "ok": true
+    },
+    {
+      "name": "operationId:logFeedback",
+      "ok": true
+    },
+    {
+      "name": "operationId:updateActionFeedback",
+      "ok": true
+    },
+    {
+      "name": "operationId:updateDecision",
+      "ok": true
+    },
+    {
+      "name": "term:openapi: 3.1.0",
+      "ok": true
+    },
+    {
+      "name": "term:securitySchemes:",
+      "ok": true
+    },
+    {
+      "name": "term:bearerAuth:",
+      "ok": true
+    },
+    {
+      "name": "term:apiKeyHeader:",
+      "ok": true
+    },
+    {
+      "name": "term:Idempotency-Key",
+      "ok": true
+    },
+    {
+      "name": "term:X-Request-ID",
+      "ok": true
+    },
+    {
+      "name": "term:X-Source-Client",
+      "ok": true
+    },
+    {
+      "name": "term:X-Source-Chat",
+      "ok": true
+    },
+    {
+      "name": "term:EnvelopeBase",
+      "ok": true
+    },
+    {
+      "name": "term:ErrorEnvelope",
+      "ok": true
+    },
+    {
+      "name": "term:\"400\":",
+      "ok": true
+    },
+    {
+      "name": "term:\"401\":",
+      "ok": true
+    },
+    {
+      "name": "term:\"404\":",
+      "ok": true
+    },
+    {
+      "name": "term:\"409\":",
+      "ok": true
+    },
+    {
+      "name": "term:\"500\":",
+      "ok": true
+    }
+  ],
+  "status": "pass"
+}

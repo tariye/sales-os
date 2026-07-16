@@ -57,10 +57,24 @@ def configured_api_key() -> str:
 BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
-DB_PATH = DATA_DIR / "info_analyzer.db"
+DB_PATH_RAW = os.environ.get("INFO_ANALYZER_DB_PATH", "").strip()
+DB_PATH = Path(DB_PATH_RAW).expanduser() if DB_PATH_RAW else DATA_DIR / "info_analyzer.db"
+if not DB_PATH.is_absolute():
+    DB_PATH = BASE_DIR / DB_PATH
 
-APP_VERSION = "v0.86-chatgpt-action-contract"
+APP_VERSION = "v0.87-external-runtime-chat-bridge"
 APP_VERSIONS = [
+    {
+        "version": "v0.87",
+        "name": "External Runtime + Chat Bridge",
+        "features": [
+            "Added persistent runtime configuration for hosted SQLite via INFO_ANALYZER_DB_PATH",
+            "Enforced SQLite foreign keys, WAL mode, and busy timeout on every application connection",
+            "Added backup/restore tooling for persistent ledger operations",
+            "Added a cross-chat acceptance runner for deployed ChatGPT Action validation",
+            "Documented stable HTTPS deployment, secret handling, persistent disk, and production acceptance criteria",
+        ],
+    },
     {
         "version": "v0.86",
         "name": "ChatGPT Action Contract",
@@ -817,12 +831,28 @@ class ClosingConnection(sqlite3.Connection):
 
 
 def connect() -> sqlite3.Connection:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, factory=ClosingConnection)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
+
+
+def sqlite_runtime_status() -> dict:
+    with connect() as conn:
+        journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        foreign_keys = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+        busy_timeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+        integrity = conn.execute("PRAGMA quick_check").fetchone()[0]
+    return {
+        "journal_mode": journal_mode,
+        "foreign_keys": bool(foreign_keys),
+        "busy_timeout_ms": int(busy_timeout),
+        "quick_check": integrity,
+        "persistent_path_configured": bool(DB_PATH_RAW),
+    }
 
 
 def _fix_weak_action_titles(conn) -> None:
@@ -855,7 +885,7 @@ def _fix_weak_action_titles(conn) -> None:
 
 
 def init_db() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with connect() as conn:
         conn.executescript("""
         CREATE TABLE IF NOT EXISTS entries (
@@ -6628,7 +6658,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
         try:
             if path == "/api/v1/health":
-                data = {"ok": True, "version": APP_VERSION, "api": "v1"}
+                data = {"ok": True, "version": APP_VERSION, "api": "v1", "sqlite": sqlite_runtime_status()}
             elif path == "/api/v1/entries/search":
                 data = api_v1_search_entries(params)
             elif path == "/api/v1/action_queue":
@@ -6729,7 +6759,7 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/style.css":
                 return self.send_file(WEB_DIR / "style.css", "text/css; charset=utf-8")
             if path == "/api/health":
-                return self.send_json({"ok": True, "app": "Info Analyzer OS", "version": APP_VERSION, "db_path": str(DB_PATH)})
+                return self.send_json({"ok": True, "app": "Info Analyzer OS", "version": APP_VERSION, "db_path": str(DB_PATH), "sqlite": sqlite_runtime_status()})
             if path == "/api/ai/status":
                 key_set = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
                 sdk_ok = _anthropic is not None

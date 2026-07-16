@@ -54,7 +54,17 @@ def main() -> int:
     )
     status, health = request(args.base_url, "GET", "/api/v1/health", args.api_key)
     health_data = data_from(health)
+    sqlite_state = health_data.get("sqlite") or {}
     checks = [{"name": "health", "status": status, "ok": health_data.get("ok") is True, "evidence": health}]
+    checks.append({
+        "name": "sqlite_runtime",
+        "status": status,
+        "ok": sqlite_state.get("journal_mode") == "wal"
+        and sqlite_state.get("foreign_keys") is True
+        and int(sqlite_state.get("busy_timeout_ms") or 0) >= 5000
+        and sqlite_state.get("quick_check") == "ok",
+        "evidence": sqlite_state,
+    })
 
     entry_payload = {
         "title": f"API v1 cross-chat loop test {nonce}",
