@@ -118,17 +118,50 @@ def check_actions_context(api: ApiClient) -> dict:
 def check_pull(api: ApiClient) -> dict:
     data = api.post("/api/pull", {"query": "sales", "domain": "Business"})
     cards = (data.get("quick_actions") or []) + (data.get("big_picture_actions") or [])
+    cleanup_entry_id = None
+    if not cards:
+        seeded = api.post("/api/entries", {
+            "title": f"Loop QA sales seed {int(time.time())}",
+            "raw_input": (
+                "Sales signal: buyers are asking for total delivered price before they commit. "
+                "Clarify pricing, delivery, and setup to reduce objections and improve close rate."
+            ),
+            "domain": "Business",
+            "entity": "Sales QA",
+            "source_type": "Observation",
+            "signal_role": "opportunity",
+            "signal": "Price-clarity objections are blocking sales conversion.",
+            "interpretation": "The pull engine should return an actionable sales card when pricing objections recur.",
+            "actionability": "next",
+            "trackable_as": "sales objection cluster",
+            "tracking_metric": "Objection frequency and conversion rate after copy change.",
+            "returned_action": "Clarify delivered price and setup in the listing or offer page.",
+            "first_step": "Rewrite the pricing section with one total delivered-price sentence.",
+            "feedback_to_capture": "Whether objections fall and conversions improve.",
+            "status": "codified",
+            "tags": ["sales", "pricing", "loop-check"],
+        })
+        cleanup_entry_id = ((seeded.get("entry") or {}).get("id")) or seeded.get("entry_id")
+        data = api.post("/api/pull", {"query": "sales", "domain": "Business"})
+        cards = (data.get("quick_actions") or []) + (data.get("big_picture_actions") or [])
     top = cards[0] if cards else {}
-    return assert_condition(
-        bool(cards and top.get("recommended_action")),
-        "pull_sales",
-        "Pull Engine returns an actionable sales card.",
-        {
-            "card_count": len(cards),
-            "top_title": top.get("title"),
-            "top_metric": top.get("tracking_metric"),
-        },
-    )
+    try:
+        return assert_condition(
+            bool(cards and top.get("recommended_action")),
+            "pull_sales",
+            "Pull Engine returns an actionable sales card.",
+            {
+                "card_count": len(cards),
+                "top_title": top.get("title"),
+                "top_metric": top.get("tracking_metric"),
+            },
+        )
+    finally:
+        if cleanup_entry_id:
+            try:
+                api.delete(f"/api/entries/{urllib.parse.quote(cleanup_entry_id)}")
+            except Exception:
+                pass
 
 
 def check_live_ingest(api: ApiClient) -> dict:

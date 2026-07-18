@@ -367,6 +367,7 @@ function switchTab(tab){
   if(tab==="memory") loadMemory();
   if(tab==="actions") loadActions();
   if(tab==="patterns") loadPatterns();
+  if(tab==="system") loadSystemHealth();
   if(tab==="changelog") loadChangelog();
 }
 
@@ -743,6 +744,110 @@ async function loadChangelog(){
   const totalFeatures = versions.reduce((n,v)=>n+(v.features||[]).length, 0);
   $("changelogMeta").textContent = `${versions.length} versions · ${totalFeatures} shipped features · ${esc(current)}`;
   $("changelogList").innerHTML = versions.map(v=>changelogEntryHTML(v, current)).join("");
+}
+function healthBadge(status){
+  const normalized = String(status || "unknown").trim() || "unknown";
+  const tone = normalized === "healthy" ? "good" : (normalized === "stale" ? "warn" : (normalized === "failed" || normalized === "dead_letter" ? "bad" : "muted"));
+  return `<span class="pill ${tone}">${esc(normalized)}</span>`;
+}
+function runtimeStatusHTML(label, state){
+  const lease = state?.lease || {};
+  const runtime = state?.runtime || state || {};
+  return `<div class="item">
+    <h3>${esc(label)}</h3>
+    <div class="meta">
+      ${healthBadge(runtime.alive ? (runtime.is_leader === false ? "standby" : "healthy") : "failed")}
+      ${runtime.owner_id ? `<span class="tag">${esc(runtime.owner_id)}</span>` : ""}
+      ${runtime.worker_id ? `<span class="tag">${esc(runtime.worker_id)}</span>` : ""}
+    </div>
+    ${kvHTML("Last heartbeat", runtime.last_heartbeat_at || "")}
+    ${kvHTML("Leader", String(runtime.is_leader ?? ""))}
+    ${kvHTML("Current job", runtime.current_job_id || "")}
+    ${kvHTML("Lease owner", lease.owner_id || "")}
+    ${kvHTML("Lease expires", lease.expires_at || "")}
+  </div>`;
+}
+function sourceHealthHTML(source){
+  const latest = source.latest_ingest_status || "none";
+  const events = (source.recent_events || []).slice(0,2).map(event => `${event.event_type}: ${event.message}`).join(" • ");
+  return `<div class="item">
+    <h3>${esc(source.source_id)}</h3>
+    <div class="meta">
+      ${healthBadge(source.status)}
+      <span class="tag">queued ${esc(source.queued_jobs || 0)}</span>
+      <span class="tag">running ${esc(source.running_jobs || 0)}</span>
+      <span class="tag">dead ${esc(source.dead_letter_jobs || 0)}</span>
+    </div>
+    ${kvHTML("Last success", source.last_success_at || "")}
+    ${kvHTML("Last attempt", source.last_attempt_at || "")}
+    ${kvHTML("Latest ingest", latest)}
+    ${kvHTML("Latest payload hash", source.latest_payload_hash || "")}
+    ${kvHTML("Freshness age", source.current_age_seconds !== null && source.current_age_seconds !== undefined ? `${source.current_age_seconds}s / target ${source.freshness_target_seconds}s` : "never run")}
+    ${events ? kvHTML("Events", events) : ""}
+  </div>`;
+}
+function systemJobHTML(job){
+  const payload = job.payload || {};
+  return `<div class="item">
+    <h3>${esc(job.id)}</h3>
+    <div class="meta">
+      ${healthBadge(job.status)}
+      <span class="tag">${esc(job.source_id || "")}</span>
+      ${payload.scenario ? `<span class="tag">${esc(payload.scenario)}</span>` : ""}
+    </div>
+    ${kvHTML("Scheduled", job.scheduled_for || "")}
+    ${kvHTML("Claimed by", job.claimed_by || "")}
+    ${kvHTML("Attempts", `${job.attempts || 0} / ${job.max_attempts || 0}`)}
+    ${kvHTML("Last error", job.last_error_message || "")}
+  </div>`;
+}
+function ingestRunHTML(run){
+  return `<div class="item">
+    <h3>${esc(run.id)}</h3>
+    <div class="meta">
+      ${healthBadge(run.status)}
+      <span class="tag">${esc(run.source_id || "")}</span>
+      <span class="tag">rows ${esc(run.row_count || 0)}</span>
+    </div>
+    ${kvHTML("Started", run.started_at || "")}
+    ${kvHTML("Finished", run.finished_at || "")}
+    ${kvHTML("Payload hash", run.payload_hash || "")}
+    ${kvHTML("Error", run.error_message || "")}
+  </div>`;
+}
+async function loadSystemHealth(){
+  const [health, jobs, runs] = await Promise.all([
+    api("/data-plane/source-health"),
+    api("/data-plane/jobs?limit=12"),
+    api("/data-plane/ingest-runs?limit=12"),
+  ]);
+  const scheduler = health.scheduler || {};
+  const worker = health.worker || {};
+  const sources = health.sources || [];
+  const staleCount = sources.filter(source => source.status === "stale").length;
+  const failedCount = sources.filter(source => source.status === "failed").length;
+  const deadJobs = sources.reduce((n, source) => n + Number(source.dead_letter_jobs || 0), 0);
+  $("systemHealthStats").innerHTML = [
+    ["Sources", sources.length],
+    ["Stale", staleCount],
+    ["Failed", failedCount],
+    ["Dead jobs", deadJobs],
+    ["Scheduler leader", scheduler?.runtime?.is_leader ? "yes" : "no"],
+    ["Worker alive", worker?.alive ? "yes" : "no"],
+  ].map(([k,v])=>`<div class="stat"><strong>${esc(v)}</strong><span class="muted">${esc(k)}</span></div>`).join("");
+  $("systemRuntimeList").innerHTML = [
+    runtimeStatusHTML("Scheduler", scheduler),
+    runtimeStatusHTML("Worker", worker),
+  ].join("");
+  $("systemSourcesList").innerHTML = sources.length
+    ? sources.map(sourceHealthHTML).join("")
+    : `<div class="item"><h3>No sources</h3><p class="muted">Milestone 1 source registry is empty.</p></div>`;
+  $("systemJobsList").innerHTML = (jobs.jobs || []).length
+    ? jobs.jobs.map(systemJobHTML).join("")
+    : `<div class="item"><h3>No jobs</h3><p class="muted">The queue is empty.</p></div>`;
+  $("systemRunsList").innerHTML = (runs.ingest_runs || []).length
+    ? runs.ingest_runs.map(ingestRunHTML).join("")
+    : `<div class="item"><h3>No ingest runs</h3><p class="muted">No collection attempts have been recorded yet.</p></div>`;
 }
 
 async function codify(){
@@ -1525,6 +1630,13 @@ async function checkAiStatus(){
     }
   } catch(e) { /* silent — don't break load if status check fails */ }
 }
+async function initializeApp(){
+  await Promise.allSettled([
+    loadCommand(),
+    checkAiStatus(),
+    updateQueueBadge(),
+  ]);
+}
 
 $("codifyBtn").addEventListener("click", codify);
 $("loopBtn").addEventListener("click", loopAnalyze);
@@ -1539,6 +1651,7 @@ if($("refreshDecisionInbox")) $("refreshDecisionInbox").addEventListener("click"
 $("dormantBtn").addEventListener("click", loadDormant);
 $("refreshPatterns").addEventListener("click", loadPatterns);
 $("scanPatterns").addEventListener("click", runPatternEngine);
+if($("refreshSystemHealth")) $("refreshSystemHealth").addEventListener("click", loadSystemHealth);
 $("refreshChangelog").addEventListener("click", loadChangelog);
 $("refreshQueue").addEventListener("click", loadQueue);
 $("refreshLiveBtn").addEventListener("click", loadLiveDashboard);
@@ -1553,10 +1666,6 @@ $("searchInput").addEventListener("input", ()=>{ clearTimeout(window.__searchTim
 $("filterDomain").addEventListener("change", loadMemory);
 $("clearBtn").addEventListener("click", ()=>{ document.querySelectorAll("textarea,input").forEach(el=>{ if(!["searchInput"].includes(el.id)) el.value=""; }); $("sourceTypeInput").value=""; $("draftPill").textContent="empty"; $("draftPill").className="pill muted"; $("saveOutput").innerHTML=""; });
 $("exportBtn").addEventListener("click", ()=>{ window.location.href="/api/export"; });
-
-loadCommand();
-checkAiStatus();
-updateQueueBadge();
 
 // WELCOME MODAL EVENT LISTENERS
 if($("closeWelcomeBtn")) $("closeWelcomeBtn").addEventListener("click", closeWelcome);

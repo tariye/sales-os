@@ -1,0 +1,153 @@
+{
+  "generated_at": "2026-07-18T21:41:52+00:00",
+  "summary": {
+    "passed": 20,
+    "failed": 0,
+    "skipped": 0,
+    "total": 20
+  },
+  "checks": [
+    {
+      "name": "test_01_scheduler_creates_due_job_while_ui_closed",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_01_scheduler_creates_due_job_while_ui_closed",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_02_only_one_scheduler_leader_holds_active_lease",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_02_only_one_scheduler_leader_holds_active_lease",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_03_expired_scheduler_lease_can_be_recovered",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_03_expired_scheduler_lease_can_be_recovered",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_04_worker_atomically_claims_one_job",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_04_worker_atomically_claims_one_job",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_05_second_worker_cannot_claim_same_active_job",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_05_second_worker_cannot_claim_same_active_job",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_06_every_collection_attempt_creates_ingest_run",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_06_every_collection_attempt_creates_ingest_run",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_07_successful_fixture_pull_stores_one_immutable_raw_snapshot",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_07_successful_fixture_pull_stores_one_immutable_raw_snapshot",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_08_identical_retry_does_not_create_another_raw_snapshot",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_08_identical_retry_does_not_create_another_raw_snapshot",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_09_duplicate_detection_remains_auditable_through_ingest_run",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_09_duplicate_detection_remains_auditable_through_ingest_run",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_10_changed_fixture_content_creates_new_snapshot",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_10_changed_fixture_content_creates_new_snapshot",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_11_failed_jobs_retry_according_to_policy",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_11_failed_jobs_retry_according_to_policy",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_12_terminal_failure_enters_dead_letter",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_12_terminal_failure_enters_dead_letter",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_13_failed_and_stale_sources_create_source_health_events",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_13_failed_and_stale_sources_create_source_health_events",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_14_restart_recovery_returns_abandoned_jobs_to_valid_state",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_14_restart_recovery_returns_abandoned_jobs_to_valid_state",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_15_raw_payload_text_remains_unchanged_after_storage",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_15_raw_payload_text_remains_unchanged_after_storage",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_16_raw_snapshots_cannot_be_overwritten_through_application_layer",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_16_raw_snapshots_cannot_be_overwritten_through_application_layer",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_17_source_health_distinguishes_healthy_stale_failed_and_never_run",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_17_source_health_distinguishes_healthy_stale_failed_and_never_run",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_18_sqlite_pragmas_remain_active",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_18_sqlite_pragmas_remain_active",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_19_info_analyzer_db_path_persistence_remains_functional",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_19_info_analyzer_db_path_persistence_remains_functional",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "test_20_existing_v1_api_and_full_site_regression_tests_still_pass",
+      "test_id": "test_data_plane_milestone_1.DataPlaneMilestone1TestCase.test_20_existing_v1_api_and_full_site_regression_tests_still_pass",
+      "status": "pass",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "status": "pass",
+  "socket_tests_enabled": true
+}

@@ -28,6 +28,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 from xml.etree import ElementTree as ET
 
+import data_plane_m1
+
 try:
     import anthropic as _anthropic
 except Exception:
@@ -62,8 +64,18 @@ DB_PATH = Path(DB_PATH_RAW).expanduser() if DB_PATH_RAW else DATA_DIR / "info_an
 if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
 
-APP_VERSION = "v0.87-external-runtime-chat-bridge"
+APP_VERSION = "v0.88-data-plane-m1-backbone"
 APP_VERSIONS = [
+    {
+        "version": "v0.88",
+        "name": "Data Plane Milestone 1 Backbone",
+        "features": [
+            "Added a persistent Milestone 1 evidence-ingestion backbone with sources, jobs, ingest runs, raw snapshots, and source health",
+            "Added a database-backed scheduler lease, background scheduler, and worker runtime against INFO_ANALYZER_DB_PATH",
+            "Added deterministic fixture ingestion, duplicate raw-snapshot protection, retries, dead-letter flow, and source-health events",
+            "Added thin System Health APIs and a browser view without changing the existing cockpit architecture",
+        ],
+    },
     {
         "version": "v0.87",
         "name": "External Runtime + Chat Bridge",
@@ -515,6 +527,7 @@ PULL_TRIGGER_TYPES = {"tag", "entity", "domain", "review_date", "threshold", "re
 CARD_TYPES = {"Action Card", "Watch Card", "Pattern Card", "Risk Card", "Opportunity Card", "Contradiction Card", "Proof Card", "Review Card", "Preference Card", "Reference Card", "Archive Card"}
 REL_TYPES = {"connects", "validates", "contradicts", "expands", "refines", "supersedes", "produces", "repeats"}
 DOMAINS = ["Lab", "Investing", "Business", "Career", "Fitness", "Network+", "Music", "AI Project", "Info Analyzer OS", "Personal Finance", "Personal Preference", "Other"]
+DATA_PLANE_RUNTIME: data_plane_m1.RuntimeService | None = None
 
 
 def now_iso() -> str:
@@ -1503,6 +1516,7 @@ def init_db() -> None:
         # Command Center. Running it on every startup can block the server
         # from binding while the memory graph is recomputed.
         conn.commit()
+    data_plane_m1.apply_migrations(DB_PATH)
 
 
 def ensure_column(conn, table: str, column: str, definition: str) -> None:
@@ -6777,6 +6791,34 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(version_history())
             if path == "/api/import/capabilities":
                 return self.send_json(workbook_import_capabilities())
+            if path == "/api/data-plane/sources":
+                return self.send_json(data_plane_m1.list_sources(DB_PATH))
+            if path == "/api/data-plane/source-health":
+                return self.send_json(data_plane_m1.list_source_health(DB_PATH, DATA_PLANE_RUNTIME))
+            if path == "/api/data-plane/jobs":
+                limit = int(clean_text((params.get("limit") or ["50"])[0]) or 50)
+                return self.send_json(data_plane_m1.list_jobs(DB_PATH, limit=limit))
+            if path == "/api/data-plane/ingest-runs":
+                limit = int(clean_text((params.get("limit") or ["50"])[0]) or 50)
+                return self.send_json(data_plane_m1.list_ingest_runs(DB_PATH, limit=limit))
+            if path == "/api/data-plane/raw-snapshots":
+                limit = int(clean_text((params.get("limit") or ["50"])[0]) or 50)
+                return self.send_json(data_plane_m1.list_raw_snapshot_metadata(DB_PATH, limit=limit))
+            if path == "/api/data-plane/scheduler":
+                return self.send_json(data_plane_m1.scheduler_status(DB_PATH, DATA_PLANE_RUNTIME))
+            if path == "/api/data-plane/worker":
+                return self.send_json(data_plane_m1.worker_status(DATA_PLANE_RUNTIME))
+            if path.startswith("/api/data-plane/sources/") and path.endswith("/health"):
+                source_id = unquote(path.split("/api/data-plane/sources/", 1)[1].rsplit("/health", 1)[0])
+                return self.send_json(data_plane_m1.read_source_health(DB_PATH, source_id, DATA_PLANE_RUNTIME))
+            if path.startswith("/api/data-plane/sources/"):
+                return self.send_json(data_plane_m1.get_source(DB_PATH, unquote(path.split("/api/data-plane/sources/", 1)[1])))
+            if path.startswith("/api/data-plane/jobs/"):
+                return self.send_json(data_plane_m1.get_job(DB_PATH, unquote(path.split("/api/data-plane/jobs/", 1)[1])))
+            if path.startswith("/api/data-plane/ingest-runs/"):
+                return self.send_json(data_plane_m1.get_ingest_run(DB_PATH, unquote(path.split("/api/data-plane/ingest-runs/", 1)[1])))
+            if path.startswith("/api/data-plane/raw-snapshots/"):
+                return self.send_json(data_plane_m1.get_raw_snapshot_metadata(DB_PATH, unquote(path.split("/api/data-plane/raw-snapshots/", 1)[1])))
             if path == "/api/ingest/sources":
                 return self.send_json(list_ingest_sources())
             if path == "/api/live-signals":
@@ -6918,6 +6960,19 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(translation_contract(payload))
             if path == "/api/import/workbook":
                 return self.send_json(import_workbook_path(payload.get("path") or payload.get("source_path") or ""), 201)
+            if path == "/api/data-plane/jobs/fixture-enqueue":
+                source_id = payload.get("source_id") or data_plane_m1.DEFAULT_SOURCE_ID
+                scenario = payload.get("scenario") or "success_alpha"
+                max_attempts = int(payload.get("max_attempts") or 3)
+                idempotency_key = clean_text(payload.get("idempotency_key") or "") or None
+                job = data_plane_m1.create_job(
+                    DB_PATH,
+                    source_id,
+                    scenario,
+                    idempotency_key=idempotency_key,
+                    max_attempts=max_attempts,
+                )
+                return self.send_json({"job": job}, 201)
             if path == "/api/ingest/sources":
                 return self.send_json(create_ingest_source(payload), 201)
             if path == "/api/ingest/run":
@@ -7059,6 +7114,7 @@ class Server(ThreadingHTTPServer):
 
 
 def main(argv=None):
+    global DATA_PLANE_RUNTIME
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", default=8000, type=int)
@@ -7074,6 +7130,8 @@ def main(argv=None):
             print(result["notes"])
     if args.no_serve:
         return
+    DATA_PLANE_RUNTIME = data_plane_m1.RuntimeService(DB_PATH)
+    DATA_PLANE_RUNTIME.start()
     httpd = Server((args.host, args.port), Handler)
     print(f"Info Analyzer OS {APP_VERSION} running at http://{args.host}:{args.port}")
     print(f"SQLite DB: {DB_PATH}")
@@ -7083,6 +7141,9 @@ def main(argv=None):
         print("\nShutting down.")
     finally:
         httpd.server_close()
+        if DATA_PLANE_RUNTIME is not None:
+            DATA_PLANE_RUNTIME.stop()
+            DATA_PLANE_RUNTIME = None
 
 
 if __name__ == "__main__":

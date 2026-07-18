@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Info Analyzer OS v0.85</title>
-  <link rel="stylesheet" href="/style.css?v=0.82.2" />
+  <title>Info Analyzer OS v0.88</title>
+  <link rel="stylesheet" href="/style.css?v=0.88.0" />
 </head>
 <body>
   <!-- WELCOME MODAL -->
@@ -40,7 +40,7 @@
   <header class="app-header">
     <div>
       <p class="eyebrow">Intelligence OS</p>
-      <h1>Info Analyzer OS <span>v0.85</span></h1>
+      <h1>Info Analyzer OS <span>v0.88</span></h1>
       <p class="subtitle">Capture raw input, contextualize it into memory, and resurface only what changes a decision.</p>
     </div>
     <div class="header-actions">
@@ -59,6 +59,7 @@
     <button class="tab" data-tab="memory" title="All saved observations and patterns">Memory DB</button>
     <button class="tab" data-tab="actions" title="Next actions and tasks to execute">Actions</button>
     <button class="tab" data-tab="patterns" title="Cross-domain insights and themes">Patterns</button>
+    <button class="tab" data-tab="system" title="Milestone 1 backbone scheduler, worker, source, and ingest health">System Health</button>
     <button class="tab" data-tab="changelog" title="Version history and features">Changelog</button>
   </nav>
 
@@ -409,7 +410,39 @@
       </div>
     </section>
 
-    <!-- ⑩ CHANGELOG ─────────────────────────────────────────────── -->
+    <!-- ⑩ SYSTEM HEALTH ─────────────────────────────────────────── -->
+    <section id="system" class="panel">
+      <div class="card hero">
+        <div class="card-head">
+          <div><p class="eyebrow">Milestone 1</p><h2>System Health</h2></div>
+          <button id="refreshSystemHealth" class="ghost small">Refresh</button>
+        </div>
+        <p class="field-hint">Stored runtime state only. Opening this view does not trigger live collection.</p>
+        <div id="systemHealthStats" class="stats"></div>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Runtime</p><h2>Scheduler + Worker</h2></div></div>
+          <div id="systemRuntimeList" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Sources</p><h2>Current Source Health</h2></div></div>
+          <div id="systemSourcesList" class="list"></div>
+        </div>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Jobs</p><h2>Queue State</h2></div></div>
+          <div id="systemJobsList" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Ingest Runs</p><h2>Latest Attempts</h2></div></div>
+          <div id="systemRunsList" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ⑪ CHANGELOG ─────────────────────────────────────────────── -->
     <section id="changelog" class="panel">
       <div class="card hero">
         <div class="card-head">
@@ -424,6 +457,6 @@
   </main>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="/app.js?v=0.82.3"></script>
+  <script src="/app.js?v=0.88.0"></script>
 </body>
 </html>

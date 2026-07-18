@@ -239,6 +239,8 @@ input:focus,textarea:focus,select:focus{
 }
 .pill.muted{color:var(--muted)}
 .pill.good{background:var(--good-soft);color:var(--good);border-color:rgba(47,103,84,.24)}
+.pill.warn{background:var(--warn-soft);color:var(--warn);border-color:rgba(179,106,31,.24)}
+.pill.bad{background:var(--bad-soft);color:var(--bad);border-color:rgba(159,62,47,.24)}
 
 .kv{
   display:grid;
