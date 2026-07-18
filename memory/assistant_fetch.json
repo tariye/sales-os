@@ -9,7 +9,10 @@
   ],
   "generated_at": "2026-07-18T08:18:23Z",
   "health_path": "memory/system_health.json",
+  "immutable_bundle_url": "https://raw.githubusercontent.com/tariye/sales-os/5a94649e50aedae804a1b2d8cbeb8b341756bb37/memory/assistant_bundle.json",
   "index_path": "memory/index.json",
+  "last_verified_at": "2026-07-18T08:19:17Z",
+  "last_verified_commit": "5a94649e50aedae804a1b2d8cbeb8b341756bb37",
   "repository": "tariye/sales-os",
   "schema_version": "1.0"
 }

@@ -47,6 +47,8 @@
     "pending_before": 0
   },
   "json_errors": [],
+  "last_push": "2026-07-18T08:19:17Z",
+  "last_push_commit": "5a94649e50aedae804a1b2d8cbeb8b341756bb37",
   "source_of_truth": "data/info_analyzer.db",
   "validation": {
     "broken_links": 0,
