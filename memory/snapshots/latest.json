@@ -79,7 +79,7 @@
     ],
     "entity_aliases": {
       "duplicate_groups_detected": 10,
-      "duplicate_groups_reconciled": 10,
+      "duplicate_groups_reconciled": 16,
       "unresolved_duplicate_entities": 0
     },
     "source_of_truth": "data/info_analyzer.db",
@@ -192,7 +192,7 @@
       "status": "open",
       "title": "SK Hynix: investigate, buy, watch, or avoid",
       "tracking_metric": "HBM demand, AI memory pricing, capex discipline, gross margin trend, and customer concentration.",
-      "updated_at": "2026-07-16T20:28:09Z"
+      "updated_at": "2026-07-18T08:18:23Z"
     },
     {
       "aliases": [
@@ -223,7 +223,7 @@
       "status": "open",
       "title": "Nashville transition readiness",
       "tracking_metric": "Cash runway, job pipeline, housing plan, family constraints, and move date confidence.",
-      "updated_at": "2026-07-16T20:28:09Z"
+      "updated_at": "2026-07-18T08:18:23Z"
     },
     {
       "aliases": [
@@ -255,7 +255,7 @@
       "status": "open",
       "title": "Dedicated compute purchase: needed now or defer",
       "tracking_metric": "Utilization hours, blocked workloads, rental cost, project revenue/proof value, and hardware payback period.",
-      "updated_at": "2026-07-16T20:28:09Z"
+      "updated_at": "2026-07-18T08:18:23Z"
     },
     {
       "aliases": [
@@ -287,7 +287,7 @@
       "status": "open",
       "title": "Bassinet pricing and condition strategy",
       "tracking_metric": "Comparable prices, condition score, delivery/setup questions, listing views, saves, offers, and days-to-sale.",
-      "updated_at": "2026-07-16T20:28:09Z"
+      "updated_at": "2026-07-18T08:18:23Z"
     },
     {
       "confidence_after": 0.65,
@@ -404,7 +404,7 @@
       "updated_at": "2026-07-16T18:47:56+00:00"
     }
   ],
-  "generated_at": "2026-07-16T20:28:09Z",
+  "generated_at": "2026-07-18T08:18:23Z",
   "open_loops": [
     {
       "action": "Define the failure mode, mitigation step, and metric to watch.",
@@ -572,7 +572,7 @@
       "status": "active",
       "summary": "Coordinate relocation readiness, cash runway, job search, housing, and family logistics as one operating project.",
       "title": "Nashville Transition",
-      "updated_at": "2026-07-16T20:28:09Z"
+      "updated_at": "2026-07-18T08:18:23Z"
     },
     {
       "aliases": [
@@ -586,7 +586,7 @@
       "current_blocker": "Needs response-rate tracking and sharper proof artifacts.",
       "current_milestone": "Turn applications into a measurable pipeline.",
       "domain": "Career",
-      "entity": "Job Search",
+      "entity": "Job Search / Career Intelligence Ledger",
       "id": "project-job-search",
       "kind": "canonical_project",
       "lifecycle": "investigating",
@@ -598,8 +598,8 @@
       "related_query": "job search resume interview applications proof outcomes",
       "status": "active",
       "summary": "Track applications, interviews, proof artifacts, role targeting, and follow-up cadence.",
-      "title": "Job Search",
-      "updated_at": "2026-07-16T20:28:09Z"
+      "title": "Job Search / Career Intelligence Ledger",
+      "updated_at": "2026-07-18T08:18:23Z"
     },
     {
       "aliases": [
@@ -626,7 +626,7 @@
       "status": "active",
       "summary": "Build a sourcing, pricing, listing, objection, and sell-through loop for liquidation/resale operations.",
       "title": "Sales OS Liquidation",
-      "updated_at": "2026-07-16T20:28:09Z"
+      "updated_at": "2026-07-18T08:18:23Z"
     },
     {
       "aliases": [
@@ -640,7 +640,7 @@
       "current_blocker": "Needs verified write-import-export-read loop.",
       "current_milestone": "Prove bidirectional ChatGPT-GitHub-SQLite synchronization.",
       "domain": "Info Analyzer OS",
-      "entity": "Info Analyzer / Intelligence Ledger",
+      "entity": "Intelligence Ledger / Info Analyzer",
       "id": "project-info-analyzer-intelligence-ledger",
       "kind": "canonical_project",
       "lifecycle": "building",
@@ -652,8 +652,8 @@
       "related_query": "info analyzer intelligence ledger github memory bridge bidirectional sync",
       "status": "active",
       "summary": "Maintain the decision intelligence system that converts raw inputs into tracked memory, actions, and briefings.",
-      "title": "Info Analyzer / Intelligence Ledger",
-      "updated_at": "2026-07-16T20:28:09Z"
+      "title": "Intelligence Ledger / Info Analyzer",
+      "updated_at": "2026-07-18T08:18:23Z"
     },
     {
       "aliases": [
@@ -679,7 +679,7 @@
       "status": "active",
       "summary": "Develop a music intelligence system for extracting emotional, structural, sync, and reuse value from audio assets.",
       "title": "Groove OS",
-      "updated_at": "2026-07-16T20:28:09Z"
+      "updated_at": "2026-07-18T08:18:23Z"
     },
     {
       "aliases": [
@@ -705,7 +705,7 @@
       "status": "active",
       "summary": "Build a home/system monitoring concept around signals, thresholds, alerts, and action loops.",
       "title": "Home Sentinel",
-      "updated_at": "2026-07-16T20:28:09Z"
+      "updated_at": "2026-07-18T08:18:23Z"
     },
     {
       "aliases": [
@@ -732,7 +732,61 @@
       "status": "active",
       "summary": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets.",
       "title": "Operator Training Concept Library",
-      "updated_at": "2026-07-16T20:28:09Z"
+      "updated_at": "2026-07-18T08:18:23Z"
+    },
+    {
+      "aliases": [
+        "Loop Engineering",
+        "Agent Harness",
+        "loop engineer",
+        "agent loop"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-07-18T08:17:32Z",
+      "current_blocker": "Needs durable proof artifacts from each loop instead of informal session summaries.",
+      "current_milestone": "Make loop testing a default release gate for API, memory, and cockpit changes.",
+      "domain": "AI Project",
+      "entity": "Agent Harness / Loop Engineering",
+      "id": "project-agent-harness-loop-engineering",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "Attach loop proof outputs to the relevant release and memory export.",
+      "related_query": "agent harness loop engineering acceptance test proof repair",
+      "status": "active",
+      "summary": "Build and test agent loops that repeatedly plan, execute, verify, and repair until the system works in practice.",
+      "title": "Agent Harness / Loop Engineering",
+      "updated_at": "2026-07-18T08:18:23Z"
+    },
+    {
+      "aliases": [
+        "AI infrastructure",
+        "physical AI infrastructure",
+        "AI investment thesis",
+        "compute thesis"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-07-18T08:17:32Z",
+      "current_blocker": "Needs current source data, trigger thresholds, and decision rules before capital allocation.",
+      "current_milestone": "Convert AI infrastructure ideas into watchable company and market signals.",
+      "domain": "Investing",
+      "entity": "AI Infrastructure Investment Thesis",
+      "id": "project-ai-infrastructure-investment-thesis",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "Create a watchlist for AI memory, compute, networking, and physical AI infrastructure names.",
+      "related_query": "AI infrastructure investing HBM compute networking robotics edge systems",
+      "status": "active",
+      "summary": "Track AI infrastructure signals across compute, memory, networking, robotics data, edge systems, and deployment economics.",
+      "title": "AI Infrastructure Investment Thesis",
+      "updated_at": "2026-07-18T08:18:23Z"
     }
   ],
   "recent_accountability": [

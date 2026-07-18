@@ -339,9 +339,132 @@
         "ESI-ACT-7EE099D2D74488"
       ],
       "source_record_count": 2
+    },
+    {
+      "aliases": [
+        "Info Analyzer",
+        "Info Analyzer / Intelligence Ledger",
+        "Info Analyzer OS",
+        "Intelligence Ledger",
+        "Sales OS memory"
+      ],
+      "canonical_entity_id": "entity-info-analyzer-intelligence-ledger",
+      "canonical_name": "Intelligence Ledger / Info Analyzer",
+      "domain": "Info Analyzer OS",
+      "id": "alias-info-analyzer-intelligence-ledger",
+      "metadata": {
+        "method": "known project/entity naming variants grouped under one assistant-facing entity",
+        "provenance": "memory_manager_assistant_bundle",
+        "source": "manual_canonical_alias_map"
+      },
+      "related_entry_ids": [
+        "IA-20260701182115-FBE99A",
+        "IA-20260701182132-985E7A",
+        "IA-20260701182151-8A607A",
+        "IA-20260701182207-DA84AF",
+        "IA-20260704004151-4DDF0F",
+        "IA-20260705020134-F88520"
+      ],
+      "source_record_count": 6
+    },
+    {
+      "aliases": [
+        "Sales OS",
+        "Sales OS Liquidation",
+        "Sales Operating System",
+        "liquidation",
+        "resale"
+      ],
+      "canonical_entity_id": "entity-sales-os",
+      "canonical_name": "Sales OS Liquidation",
+      "domain": "Business",
+      "id": "alias-sales-os",
+      "metadata": {
+        "method": "known project/entity naming variants grouped under one assistant-facing entity",
+        "provenance": "memory_manager_assistant_bundle",
+        "source": "manual_canonical_alias_map"
+      },
+      "related_entry_ids": [],
+      "source_record_count": 0
+    },
+    {
+      "aliases": [
+        "Home Sentinel",
+        "Sentinel",
+        "home monitoring",
+        "home signals"
+      ],
+      "canonical_entity_id": "entity-home-sentinel",
+      "canonical_name": "Home Sentinel",
+      "domain": "AI Project",
+      "id": "alias-home-sentinel",
+      "metadata": {
+        "method": "known project/entity naming variants grouped under one assistant-facing entity",
+        "provenance": "memory_manager_assistant_bundle",
+        "source": "manual_canonical_alias_map"
+      },
+      "related_entry_ids": [],
+      "source_record_count": 0
+    },
+    {
+      "aliases": [
+        "000660.KS",
+        "AI memory",
+        "Hynix",
+        "SK Hynix",
+        "SKHY"
+      ],
+      "canonical_entity_id": "entity-sk-hynix",
+      "canonical_name": "SK Hynix",
+      "domain": "Investing",
+      "id": "alias-sk-hynix",
+      "metadata": {
+        "method": "known project/entity naming variants grouped under one assistant-facing entity",
+        "provenance": "memory_manager_assistant_bundle",
+        "source": "manual_canonical_alias_map"
+      },
+      "related_entry_ids": [],
+      "source_record_count": 0
+    },
+    {
+      "aliases": [
+        "Groove",
+        "Groove OS",
+        "music intelligence"
+      ],
+      "canonical_entity_id": "entity-groove-os",
+      "canonical_name": "Groove OS",
+      "domain": "Music",
+      "id": "alias-groove-os",
+      "metadata": {
+        "method": "known project/entity naming variants grouped under one assistant-facing entity",
+        "provenance": "memory_manager_assistant_bundle",
+        "source": "manual_canonical_alias_map"
+      },
+      "related_entry_ids": [],
+      "source_record_count": 0
+    },
+    {
+      "aliases": [
+        "Nashville Move",
+        "Nashville Transition",
+        "Nashville readiness",
+        "transition readiness"
+      ],
+      "canonical_entity_id": "entity-nashville-transition",
+      "canonical_name": "Nashville Transition",
+      "domain": "Personal Operations",
+      "id": "alias-nashville-transition",
+      "metadata": {
+        "method": "known project/entity naming variants grouped under one assistant-facing entity",
+        "provenance": "memory_manager_assistant_bundle",
+        "source": "manual_canonical_alias_map"
+      },
+      "related_entry_ids": [],
+      "source_record_count": 0
     }
   ],
   "duplicate_groups_detected": 10,
-  "duplicate_groups_reconciled": 10,
+  "duplicate_groups_reconciled": 16,
   "unresolved_duplicate_entities": 0
 }

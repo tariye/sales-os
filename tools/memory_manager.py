@@ -10,12 +10,15 @@ import argparse
 import hashlib
 import json
 import os
+import base64
 import sqlite3
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+import urllib.error
+import urllib.request
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +32,8 @@ ARCHIVE_DIR = MEMORY_DIR / "archive"
 
 REQUIRED_FILES = [
     "memory/index.json",
+    "memory/assistant_bundle.json",
+    "memory/assistant_fetch.json",
     "memory/snapshots/latest.json",
     "memory/actions.jsonl",
     "memory/patterns.jsonl",
@@ -59,9 +64,9 @@ CANONICAL_PROJECTS = [
     },
     {
         "id": "project-job-search",
-        "title": "Job Search",
+        "title": "Job Search / Career Intelligence Ledger",
         "domain": "Career",
-        "entity": "Job Search",
+        "entity": "Job Search / Career Intelligence Ledger",
         "summary": "Track applications, interviews, proof artifacts, role targeting, and follow-up cadence.",
         "current_milestone": "Turn applications into a measurable pipeline.",
         "current_blocker": "Needs response-rate tracking and sharper proof artifacts.",
@@ -83,15 +88,27 @@ CANONICAL_PROJECTS = [
     },
     {
         "id": "project-info-analyzer-intelligence-ledger",
-        "title": "Info Analyzer / Intelligence Ledger",
+        "title": "Intelligence Ledger / Info Analyzer",
         "domain": "Info Analyzer OS",
-        "entity": "Info Analyzer / Intelligence Ledger",
+        "entity": "Intelligence Ledger / Info Analyzer",
         "summary": "Maintain the decision intelligence system that converts raw inputs into tracked memory, actions, and briefings.",
         "current_milestone": "Prove bidirectional ChatGPT-GitHub-SQLite synchronization.",
         "current_blocker": "Needs verified write-import-export-read loop.",
         "next_action": "Run bridge acceptance test and verify raw GitHub visibility.",
         "aliases": ["Info Analyzer", "Intelligence Ledger", "memory bridge", "Sales OS memory"],
         "related_query": "info analyzer intelligence ledger github memory bridge bidirectional sync",
+    },
+    {
+        "id": "project-agent-harness-loop-engineering",
+        "title": "Agent Harness / Loop Engineering",
+        "domain": "AI Project",
+        "entity": "Agent Harness / Loop Engineering",
+        "summary": "Build and test agent loops that repeatedly plan, execute, verify, and repair until the system works in practice.",
+        "current_milestone": "Make loop testing a default release gate for API, memory, and cockpit changes.",
+        "current_blocker": "Needs durable proof artifacts from each loop instead of informal session summaries.",
+        "next_action": "Attach loop proof outputs to the relevant release and memory export.",
+        "aliases": ["Loop Engineering", "Agent Harness", "loop engineer", "agent loop"],
+        "related_query": "agent harness loop engineering acceptance test proof repair",
     },
     {
         "id": "project-groove-os",
@@ -128,6 +145,63 @@ CANONICAL_PROJECTS = [
         "next_action": "Create concept cards for calibration drift, setup errors, SOP gaps, and usable data hours.",
         "aliases": ["operator training", "concept library", "SOP library", "lab training"],
         "related_query": "operator training SOP calibration quality feedback loop usable data",
+    },
+    {
+        "id": "project-ai-infrastructure-investment-thesis",
+        "title": "AI Infrastructure Investment Thesis",
+        "domain": "Investing",
+        "entity": "AI Infrastructure Investment Thesis",
+        "summary": "Track AI infrastructure signals across compute, memory, networking, robotics data, edge systems, and deployment economics.",
+        "current_milestone": "Convert AI infrastructure ideas into watchable company and market signals.",
+        "current_blocker": "Needs current source data, trigger thresholds, and decision rules before capital allocation.",
+        "next_action": "Create a watchlist for AI memory, compute, networking, and physical AI infrastructure names.",
+        "aliases": ["AI infrastructure", "physical AI infrastructure", "AI investment thesis", "compute thesis"],
+        "related_query": "AI infrastructure investing HBM compute networking robotics edge systems",
+    },
+]
+
+CANONICAL_ENTITY_ALIASES = [
+    {
+        "id": "alias-info-analyzer-intelligence-ledger",
+        "canonical_entity_id": "entity-info-analyzer-intelligence-ledger",
+        "canonical_name": "Intelligence Ledger / Info Analyzer",
+        "domain": "Info Analyzer OS",
+        "aliases": ["Info Analyzer", "Intelligence Ledger", "Info Analyzer OS", "Info Analyzer / Intelligence Ledger", "Sales OS memory"],
+    },
+    {
+        "id": "alias-sales-os",
+        "canonical_entity_id": "entity-sales-os",
+        "canonical_name": "Sales OS Liquidation",
+        "domain": "Business",
+        "aliases": ["Sales OS", "Sales Operating System", "Sales OS Liquidation", "resale", "liquidation"],
+    },
+    {
+        "id": "alias-home-sentinel",
+        "canonical_entity_id": "entity-home-sentinel",
+        "canonical_name": "Home Sentinel",
+        "domain": "AI Project",
+        "aliases": ["Home Sentinel", "Sentinel", "home monitoring", "home signals"],
+    },
+    {
+        "id": "alias-sk-hynix",
+        "canonical_entity_id": "entity-sk-hynix",
+        "canonical_name": "SK Hynix",
+        "domain": "Investing",
+        "aliases": ["SK Hynix", "SKHY", "Hynix", "000660.KS", "AI memory"],
+    },
+    {
+        "id": "alias-groove-os",
+        "canonical_entity_id": "entity-groove-os",
+        "canonical_name": "Groove OS",
+        "domain": "Music",
+        "aliases": ["Groove OS", "Groove", "music intelligence"],
+    },
+    {
+        "id": "alias-nashville-transition",
+        "canonical_entity_id": "entity-nashville-transition",
+        "canonical_name": "Nashville Transition",
+        "domain": "Personal Operations",
+        "aliases": ["Nashville Move", "Nashville Transition", "Nashville readiness", "transition readiness"],
     },
 ]
 
@@ -222,6 +296,80 @@ def load_json(value: Any, fallback: Any) -> Any:
 def one_line(value: Any, limit: int = 220) -> str:
     text = " ".join(str(value or "").split())
     return text[: limit - 1] + "…" if len(text) > limit else text
+
+
+def export_run_id(generated_at: str) -> str:
+    return "export-" + generated_at.replace(":", "").replace("-", "").replace("Z", "").replace("T", "-")
+
+
+def source_of_truth_ref() -> str:
+    return "data/info_analyzer.db"
+
+
+def priority_number(value: Any) -> int:
+    text = str(value or "").lower()
+    if text in {"high", "critical", "urgent"}:
+        return 1
+    if text in {"medium", "normal"}:
+        return 2
+    return 3
+
+
+def confidence_number(value: Any) -> float:
+    text = str(value or "").lower()
+    if text == "high":
+        return 0.8
+    if text == "low":
+        return 0.35
+    if text in {"", "none", "null"}:
+        return 0.5
+    return 0.6
+
+
+SENSITIVE_TERMS = [
+    "github_pat_",
+    "api_key",
+    "apikey",
+    "authorization: bearer",
+    "x-info-analyzer-key",
+    "password",
+    "account number",
+    "routing number",
+    "ssn",
+    "social security",
+    "private medical",
+    "diagnosis:",
+    "patient",
+    "confidential robotics",
+    "proprietary robotics",
+]
+
+
+def summarize_for_bundle(value: Any, limit: int = 180) -> str:
+    text = one_line(value, limit)
+    # Keep the assistant bundle contextual, not evidentiary. Raw source fields stay in SQLite.
+    text = text.replace("Authorization: Bearer", "Authorization header")
+    text = text.replace("X-Info-Analyzer-Key", "API key header")
+    return text
+
+
+def privacy_issues(bundle: dict[str, Any]) -> list[str]:
+    text = json.dumps(bundle, ensure_ascii=False).lower()
+    issues: list[str] = []
+    for term in SENSITIVE_TERMS:
+        if term in text:
+            issues.append(f"sensitive term present: {term}")
+    if '"raw_input"' in text:
+        issues.append("raw_input field present")
+    if "github_pat_" in text:
+        issues.append("GitHub token pattern present")
+    import re
+
+    if re.search(r"\bsk-(?:proj-[a-z0-9_-]{20,}|[a-z0-9]{32,})\b", text):
+        issues.append("OpenAI-style secret key pattern present")
+    if re.search(r"(account number|routing number|ssn|social security)[^\n]{0,40}\d{4,}", text):
+        issues.append("private financial or identity number context present")
+    return sorted(set(issues))
 
 
 def ensure_dirs() -> None:
@@ -772,6 +920,70 @@ def reconcile_entity_aliases(conn: sqlite3.Connection, generated_at: str) -> dic
                 "metadata": metadata,
             }
         )
+    for item in CANONICAL_ENTITY_ALIASES:
+        aliases = sorted({str(alias).strip() for alias in item["aliases"] if str(alias).strip()})
+        placeholders = ",".join("?" for _ in aliases)
+        related_entry_ids: list[str] = []
+        if aliases:
+            related_entry_ids = [
+                row["id"]
+                for row in conn.execute(
+                    f"""
+                    select id from entries
+                    where lower(coalesce(entity,'')) in ({placeholders})
+                       or lower(coalesce(title,'')) in ({placeholders})
+                    order by updated_at desc
+                    limit 40
+                    """,
+                    tuple(alias.lower() for alias in aliases) * 2,
+                ).fetchall()
+            ]
+        metadata = {
+            "source": "manual_canonical_alias_map",
+            "method": "known project/entity naming variants grouped under one assistant-facing entity",
+            "provenance": "memory_manager_assistant_bundle",
+        }
+        conn.execute(
+            """
+            insert into entity_aliases (
+              id, created_at, updated_at, canonical_entity_id, canonical_name,
+              domain, aliases, source_record_count, related_entry_ids, metadata
+            ) values (?,?,?,?,?,?,?,?,?,?)
+            on conflict(id) do update set
+              updated_at=excluded.updated_at,
+              canonical_entity_id=excluded.canonical_entity_id,
+              canonical_name=excluded.canonical_name,
+              domain=excluded.domain,
+              aliases=excluded.aliases,
+              source_record_count=excluded.source_record_count,
+              related_entry_ids=excluded.related_entry_ids,
+              metadata=excluded.metadata
+            """,
+            (
+                item["id"],
+                generated_at,
+                generated_at,
+                item["canonical_entity_id"],
+                item["canonical_name"],
+                item["domain"],
+                json.dumps(aliases),
+                len(related_entry_ids),
+                json.dumps(related_entry_ids),
+                json.dumps(metadata),
+            ),
+        )
+        alias_records.append(
+            {
+                "id": item["id"],
+                "canonical_entity_id": item["canonical_entity_id"],
+                "canonical_name": item["canonical_name"],
+                "domain": item["domain"],
+                "aliases": aliases,
+                "source_record_count": len(related_entry_ids),
+                "related_entry_ids": related_entry_ids,
+                "metadata": metadata,
+            }
+        )
     conn.commit()
     return {
         "duplicate_groups_detected": len(rows),
@@ -922,6 +1134,231 @@ def build_manifest(snapshot: dict[str, Any], actions: list[dict[str, Any]], patt
     }
 
 
+def build_assistant_bundle(
+    generated_at: str,
+    entries: list[dict[str, Any]],
+    actions: list[dict[str, Any]],
+    patterns: list[dict[str, Any]],
+    watchlist: list[dict[str, Any]],
+    decisions: list[dict[str, Any]],
+    projects: list[dict[str, Any]],
+    manifest: dict[str, Any],
+    health: dict[str, Any],
+    entity_aliases: dict[str, Any],
+) -> dict[str, Any]:
+    run_id = export_run_id(generated_at)
+    active_projects = [
+        p for p in projects
+        if p.get("kind") == "canonical_project" and str(p.get("status") or "").lower() not in {"archived", "complete", "deleted"}
+    ][:10]
+    open_actions = [a for a in actions if a.get("status") in {"open", "waiting", "in_progress", None}]
+    sorted_actions = sorted(open_actions, key=lambda a: (priority_number(a.get("priority")), str(a.get("due_date") or "9999-99-99"), str(a.get("updated_at") or "")))
+    active_decisions = [d for d in decisions if str(d.get("status") or "").lower() not in {"archived", "closed", "deleted"}][:10]
+    active_patterns = patterns[:15]
+    watch_items = watchlist[:20]
+    recent_lessons = [e for e in entries if e.get("lesson")][:10]
+    activity = read_jsonl(MEMORY_DIR / "activity.jsonl") if (MEMORY_DIR / "activity.jsonl").exists() else []
+    recent_activity = activity[-20:]
+    accountability = [
+        a for a in actions
+        if a.get("status") not in {"open", "waiting", "in_progress", None} and (a.get("result") or a.get("lesson_update"))
+    ][:10]
+    critical_actions = [a for a in sorted_actions if priority_number(a.get("priority")) == 1][:10]
+
+    project_rows = [
+        {
+            "id": p.get("id") or "",
+            "name": p.get("title") or p.get("entity") or "",
+            "status": p.get("status") or "active",
+            "priority": 1 if "Info Analyzer" in str(p.get("title") or "") or "Intelligence Ledger" in str(p.get("title") or "") else 2,
+            "why_now": summarize_for_bundle(p.get("summary"), 220),
+            "current_milestone": summarize_for_bundle(p.get("current_milestone"), 180),
+            "blocker": summarize_for_bundle(p.get("current_blocker"), 180),
+            "next_action": summarize_for_bundle(p.get("next_action"), 180),
+            "deadline": "",
+            "evidence_required": summarize_for_bundle(p.get("related_query"), 180),
+            "review_cadence": "daily",
+        }
+        for p in active_projects
+    ]
+    project_ids = {p["id"] for p in project_rows}
+
+    action_rows = []
+    for a in sorted_actions[:20]:
+        project_id = ""
+        domain = str(a.get("domain") or "")
+        entity = str(a.get("entity") or "")
+        if "Info Analyzer" in entity or "Ledger" in entity:
+            project_id = "project-info-analyzer-intelligence-ledger"
+        elif "Sales" in entity or domain == "Business":
+            project_id = "project-sales-os-liquidation"
+        elif domain == "Career":
+            project_id = "project-job-search"
+        elif domain == "Lab":
+            project_id = "project-operator-training-concept-library"
+        if project_id and project_id not in project_ids:
+            project_id = ""
+        action_rows.append(
+            {
+                "id": a.get("id") or "",
+                "project_id": project_id,
+                "action": summarize_for_bundle(a.get("action_title"), 220),
+                "status": a.get("status") or "open",
+                "priority": priority_number(a.get("priority")),
+                "deadline": a.get("due_date") or "",
+                "success_metric": summarize_for_bundle(a.get("track_metric"), 180),
+                "last_accountability_response": summarize_for_bundle(a.get("result"), 180),
+            }
+        )
+
+    decision_rows = [
+        {
+            "id": d.get("id") or "",
+            "entity": d.get("entity") or d.get("domain") or "",
+            "question": summarize_for_bundle(d.get("decision_question") or d.get("title"), 220),
+            "current_state": summarize_for_bundle(d.get("current_position") or d.get("status") or d.get("current_rule"), 160),
+            "confidence": confidence_number(d.get("confidence") or d.get("confidence_after") or d.get("confidence_before")),
+            "supporting_evidence": [summarize_for_bundle(d.get("tracking_metric") or d.get("recommended_change"), 160)] if (d.get("tracking_metric") or d.get("recommended_change")) else [],
+            "contradicting_evidence": [],
+            "next_evidence_needed": [summarize_for_bundle(d.get("related_query") or d.get("feedback_metric"), 160)] if (d.get("related_query") or d.get("feedback_metric")) else [],
+            "decision_trigger": summarize_for_bundle(d.get("next_review") or d.get("tracking_metric"), 160),
+            "review_cadence": "daily",
+        }
+        for d in active_decisions
+    ]
+
+    pattern_rows = [
+        {
+            "id": p.get("id") or "",
+            "pattern": summarize_for_bundle(p.get("pattern"), 220),
+            "confidence": p.get("confidence") or "Medium",
+            "entry_count": p.get("entry_count") or 0,
+            "domains": p.get("domains") or [],
+            "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+        }
+        for p in active_patterns
+    ]
+
+    watch_rows = [
+        {
+            "id": w.get("id") or "",
+            "name": summarize_for_bundle(w.get("display_name") or w.get("ticker") or w.get("sector"), 120),
+            "ticker": w.get("ticker") or "",
+            "signal": summarize_for_bundle(w.get("catalyst") or w.get("note"), 180),
+            "trigger": summarize_for_bundle(w.get("target_price") or w.get("support_price") or w.get("return_potential"), 120),
+        }
+        for w in watch_items
+    ]
+
+    acceptance_test = {
+        "id": "CHATGPT-FETCH-TEST-202607",
+        "type": "system_acceptance_test",
+        "status": "ready",
+        "signal": "ChatGPT can retrieve the current Intelligence Ledger operating state through an immutable GitHub commit URL.",
+        "next_action": "Confirm the Daily Intelligence Briefing references this record.",
+    }
+
+    bundle = {
+        "schema_version": "1.0",
+        "generated_at": generated_at,
+        "export_run_id": run_id,
+        "source_of_truth": source_of_truth_ref(),
+        "export_success": bool(health.get("export_success")),
+        "privacy_validation_passed": False,
+        "current_context": {
+            "primary_constraint": "Use the compact assistant bundle for briefings; SQLite remains the source of truth and must not be committed.",
+            "current_transition": "External ChatGPT memory bridge and daily briefing retrieval are the active transition.",
+            "career_state": "Career and job-search context is tracked through the Career Intelligence Ledger project.",
+            "important_deadlines": [a.get("deadline") for a in action_rows if a.get("deadline")][:8],
+        },
+        "weekend_clarity": [
+            "Stabilize the ChatGPT read path through one immutable assistant bundle.",
+            "Prioritize transition-critical actions, open decisions, and proof artifacts over background themes.",
+        ],
+        "active_projects": project_rows,
+        "top_actions": action_rows,
+        "active_decisions": decision_rows,
+        "active_patterns": pattern_rows,
+        "watchlist": watch_rows,
+        "recent_lessons": [
+            {"id": e.get("id") or "", "lesson": summarize_for_bundle(e.get("lesson"), 180), "domain": e.get("domain") or "", "entity": e.get("entity") or ""}
+            for e in recent_lessons
+        ],
+        "recent_activity": [
+            {
+                "id": item.get("id") or "",
+                "time": item.get("time") or "",
+                "type": item.get("type") or "",
+                "entity": summarize_for_bundle(item.get("entity"), 100),
+                "summary": summarize_for_bundle(item.get("summary"), 180),
+            }
+            for item in recent_activity
+        ] + [acceptance_test],
+        "accountability_state": [
+            {
+                "id": a.get("id") or "",
+                "action": summarize_for_bundle(a.get("action_title"), 160),
+                "status": a.get("status") or "",
+                "result": summarize_for_bundle(a.get("result") or a.get("lesson_update"), 180),
+            }
+            for a in accountability
+        ],
+        "critical_alerts": [
+            {
+                "id": a.get("id") or "",
+                "type": "action",
+                "severity": "high" if priority_number(a.get("priority")) == 1 else "medium",
+                "signal": summarize_for_bundle(a.get("why"), 180),
+                "next_action": summarize_for_bundle(a.get("action_title"), 180),
+            }
+            for a in critical_actions
+        ],
+        "briefing_priorities": [
+            summarize_for_bundle(item.get("action") or item.get("summary") or item, 180)
+            for item in manifest.get("todays_highest_priorities", [])[:8]
+        ],
+        "weekly_only_topics": [
+            "Background watchlist review unless a trigger changed.",
+            "Closed actions unless the result changed a decision rule.",
+        ],
+        "exclude_unless_material": [
+            "Raw source text",
+            "Full SQLite exports",
+            "Credentials or host secrets",
+            "Non-actionable archive notes",
+        ],
+        "entity_alias_summary": {
+            "duplicate_groups_detected": entity_aliases.get("duplicate_groups_detected", 0),
+            "duplicate_groups_reconciled": entity_aliases.get("duplicate_groups_reconciled", 0),
+            "unresolved_duplicate_entities": entity_aliases.get("unresolved_duplicate_entities", 0),
+        },
+    }
+    issues = privacy_issues(bundle)
+    if not issues:
+        bundle["privacy_validation_passed"] = True
+    else:
+        bundle["privacy_validation_errors"] = issues
+    return bundle
+
+
+def build_assistant_fetch(generated_at: str, run_id: str) -> dict[str, Any]:
+    return {
+        "schema_version": "1.0",
+        "repository": "tariye/sales-os",
+        "branch": "main",
+        "bundle_path": "memory/assistant_bundle.json",
+        "health_path": "memory/system_health.json",
+        "index_path": "memory/index.json",
+        "generated_at": generated_at,
+        "export_run_id": run_id,
+        "fetch_strategy": [
+            "Read GitHub API branch HEAD SHA",
+            "Fetch assistant_bundle.json using immutable commit SHA",
+            "Use GitHub contents API as fallback",
+        ],
+    }
+
+
 def validation_report(conn: sqlite3.Connection, entity_aliases: dict[str, Any]) -> dict[str, Any]:
     broken_relationships = conn.execute(
         """
@@ -1030,12 +1467,20 @@ def update_last_push(push_time: str, commit_hash: str) -> None:
     health_path = MEMORY_DIR / "system_health.json"
     status_path = MEMORY_DIR / "export_status.json"
     activity_path = MEMORY_DIR / "activity.jsonl"
+    fetch_path = MEMORY_DIR / "assistant_fetch.json"
     health = json.loads(health_path.read_text(encoding="utf-8"))
     export_status = json.loads(status_path.read_text(encoding="utf-8"))
     health["last_push"] = push_time
     health["last_push_commit"] = commit_hash
     export_status["last_push"] = push_time
     export_status["last_push_commit"] = commit_hash
+    immutable_bundle_url = f"https://raw.githubusercontent.com/tariye/sales-os/{commit_hash}/memory/assistant_bundle.json"
+    if fetch_path.exists():
+        fetch_meta = json.loads(fetch_path.read_text(encoding="utf-8"))
+        fetch_meta["last_verified_commit"] = commit_hash
+        fetch_meta["immutable_bundle_url"] = immutable_bundle_url
+        fetch_meta["last_verified_at"] = push_time
+        write_json(fetch_path, fetch_meta)
     write_json(health_path, health)
     write_json(status_path, export_status)
     activity = read_jsonl(activity_path)
@@ -1046,6 +1491,7 @@ def update_last_push(push_time: str, commit_hash: str) -> None:
             "type": "remote_push_verified",
             "entity": "GitHub memory bridge",
             "summary": f"Verified origin/main at {commit_hash}.",
+            "immutable_bundle_url": immutable_bundle_url,
         }
     )
     write_jsonl(activity_path, activity[-500:])
@@ -1083,11 +1529,17 @@ def export_memory(args: argparse.Namespace) -> int:
     export_status = {
         "generated_at": generated_at,
         "export_success": False,
-        "source_of_truth": str(DB_PATH.relative_to(ROOT)),
+        "source_of_truth": source_of_truth_ref(),
         "chatgpt_contract_files": REQUIRED_FILES,
         "import_result": import_result,
         "validation": db_validation,
         "json_errors": [],
+        "assistant_bundle": {
+            "path": "memory/assistant_bundle.json",
+            "max_bytes": 150000,
+            "bytes": 0,
+            "privacy_validation_passed": False,
+        },
         "counts": {
             "entries": len(entries),
             "actions": len(actions),
@@ -1121,6 +1573,8 @@ def export_memory(args: argparse.Namespace) -> int:
     index = {
         "version": "1.0",
         "generated_at": generated_at,
+        "assistant_bundle": "memory/assistant_bundle.json",
+        "assistant_fetch": "memory/assistant_fetch.json",
         "snapshot": "memory/snapshots/latest.json",
         "actions": "memory/actions.jsonl",
         "patterns": "memory/patterns.jsonl",
@@ -1138,13 +1592,46 @@ def export_memory(args: argparse.Namespace) -> int:
     write_json(MEMORY_DIR / "index.json", index)
 
     export_status["export_success"] = db_validation["ok"]
-    write_json(MEMORY_DIR / "export_status.json", export_status)
     health["export_success"] = export_status["export_success"]
+    assistant_bundle = build_assistant_bundle(
+        generated_at,
+        entries,
+        actions,
+        patterns,
+        watchlist,
+        decisions,
+        projects,
+        manifest,
+        health,
+        entity_aliases,
+    )
+    assistant_fetch = build_assistant_fetch(generated_at, assistant_bundle["export_run_id"])
+    write_json(MEMORY_DIR / "assistant_bundle.json", assistant_bundle)
+    write_json(MEMORY_DIR / "assistant_fetch.json", assistant_fetch)
+    bundle_size = (MEMORY_DIR / "assistant_bundle.json").stat().st_size
+    bundle_errors = []
+    if bundle_size > 150000:
+        bundle_errors.append(f"assistant_bundle.json is {bundle_size} bytes; limit is 150000")
+    if not assistant_bundle.get("privacy_validation_passed"):
+        bundle_errors.extend(assistant_bundle.get("privacy_validation_errors") or ["privacy validation failed"])
+    export_status["assistant_bundle"] = {
+        "path": "memory/assistant_bundle.json",
+        "max_bytes": 150000,
+        "bytes": bundle_size,
+        "privacy_validation_passed": bool(assistant_bundle.get("privacy_validation_passed")),
+        "errors": bundle_errors,
+    }
+    if bundle_errors:
+        export_status["export_success"] = False
+        health["export_success"] = False
+    write_json(MEMORY_DIR / "export_status.json", export_status)
     write_json(MEMORY_DIR / "system_health.json", health)
     activity = append_activity(generated_at, import_result, export_status)
     write_jsonl(MEMORY_DIR / "activity.jsonl", activity)
 
     export_errors = validate_json_exports()
+    if bundle_errors:
+        export_errors.extend(bundle_errors)
     if export_errors:
         export_status["export_success"] = False
         export_status["json_errors"] = export_errors
@@ -1184,7 +1671,7 @@ def main() -> int:
         print("Memory export validation failed; not pushing.", file=sys.stderr)
         return code
     if args.git:
-        run(["git", "add", "memory/", "tools/memory_manager.py"])
+        run(["git", "add", "memory/", "tools/"])
         if run(["git", "diff", "--cached", "--quiet"], check=False).returncode != 0:
             run(["git", "commit", "-m", args.commit_message])
             run(["git", "push", "-u", "origin", "main"])
@@ -1193,9 +1680,10 @@ def main() -> int:
             remote_commit = run(["git", "rev-parse", "origin/main"]).stdout.strip()
             if remote_commit != pushed_commit:
                 raise RuntimeError(f"push verification failed: origin/main={remote_commit}, expected={pushed_commit}")
+            run(["python3", "tools/verify_chatgpt_fetch.py"])
             push_time = now_iso()
             update_last_push(push_time, pushed_commit)
-            run(["git", "add", "memory/system_health.json", "memory/export_status.json", "memory/activity.jsonl"])
+            run(["git", "add", "memory/system_health.json", "memory/export_status.json", "memory/activity.jsonl", "memory/assistant_fetch.json"])
             if run(["git", "diff", "--cached", "--quiet"], check=False).returncode != 0:
                 run(["git", "commit", "-m", "Record verified intelligence ledger push"])
                 run(["git", "push", "-u", "origin", "main"])
@@ -1204,6 +1692,7 @@ def main() -> int:
                 final_remote = run(["git", "rev-parse", "origin/main"]).stdout.strip()
                 if final_remote != final_commit:
                     raise RuntimeError(f"final push verification failed: origin/main={final_remote}, expected={final_commit}")
+                run(["python3", "tools/verify_chatgpt_fetch.py"])
     return 0
 
 

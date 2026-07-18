@@ -4,11 +4,10 @@
   "database": "healthy",
   "duplicate_entities": 0,
   "duplicate_groups_detected": 10,
-  "duplicate_groups_reconciled": 10,
+  "duplicate_groups_reconciled": 16,
   "export_success": true,
-  "last_export": "2026-07-16T20:28:09Z",
-  "last_push": "2026-07-16T20:28:53Z",
-  "last_push_commit": "f65d2d9939ebc2bcd245646c606801462abca384",
+  "last_export": "2026-07-18T08:18:23Z",
+  "last_push": "",
   "orphan_actions": 0,
   "snapshot_age_minutes": 0
 }

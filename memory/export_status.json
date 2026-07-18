@@ -1,6 +1,15 @@
 {
+  "assistant_bundle": {
+    "bytes": 42229,
+    "errors": [],
+    "max_bytes": 150000,
+    "path": "memory/assistant_bundle.json",
+    "privacy_validation_passed": true
+  },
   "chatgpt_contract_files": [
     "memory/index.json",
+    "memory/assistant_bundle.json",
+    "memory/assistant_fetch.json",
     "memory/snapshots/latest.json",
     "memory/actions.jsonl",
     "memory/patterns.jsonl",
@@ -18,19 +27,19 @@
   "counts": {
     "actions": 120,
     "decisions": 10,
-    "entity_aliases": 10,
+    "entity_aliases": 16,
     "entries": 100,
     "patterns": 59,
-    "projects": 7,
+    "projects": 9,
     "watchlist": 126
   },
   "entity_aliases": {
     "duplicate_groups_detected": 10,
-    "duplicate_groups_reconciled": 10,
+    "duplicate_groups_reconciled": 16,
     "unresolved_duplicate_entities": 0
   },
   "export_success": true,
-  "generated_at": "2026-07-16T20:28:09Z",
+  "generated_at": "2026-07-18T08:18:23Z",
   "import_result": {
     "archived": "",
     "duplicates": 0,
@@ -38,14 +47,12 @@
     "pending_before": 0
   },
   "json_errors": [],
-  "last_push": "2026-07-16T20:28:53Z",
-  "last_push_commit": "f65d2d9939ebc2bcd245646c606801462abca384",
   "source_of_truth": "data/info_analyzer.db",
   "validation": {
     "broken_links": 0,
     "duplicate_entities": 0,
     "duplicate_groups_detected": 10,
-    "duplicate_groups_reconciled": 10,
+    "duplicate_groups_reconciled": 16,
     "errors": [],
     "missing_required_files": [],
     "ok": true,

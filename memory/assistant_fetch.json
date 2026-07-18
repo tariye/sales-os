@@ -1,0 +1,15 @@
+{
+  "branch": "main",
+  "bundle_path": "memory/assistant_bundle.json",
+  "export_run_id": "export-20260718-081823",
+  "fetch_strategy": [
+    "Read GitHub API branch HEAD SHA",
+    "Fetch assistant_bundle.json using immutable commit SHA",
+    "Use GitHub contents API as fallback"
+  ],
+  "generated_at": "2026-07-18T08:18:23Z",
+  "health_path": "memory/system_health.json",
+  "index_path": "memory/index.json",
+  "repository": "tariye/sales-os",
+  "schema_version": "1.0"
+}

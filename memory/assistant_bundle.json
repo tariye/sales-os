@@ -1,0 +1,1133 @@
+{
+  "accountability_state": [
+    {
+      "action": "Complete the authenticated API cross-chat loop and record the result.",
+      "id": "ACT-76CA417E95775BC2",
+      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
+      "status": "done"
+    },
+    {
+      "action": "Test a visual setup checklist during the next onboarding rep.",
+      "id": "ACT-4C15D68EC5FE5173",
+      "result": "The visual checklist reduced setup errors from three to one and reduced coaching intervention.",
+      "status": "done"
+    },
+    {
+      "action": "Complete the authenticated API cross-chat loop and record the result.",
+      "id": "ACT-1F2A1D42FE9850A7",
+      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
+      "status": "done"
+    },
+    {
+      "action": "Complete the authenticated API cross-chat loop and record the result.",
+      "id": "ACT-6E89B6530B1356A9",
+      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
+      "status": "done"
+    },
+    {
+      "action": "Complete the authenticated API cross-chat loop and record the result.",
+      "id": "ACT-D13CF3299EE45935",
+      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
+      "status": "done"
+    },
+    {
+      "action": "Complete the authenticated API cross-chat loop and record the result.",
+      "id": "ACT-50D5E9E7EA3358D1",
+      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
+      "status": "done"
+    },
+    {
+      "action": "After every sales call, create a CRM row with: Lead name, date, what they said, objection, next step, and follow-up date.",
+      "id": "ACT-9D143F9B474F5FB6",
+      "result": "Created a Google Sheet with columns: Lead, Date, What They Said, Objection, Next Step, Follow-Up Date. Used it after the very next call. Follow-up sent same day. Lead replied next\u2026",
+      "status": "done"
+    }
+  ],
+  "active_decisions": [
+    {
+      "confidence": 0.6,
+      "contradicting_evidence": [],
+      "current_state": "investigate",
+      "decision_trigger": "HBM demand, AI memory pricing, capex discipline, gross margin trend, and customer concentration.",
+      "entity": "SK Hynix",
+      "id": "decision-sk-hynix-investigate-buy-watch-avoid",
+      "next_evidence_needed": [
+        "SK Hynix HBM AI memory valuation earnings capex"
+      ],
+      "question": "Should SK Hynix be investigated, bought, watched, or avoided based on AI memory demand, valuation, and cycle risk?",
+      "review_cadence": "daily",
+      "supporting_evidence": [
+        "HBM demand, AI memory pricing, capex discipline, gross margin trend, and customer concentration."
+      ]
+    },
+    {
+      "confidence": 0.6,
+      "contradicting_evidence": [],
+      "current_state": "prepare",
+      "decision_trigger": "Cash runway, job pipeline, housing plan, family constraints, and move date confidence.",
+      "entity": "Nashville Transition",
+      "id": "decision-nashville-transition-readiness",
+      "next_evidence_needed": [
+        "Nashville transition readiness cash runway job housing family"
+      ],
+      "question": "Is the Nashville transition ready to execute, or should it remain in preparation?",
+      "review_cadence": "daily",
+      "supporting_evidence": [
+        "Cash runway, job pipeline, housing plan, family constraints, and move date confidence."
+      ]
+    },
+    {
+      "confidence": 0.6,
+      "contradicting_evidence": [],
+      "current_state": "defer",
+      "decision_trigger": "Utilization hours, blocked workloads, rental cost, project revenue/proof value, and hardware payback period.",
+      "entity": "Dedicated Compute",
+      "id": "decision-dedicated-compute-purchase",
+      "next_evidence_needed": [
+        "dedicated compute GPU purchase defer utilization payback"
+      ],
+      "question": "Is dedicated compute needed now for projects, or should the purchase be deferred until utilization is proven?",
+      "review_cadence": "daily",
+      "supporting_evidence": [
+        "Utilization hours, blocked workloads, rental cost, project revenue/proof value, and hardware payback period."
+      ]
+    },
+    {
+      "confidence": 0.6,
+      "contradicting_evidence": [],
+      "current_state": "investigate",
+      "decision_trigger": "Comparable prices, condition score, delivery/setup questions, listing views, saves, offers, and days-to-sale.",
+      "entity": "Bassinet Resale",
+      "id": "decision-bassinet-pricing-condition-strategy",
+      "next_evidence_needed": [
+        "bassinet pricing condition resale delivery setup comparable"
+      ],
+      "question": "What pricing and condition strategy should be used for the bassinet listing?",
+      "review_cadence": "daily",
+      "supporting_evidence": [
+        "Comparable prices, condition score, delivery/setup questions, listing views, saves, offers, and days-to-sale."
+      ]
+    },
+    {
+      "confidence": 0.6,
+      "contradicting_evidence": [],
+      "current_state": "open",
+      "decision_trigger": "",
+      "entity": "Authenticated Ledger API",
+      "id": "DREV-76CA417E95775BC2",
+      "next_evidence_needed": [
+        "Entry saved, retrieved, alert acknowledged, feedback logged."
+      ],
+      "question": "What decision should change for Authenticated Ledger API?",
+      "review_cadence": "daily",
+      "supporting_evidence": [
+        "Complete the authenticated API cross-chat loop and record the result."
+      ]
+    },
+    {
+      "confidence": 0.6,
+      "contradicting_evidence": [],
+      "current_state": "open",
+      "decision_trigger": "",
+      "entity": "Operator setup training",
+      "id": "DREV-4C15D68EC5FE5173",
+      "next_evidence_needed": [
+        "Setup errors and independent completion time."
+      ],
+      "question": "What decision should change for Operator setup training?",
+      "review_cadence": "daily",
+      "supporting_evidence": [
+        "Test a visual setup checklist during the next onboarding rep."
+      ]
+    },
+    {
+      "confidence": 0.6,
+      "contradicting_evidence": [],
+      "current_state": "open",
+      "decision_trigger": "",
+      "entity": "Authenticated Ledger API",
+      "id": "DREV-1F2A1D42FE9850A7",
+      "next_evidence_needed": [
+        "Entry saved, retrieved, alert acknowledged, feedback logged."
+      ],
+      "question": "What decision should change for Authenticated Ledger API?",
+      "review_cadence": "daily",
+      "supporting_evidence": [
+        "Complete the authenticated API cross-chat loop and record the result."
+      ]
+    },
+    {
+      "confidence": 0.6,
+      "contradicting_evidence": [],
+      "current_state": "open",
+      "decision_trigger": "",
+      "entity": "Authenticated Ledger API",
+      "id": "DREV-6E89B6530B1356A9",
+      "next_evidence_needed": [
+        "Entry saved, retrieved, alert acknowledged, feedback logged."
+      ],
+      "question": "What decision should change for Authenticated Ledger API?",
+      "review_cadence": "daily",
+      "supporting_evidence": [
+        "Complete the authenticated API cross-chat loop and record the result."
+      ]
+    },
+    {
+      "confidence": 0.6,
+      "contradicting_evidence": [],
+      "current_state": "open",
+      "decision_trigger": "",
+      "entity": "Authenticated Ledger API",
+      "id": "DREV-D13CF3299EE45935",
+      "next_evidence_needed": [
+        "Entry saved, retrieved, alert acknowledged, feedback logged."
+      ],
+      "question": "What decision should change for Authenticated Ledger API?",
+      "review_cadence": "daily",
+      "supporting_evidence": [
+        "Complete the authenticated API cross-chat loop and record the result."
+      ]
+    },
+    {
+      "confidence": 0.6,
+      "contradicting_evidence": [],
+      "current_state": "open",
+      "decision_trigger": "",
+      "entity": "Authenticated Ledger API",
+      "id": "DREV-50D5E9E7EA3358D1",
+      "next_evidence_needed": [
+        "Entry saved, retrieved, alert acknowledged, feedback logged."
+      ],
+      "question": "What decision should change for Authenticated Ledger API?",
+      "review_cadence": "daily",
+      "supporting_evidence": [
+        "Complete the authenticated API cross-chat loop and record the result."
+      ]
+    }
+  ],
+  "active_patterns": [
+    {
+      "confidence": "High",
+      "domains": [
+        "Investing"
+      ],
+      "entry_count": 90,
+      "id": "PAT-5D15EA5FFF5C5C2C",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Economic action: Track"
+    },
+    {
+      "confidence": "High",
+      "domains": [
+        "Network+",
+        "Lab",
+        "Other",
+        "Investing",
+        "Business"
+      ],
+      "entry_count": 27,
+      "id": "PAT-6C91A980E32458F0",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Non-trackable signal is useless; every signal needs a metric, trigger, action, or review loop."
+    },
+    {
+      "confidence": "High",
+      "domains": [
+        "AI Project"
+      ],
+      "entry_count": 17,
+      "id": "PAT-6F4C139A1CFC52D5",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Signals become more powerful when they are broken into labeled assets with metrics, examples, and resurfacing triggers."
+    },
+    {
+      "confidence": "High",
+      "domains": [
+        "Business"
+      ],
+      "entry_count": 16,
+      "id": "PAT-E593EACF1E255B53",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "When repeated objections cluster around one offer, test clarity before adding more traffic."
+    },
+    {
+      "confidence": "High",
+      "domains": [
+        "Investing"
+      ],
+      "entry_count": 9,
+      "id": "PAT-7FF041F359415C4D",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Economic action: Analyze"
+    },
+    {
+      "confidence": "High",
+      "domains": [
+        "Investing"
+      ],
+      "entry_count": 8,
+      "id": "PAT-2B2522B576045BAB",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Economic signal: demand"
+    },
+    {
+      "confidence": "High",
+      "domains": [
+        "Investing"
+      ],
+      "entry_count": 8,
+      "id": "PAT-468B40419D495A95",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Economic signal: profit"
+    },
+    {
+      "confidence": "High",
+      "domains": [
+        "Investing"
+      ],
+      "entry_count": 8,
+      "id": "PAT-1C3E62B9FEFC5303",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Economic signal: cash"
+    },
+    {
+      "confidence": "High",
+      "domains": [
+        "Investing"
+      ],
+      "entry_count": 8,
+      "id": "PAT-0A40B0F1E56F5D8A",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Economic signal: balance-sheet"
+    },
+    {
+      "confidence": "High",
+      "domains": [
+        "Business",
+        "Career",
+        "Lab",
+        "AI Project"
+      ],
+      "entry_count": 5,
+      "id": "PAT-40F3D07979E65BB6",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Recurring risk signal pattern"
+    },
+    {
+      "confidence": "High",
+      "domains": [
+        "Lab"
+      ],
+      "entry_count": 5,
+      "id": "PAT-442F1A31CB3D5D4F",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Scaling exposes weak process; training, SOPs, and feedback loops are infrastructure."
+    },
+    {
+      "confidence": "Medium",
+      "domains": [
+        "AI Project"
+      ],
+      "entry_count": 4,
+      "id": "PAT-830A67330898572B",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Recurring action signal pattern"
+    },
+    {
+      "confidence": "Medium",
+      "domains": [
+        "Music"
+      ],
+      "entry_count": 3,
+      "id": "PAT-AD29705D9B265E1D",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Songs become more valuable when reusable sections, glossary terms, and sound examples are labeled for later routing."
+    },
+    {
+      "confidence": "Medium",
+      "domains": [
+        "Fitness",
+        "Business"
+      ],
+      "entry_count": 3,
+      "id": "PAT-1F3B36C7739B5515",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Recurring contradiction signal pattern"
+    },
+    {
+      "confidence": "Medium",
+      "domains": [
+        "Business"
+      ],
+      "entry_count": 3,
+      "id": "PAT-FC8B817F735B5B71",
+      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
+      "pattern": "Business opportunities appear where friction, poor packaging, or poor distribution hides value."
+    }
+  ],
+  "active_projects": [
+    {
+      "blocker": "Needs consolidated plan, cash runway view, and trigger dates.",
+      "current_milestone": "Define readiness checklist and weekly decision gates.",
+      "deadline": "",
+      "evidence_required": "Nashville transition job search cash runway housing family",
+      "id": "project-nashville-transition",
+      "name": "Nashville Transition",
+      "next_action": "Create transition readiness checklist with go/no-go criteria.",
+      "priority": 2,
+      "review_cadence": "daily",
+      "status": "active",
+      "why_now": "Coordinate relocation readiness, cash runway, job search, housing, and family logistics as one operating project."
+    },
+    {
+      "blocker": "Needs response-rate tracking and sharper proof artifacts.",
+      "current_milestone": "Turn applications into a measurable pipeline.",
+      "deadline": "",
+      "evidence_required": "job search resume interview applications proof outcomes",
+      "id": "project-job-search",
+      "name": "Job Search / Career Intelligence Ledger",
+      "next_action": "Log applications with role, date, follow-up date, response, and proof used.",
+      "priority": 1,
+      "review_cadence": "daily",
+      "status": "active",
+      "why_now": "Track applications, interviews, proof artifacts, role targeting, and follow-up cadence."
+    },
+    {
+      "blocker": "Needs consistent unit economics by item type.",
+      "current_milestone": "Convert sales signals into inventory and listing actions.",
+      "deadline": "",
+      "evidence_required": "sales liquidation resale pricing objections sell-through margin",
+      "id": "project-sales-os-liquidation",
+      "name": "Sales OS Liquidation",
+      "next_action": "Track acquisition cost, listing price, objection, sale price, margin, and days-to-sale.",
+      "priority": 2,
+      "review_cadence": "daily",
+      "status": "active",
+      "why_now": "Build a sourcing, pricing, listing, objection, and sell-through loop for liquidation/resale operations."
+    },
+    {
+      "blocker": "Needs verified write-import-export-read loop.",
+      "current_milestone": "Prove bidirectional ChatGPT-GitHub-SQLite synchronization.",
+      "deadline": "",
+      "evidence_required": "info analyzer intelligence ledger github memory bridge bidirectional sync",
+      "id": "project-info-analyzer-intelligence-ledger",
+      "name": "Intelligence Ledger / Info Analyzer",
+      "next_action": "Run bridge acceptance test and verify raw GitHub visibility.",
+      "priority": 1,
+      "review_cadence": "daily",
+      "status": "active",
+      "why_now": "Maintain the decision intelligence system that converts raw inputs into tracked memory, actions, and briefings."
+    },
+    {
+      "blocker": "Needs repeatable library schema and examples.",
+      "current_milestone": "Clarify asset extraction and labeling workflow.",
+      "deadline": "",
+      "evidence_required": "groove os music asset lab extraction emotional commercial reuse",
+      "id": "project-groove-os",
+      "name": "Groove OS",
+      "next_action": "Break one audio asset into section map, glossary, sound example, and reuse notes.",
+      "priority": 2,
+      "review_cadence": "daily",
+      "status": "active",
+      "why_now": "Develop a music intelligence system for extracting emotional, structural, sync, and reuse value from audio assets."
+    },
+    {
+      "blocker": "Needs clear sensor/event list and decision rules.",
+      "current_milestone": "Define minimum viable monitoring scope.",
+      "deadline": "",
+      "evidence_required": "home sentinel monitoring threshold alert action loop",
+      "id": "project-home-sentinel",
+      "name": "Home Sentinel",
+      "next_action": "List monitored events, thresholds, alert levels, and response actions.",
+      "priority": 2,
+      "review_cadence": "daily",
+      "status": "active",
+      "why_now": "Build a home/system monitoring concept around signals, thresholds, alerts, and action loops."
+    },
+    {
+      "blocker": "Needs extraction labels and reusable examples.",
+      "current_milestone": "Turn lab patterns into concept cards and checklists.",
+      "deadline": "",
+      "evidence_required": "operator training SOP calibration quality feedback loop usable data",
+      "id": "project-operator-training-concept-library",
+      "name": "Operator Training Concept Library",
+      "next_action": "Create concept cards for calibration drift, setup errors, SOP gaps, and usable data hours.",
+      "priority": 2,
+      "review_cadence": "daily",
+      "status": "active",
+      "why_now": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets."
+    },
+    {
+      "blocker": "Needs durable proof artifacts from each loop instead of informal session summaries.",
+      "current_milestone": "Make loop testing a default release gate for API, memory, and cockpit changes.",
+      "deadline": "",
+      "evidence_required": "agent harness loop engineering acceptance test proof repair",
+      "id": "project-agent-harness-loop-engineering",
+      "name": "Agent Harness / Loop Engineering",
+      "next_action": "Attach loop proof outputs to the relevant release and memory export.",
+      "priority": 2,
+      "review_cadence": "daily",
+      "status": "active",
+      "why_now": "Build and test agent loops that repeatedly plan, execute, verify, and repair until the system works in practice."
+    },
+    {
+      "blocker": "Needs current source data, trigger thresholds, and decision rules before capital allocation.",
+      "current_milestone": "Convert AI infrastructure ideas into watchable company and market signals.",
+      "deadline": "",
+      "evidence_required": "AI infrastructure investing HBM compute networking robotics edge systems",
+      "id": "project-ai-infrastructure-investment-thesis",
+      "name": "AI Infrastructure Investment Thesis",
+      "next_action": "Create a watchlist for AI memory, compute, networking, and physical AI infrastructure names.",
+      "priority": 2,
+      "review_cadence": "daily",
+      "status": "active",
+      "why_now": "Track AI infrastructure signals across compute, memory, networking, robotics data, edge systems, and deployment economics."
+    }
+  ],
+  "briefing_priorities": [
+    "Define the failure mode, mitigation step, and metric to watch.",
+    "Compare against old belief. Update confidence with evidence.",
+    "Identify failure mode. Define mitigation and metric to watch.",
+    "Compare against old belief. Update confidence with evidence.",
+    "Identify failure mode. Define mitigation and metric to watch."
+  ],
+  "critical_alerts": [
+    {
+      "id": "ACT-0DE765D7511C5318",
+      "next_action": "Monitor whether NVIDIA reroutes China demand through partners or loses it permanently. Update thesis if H20 ban becomes permanent.",
+      "severity": "high",
+      "signal": "NVIDIA is printing revenue but the China H20 export ban is a $15B known risk that is not yet priced as a structural ceiling \u2014 it is being treated as a one-time headwind.",
+      "type": "action"
+    },
+    {
+      "id": "ACT-106771F645F05C47",
+      "next_action": "Execute, then log result back into the DB.",
+      "severity": "high",
+      "signal": "Translation run found a Action Signal in Lab.",
+      "type": "action"
+    },
+    {
+      "id": "ACT-87DE73E76FC2547C",
+      "next_action": "Execute, then log result back into the DB.",
+      "severity": "high",
+      "signal": "Translation run found a Action Signal in Lab.",
+      "type": "action"
+    },
+    {
+      "id": "ACT-13531FB6E4515E40",
+      "next_action": "Define the failure mode, mitigation step, and metric to watch.",
+      "severity": "high",
+      "signal": "Risk signal detected in Lab: How Companies Use Generative AI To Execute With Speed by Sara Brown Sep 24, 2024 For the last few years, companies have been experimenting with use ca\u2026",
+      "type": "action"
+    },
+    {
+      "id": "ACT-CA09EC5E110C5580",
+      "next_action": "Define the failure mode, mitigation step, and metric to watch.",
+      "severity": "high",
+      "signal": "Risk signal detected in Business: I keep missing follow-ups with leads. Had 3 potential customers this week and only responded to 1. The other 2 ghosted after my delay.",
+      "type": "action"
+    },
+    {
+      "id": "ACT-FD3DC537930758FE",
+      "next_action": "Review NVIDIA CORP economics and update the monitor metric",
+      "severity": "high",
+      "signal": "Cash conversion signal",
+      "type": "action"
+    },
+    {
+      "id": "ACT-3346B6E0263E5DDE",
+      "next_action": "Review NVIDIA CORP economics and update the monitor metric",
+      "severity": "high",
+      "signal": "Cash conversion signal",
+      "type": "action"
+    },
+    {
+      "id": "ACT-D122F6BFBA7B5952",
+      "next_action": "Review NVIDIA CORP economics and update the monitor metric",
+      "severity": "high",
+      "signal": "Cash conversion signal",
+      "type": "action"
+    },
+    {
+      "id": "ACT-C2103715C33A540A",
+      "next_action": "Review NVIDIA CORP economics and update the monitor metric",
+      "severity": "high",
+      "signal": "Cash conversion signal",
+      "type": "action"
+    },
+    {
+      "id": "ACT-9A0B21BAFEC95CD1",
+      "next_action": "Review NVIDIA CORP economics and update the monitor metric",
+      "severity": "high",
+      "signal": "Cash conversion signal",
+      "type": "action"
+    }
+  ],
+  "current_context": {
+    "career_state": "Career and job-search context is tracked through the Career Intelligence Ledger project.",
+    "current_transition": "External ChatGPT memory bridge and daily briefing retrieval are the active transition.",
+    "important_deadlines": [
+      "2026-08-01"
+    ],
+    "primary_constraint": "Use the compact assistant bundle for briefings; SQLite remains the source of truth and must not be committed."
+  },
+  "entity_alias_summary": {
+    "duplicate_groups_detected": 10,
+    "duplicate_groups_reconciled": 16,
+    "unresolved_duplicate_entities": 0
+  },
+  "exclude_unless_material": [
+    "Raw source text",
+    "Full SQLite exports",
+    "Credentials or host secrets",
+    "Non-actionable archive notes"
+  ],
+  "export_run_id": "export-20260718-081823",
+  "export_success": true,
+  "generated_at": "2026-07-18T08:18:23Z",
+  "privacy_validation_passed": true,
+  "recent_activity": [
+    {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-07-15T19:40:10Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-07-15T19:40:10Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-07-15T19:40:37Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-07-15T19:40:37Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-07-15T19:41:45Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-07-15T19:41:45Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-07-15T19:57:30Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-07-15T19:57:30Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "entity": "Intelligence Ledger Memory Bridge",
+      "id": "activity-2026-07-15T19:58:55Z-IA-20260715195855-6CAB2B",
+      "summary": "Imported chat memory: The read-side GitHub memory contract is operational; the next required proof is a complete write-import-export-read loop.",
+      "time": "2026-07-15T19:58:55Z",
+      "type": "chat_memory_imported"
+    },
+    {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-07-15T19:58:55Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-07-15T19:58:55Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "entity": "GitHub memory bridge",
+      "id": "activity-2026-07-15T19:58:57Z-45e382841fd5",
+      "summary": "Verified origin/main at 45e382841fd5f8ba89c39c3b98d569d7c488a3dd.",
+      "time": "2026-07-15T19:58:57Z",
+      "type": "remote_push_verified"
+    },
+    {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-07-16T18:49:49Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-07-16T18:49:49Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "entity": "GitHub memory bridge",
+      "id": "activity-2026-07-16T18:52:06Z-9f6d79ff7f55",
+      "summary": "Verified origin/main at 9f6d79ff7f55a78b7ec3c4fff0ab16f8cda9ebaf.",
+      "time": "2026-07-16T18:52:06Z",
+      "type": "remote_push_verified"
+    },
+    {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-07-16T19:58:46Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-07-16T19:58:46Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "entity": "GitHub memory bridge",
+      "id": "activity-2026-07-16T19:59:36Z-efa70687868a",
+      "summary": "Verified origin/main at efa70687868a2c0e1ab233c33177f9dcf1713244.",
+      "time": "2026-07-16T19:59:36Z",
+      "type": "remote_push_verified"
+    },
+    {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-07-16T20:21:59Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-07-16T20:21:59Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "entity": "GitHub memory bridge",
+      "id": "activity-2026-07-16T20:22:56Z-f165ba920d98",
+      "summary": "Verified origin/main at f165ba920d984ebb517f0ba8f1878fccbbf8283c.",
+      "time": "2026-07-16T20:22:56Z",
+      "type": "remote_push_verified"
+    },
+    {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-07-16T20:28:09Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-07-16T20:28:09Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "entity": "GitHub memory bridge",
+      "id": "activity-2026-07-16T20:28:53Z-f65d2d9939eb",
+      "summary": "Verified origin/main at f65d2d9939ebc2bcd245646c606801462abca384.",
+      "time": "2026-07-16T20:28:53Z",
+      "type": "remote_push_verified"
+    },
+    {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-07-18T08:17:32Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-07-18T08:17:32Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-07-18T08:17:56Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-07-18T08:17:56Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "id": "CHATGPT-FETCH-TEST-202607",
+      "next_action": "Confirm the Daily Intelligence Briefing references this record.",
+      "signal": "ChatGPT can retrieve the current Intelligence Ledger operating state through an immutable GitHub commit URL.",
+      "status": "ready",
+      "type": "system_acceptance_test"
+    }
+  ],
+  "recent_lessons": [
+    {
+      "domain": "Info Analyzer OS",
+      "entity": "Authenticated Ledger API",
+      "id": "IA-20260716202129-6A81E6",
+      "lesson": "The API is the correct live connection layer for cross-chat intelligence."
+    },
+    {
+      "domain": "Lab",
+      "entity": "Operator setup training",
+      "id": "IA-20260716202127-FC4355",
+      "lesson": "Visual setup checklists strengthen knowledge transfer when verbal coaching is inconsistent."
+    },
+    {
+      "domain": "Business",
+      "entity": "How You Define the Problem Determines Whether You Solve It",
+      "id": "IA-20260622010849-B76C8B",
+      "lesson": "A business rep becomes valuable when it turns observation into offer, test, and measured outcome."
+    },
+    {
+      "domain": "AI Project",
+      "entity": "Routing Intelligence Framework",
+      "id": "IA-20260626083952-82B4E9",
+      "lesson": "Data turns vague feeling into measurable signal. Without data you say 'I feel stronger.' With data you know Exercise A produced 0.18 inches, Exercise B 0.05. Without data you say \u2026"
+    },
+    {
+      "domain": "Lab",
+      "entity": "The No. 1 Business Skill You\u2019ll Need in 2025",
+      "id": "IA-20260626173926-8C2DC8",
+      "lesson": "Training system is infrastructure. Clean reps require clear standards, feedback, and repeatable process."
+    },
+    {
+      "domain": "Business",
+      "entity": "The Secret to Having More Energy as an Entrepreneur",
+      "id": "IA-20260626174001-612071",
+      "lesson": "A business rep becomes valuable when it turns observation into offer, test, and measured outcome."
+    },
+    {
+      "domain": "Business",
+      "entity": "The Art of the Elevator Pitch",
+      "id": "IA-20260626174059-11B276",
+      "lesson": "A business rep becomes valuable when it turns observation into offer, test, and measured outcome."
+    },
+    {
+      "domain": "Lab",
+      "entity": "Become a Millionaire in 5 Years or Less",
+      "id": "IA-20260626174148-FE7E1D",
+      "lesson": "Training system is infrastructure. Clean reps require clear standards, feedback, and repeatable process."
+    },
+    {
+      "domain": "Lab",
+      "entity": "MBA Case Studies Articles 3",
+      "id": "IA-20260626174226-BCB8B7",
+      "lesson": "Training system is infrastructure. Clean reps require clear standards, feedback, and repeatable process."
+    },
+    {
+      "domain": "Lab",
+      "entity": "Using Mathematical Optimization to Solve Complex Business Challenges",
+      "id": "IA-20260627203810-2067CE",
+      "lesson": "Non-trackable signal is not actionable. Every saved signal needs proof, metric, trigger, or next review."
+    }
+  ],
+  "schema_version": "1.0",
+  "source_of_truth": "data/info_analyzer.db",
+  "top_actions": [
+    {
+      "action": "Monitor whether NVIDIA reroutes China demand through partners or loses it permanently. Update thesis if H20 ban becomes permanent.",
+      "deadline": "2026-08-01",
+      "id": "ACT-0DE765D7511C5318",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "Data center revenue ex-China, gross margin stability above 75%, Q2 actual vs $45B guide."
+    },
+    {
+      "action": "Execute, then log result back into the DB.",
+      "deadline": "",
+      "id": "ACT-106771F645F05C47",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "Setup error rate, usable data hours, calibration pass rate"
+    },
+    {
+      "action": "Execute, then log result back into the DB.",
+      "deadline": "",
+      "id": "ACT-87DE73E76FC2547C",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "Setup error rate, usable data hours, calibration pass rate"
+    },
+    {
+      "action": "Define the failure mode, mitigation step, and metric to watch.",
+      "deadline": "",
+      "id": "ACT-13531FB6E4515E40",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "project-operator-training-concept-library",
+      "status": "open",
+      "success_metric": "Error rate, usable data hours, cycle time, checklist completion, escalation count"
+    },
+    {
+      "action": "Define the failure mode, mitigation step, and metric to watch.",
+      "deadline": "",
+      "id": "ACT-CA09EC5E110C5580",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "project-sales-os-liquidation",
+      "status": "open",
+      "success_metric": "Units sold, conversion rate, margin, customer response, time to sale"
+    },
+    {
+      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "deadline": "",
+      "id": "ACT-FD3DC537930758FE",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+    },
+    {
+      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "deadline": "",
+      "id": "ACT-3346B6E0263E5DDE",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+    },
+    {
+      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "deadline": "",
+      "id": "ACT-D122F6BFBA7B5952",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+    },
+    {
+      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "deadline": "",
+      "id": "ACT-C2103715C33A540A",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+    },
+    {
+      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "deadline": "",
+      "id": "ACT-9A0B21BAFEC95CD1",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+    },
+    {
+      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "deadline": "",
+      "id": "ACT-5849FBD3A16E5693",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+    },
+    {
+      "action": "Review Apple Inc. economics and update the monitor metric",
+      "deadline": "",
+      "id": "ACT-7B197CF25025564D",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+    },
+    {
+      "action": "Build a trackable sales follow-up loop for SALES",
+      "deadline": "",
+      "id": "ACT-8FA9896B3B2D598D",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "Confidence before/after and evidence that changed it"
+    },
+    {
+      "action": "Build a trackable sales follow-up loop for SALES",
+      "deadline": "",
+      "id": "ACT-594383BF2F045FB1",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "Confidence before/after and evidence that changed it"
+    },
+    {
+      "action": "Build a trackable sales follow-up loop for SALES",
+      "deadline": "",
+      "id": "ACT-6DD489BC5A1B598B",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "Confidence before/after and evidence that changed it"
+    },
+    {
+      "action": "Build a trackable sales follow-up loop for SALES",
+      "deadline": "",
+      "id": "ACT-65585207D03C5EAB",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "Confidence before/after and evidence that changed it"
+    },
+    {
+      "action": "Turn Tron Ares Network Case Study into a tracked action",
+      "deadline": "",
+      "id": "ACT-777B63A6D0715711",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "",
+      "status": "waiting",
+      "success_metric": "Confidence before/after and evidence that changed it"
+    },
+    {
+      "action": "Build a minimal investor tracking table today: Name, Last Contact, Follow-Up Date, Status, Notes. Enter every current investor and prospect. Set a weekly 15-minute review cadence.",
+      "deadline": "",
+      "id": "ACT-615A578122735179",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "project-sales-os-liquidation",
+      "status": "open",
+      "success_metric": "Missed follow-up count per month (target: 0). Follow-up response rate. Average days between initial contact and next touchpoint."
+    },
+    {
+      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "deadline": "",
+      "id": "ACT-348A57783B8E5B48",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "project-job-search",
+      "status": "open",
+      "success_metric": "Signal tracked and acted upon"
+    },
+    {
+      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "deadline": "",
+      "id": "ACT-4EA59FDE56075E0C",
+      "last_accountability_response": "",
+      "priority": 1,
+      "project_id": "project-operator-training-concept-library",
+      "status": "open",
+      "success_metric": "Signal tracked and acted upon"
+    }
+  ],
+  "watchlist": [
+    {
+      "id": "WLI-20260704190327-1714AB",
+      "name": "Paypal",
+      "signal": "",
+      "ticker": "",
+      "trigger": "1128.36"
+    },
+    {
+      "id": "WLI-20260704190327-6C7ACB",
+      "name": "DWT",
+      "signal": "",
+      "ticker": "DWT",
+      "trigger": ""
+    },
+    {
+      "id": "WLI-20260704190327-B98D94",
+      "name": "TREE",
+      "signal": "",
+      "ticker": "TREE",
+      "trigger": ""
+    },
+    {
+      "id": "WLI-20260704190327-E28AB5",
+      "name": "Kraft",
+      "signal": "",
+      "ticker": "",
+      "trigger": "14.07"
+    },
+    {
+      "id": "WLI-20260704190327-6BE1E1",
+      "name": "MNST",
+      "signal": "",
+      "ticker": "MNST",
+      "trigger": ""
+    },
+    {
+      "id": "WLI-20260704190327-99ADEE",
+      "name": "IGC",
+      "signal": "sell off",
+      "ticker": "IGC",
+      "trigger": "17.71653543"
+    },
+    {
+      "id": "WLI-20260704190327-91FB31",
+      "name": "TSLA",
+      "signal": "",
+      "ticker": "TSLA",
+      "trigger": "250.56"
+    },
+    {
+      "id": "WLI-20260704190327-8BF165",
+      "name": "Monster",
+      "signal": "",
+      "ticker": "",
+      "trigger": "13.16"
+    },
+    {
+      "id": "WLI-20260704190327-AB8BB7",
+      "name": "ETSY",
+      "signal": "IPO, new, pot hih gwth",
+      "ticker": "ETSY",
+      "trigger": ""
+    },
+    {
+      "id": "WLI-20260704190327-D46C73",
+      "name": "VTVT",
+      "signal": "sell off",
+      "ticker": "VTVT",
+      "trigger": "21.06824926"
+    },
+    {
+      "id": "WLI-20260704190327-E1E4BB",
+      "name": "NVDA",
+      "signal": "",
+      "ticker": "NVDA",
+      "trigger": "235.13"
+    },
+    {
+      "id": "WLI-20260704190327-9D821D",
+      "name": "Apple",
+      "signal": "",
+      "ticker": "",
+      "trigger": "84.85"
+    },
+    {
+      "id": "WLI-20260704190327-022025",
+      "name": "CLH",
+      "signal": "",
+      "ticker": "CLH",
+      "trigger": ""
+    },
+    {
+      "id": "WLI-20260704190327-7CB689",
+      "name": "OGEN",
+      "signal": "sell off",
+      "ticker": "OGEN",
+      "trigger": "6.790123457"
+    },
+    {
+      "id": "WLI-20260704190327-F25E51",
+      "name": "NFLX",
+      "signal": "",
+      "ticker": "NFLX",
+      "trigger": "321.1"
+    },
+    {
+      "id": "WLI-20260704190327-51DCD0",
+      "name": "Microsoft",
+      "signal": "",
+      "ticker": "",
+      "trigger": "53.0"
+    },
+    {
+      "id": "WLI-20260704190327-AA128D",
+      "name": "DKS",
+      "signal": "",
+      "ticker": "DKS",
+      "trigger": ""
+    },
+    {
+      "id": "WLI-20260704190327-A899F3",
+      "name": "TSLA",
+      "signal": "sell off",
+      "ticker": "TSLA",
+      "trigger": "1.568627451"
+    },
+    {
+      "id": "WLI-20260704190327-E9C6A6",
+      "name": "Disney",
+      "signal": "",
+      "ticker": "",
+      "trigger": "62.61"
+    },
+    {
+      "id": "WLI-20260704190327-C6A6CD",
+      "name": "KFY",
+      "signal": "",
+      "ticker": "KFY",
+      "trigger": ""
+    }
+  ],
+  "weekend_clarity": [
+    "Stabilize the ChatGPT read path through one immutable assistant bundle.",
+    "Prioritize transition-critical actions, open decisions, and proof artifacts over background themes."
+  ],
+  "weekly_only_topics": [
+    "Background watchlist review unless a trigger changed.",
+    "Closed actions unless the result changed a decision rule."
+  ]
+}
