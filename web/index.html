@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Info Analyzer OS v0.85</title>
-  <link rel="stylesheet" href="/style.css?v=0.82.2" />
+  <title>Info Analyzer OS v0.88</title>
+  <link rel="stylesheet" href="/style.css?v=0.88.0" />
 </head>
 <body>
   <!-- WELCOME MODAL -->
@@ -40,7 +40,7 @@
   <header class="app-header">
     <div>
       <p class="eyebrow">Intelligence OS</p>
-      <h1>Info Analyzer OS <span>v0.85</span></h1>
+      <h1>Info Analyzer OS <span id="appVersion">v0.88</span></h1>
       <p class="subtitle">Capture raw input, contextualize it into memory, and resurface only what changes a decision.</p>
     </div>
     <div class="header-actions">
@@ -272,6 +272,7 @@
           </div>
         </div>
         <div id="liveStats" class="stats"></div>
+        <div id="dataPlaneStats" class="list"></div>
       </div>
 
       <div class="grid two">
@@ -280,12 +281,14 @@
           <div class="grid two">
             <label>Name<input id="ingestName" placeholder="Sales trend feed, Apple news, SK Hynix watch..." /></label>
             <label>Type
-              <select id="ingestType"><option value="manual">Manual Test</option><option value="url">URL</option><option value="rss">RSS/Atom</option></select>
+              <select id="ingestType"><option value="manual">Manual Test</option><option value="fixture">Fixture Test</option><option value="url">URL</option><option value="rss">RSS/Atom</option></select>
             </label>
             <label>Domain
               <select id="ingestDomain"><option>Business</option><option>Investing</option><option>Lab</option><option>Career</option><option>Fitness</option><option>Network+</option><option>Music</option><option>AI Project</option><option>Personal Finance</option><option>Personal Preference</option><option>Other</option></select>
             </label>
             <label>Entity<input id="ingestEntity" placeholder="Company, product, source, system..." /></label>
+            <label>Poll Minutes<input id="ingestPollMinutes" type="number" step="0.05" min="0.05" value="1" /></label>
+            <label>Stale After Seconds<input id="ingestStaleAfter" type="number" step="1" min="2" value="8" /></label>
           </div>
           <label>URL <span class="label-hint">for URL/RSS sources</span><input id="ingestUrl" placeholder="https://..." /></label>
           <label>Manual Source Text <span class="label-hint">for testing or phone dumps</span><textarea id="ingestManualText" rows="5" placeholder="Paste a live signal here, e.g. Sales signal: customer objections are clustering around pricing. Track conversion rate and objections before increasing traffic."></textarea></label>
@@ -424,6 +427,6 @@
   </main>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="/app.js?v=0.82.3"></script>
+  <script src="/app.js?v=0.88.0"></script>
 </body>
 </html>

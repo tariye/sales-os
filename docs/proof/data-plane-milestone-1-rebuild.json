@@ -1,0 +1,249 @@
+{
+  "status": "pass",
+  "summary": {
+    "passed": 13,
+    "failed": 0,
+    "total": 13
+  },
+  "base_url": "http://127.0.0.1:8031",
+  "db_path": "/tmp/info-analyzer-m1-proof/eval.db",
+  "source_id": "SRC-20260719071606-002FFE",
+  "checks": [
+    {
+      "name": "health",
+      "ok": true,
+      "evidence": "v0.88-data-plane-milestone-1-rebuild"
+    },
+    {
+      "name": "schema_version",
+      "ok": true,
+      "evidence": 1
+    },
+    {
+      "name": "source_registered_never_run",
+      "ok": true,
+      "evidence": "SRC-20260719071606-002FFE"
+    },
+    {
+      "name": "background_job",
+      "ok": true,
+      "evidence": {
+        "id": "JOB-20260719071607-277948",
+        "created_at": "2026-07-19T07:16:07+00:00",
+        "updated_at": "2026-07-19T07:16:08+00:00",
+        "source_id": "SRC-20260719071606-002FFE",
+        "job_type": "ingest",
+        "trigger_type": "scheduled",
+        "status": "succeeded",
+        "scheduled_for": "2026-07-19T07:16:07+00:00",
+        "attempts": 0,
+        "max_attempts": 3,
+        "next_attempt_at": "2026-07-19T07:16:07+00:00",
+        "worker_id": "worker-39129-61c5d0",
+        "claim_id": "CLAIM-20260719071608-20AFC7",
+        "run_id": "RUN-20260719071608-298196",
+        "last_error": "",
+        "finished_at": "2026-07-19T07:16:08+00:00",
+        "metadata": "{\"source_name\": \"M1 Fixture Source 1784445366\", \"data_plane_milestone\": 1}"
+      }
+    },
+    {
+      "name": "worker_claim",
+      "ok": true,
+      "evidence": {
+        "id": "CLAIM-20260719071608-20AFC7",
+        "created_at": "2026-07-19T07:16:08+00:00",
+        "updated_at": "2026-07-19T07:16:08+00:00",
+        "job_id": "JOB-20260719071607-277948",
+        "source_id": "SRC-20260719071606-002FFE",
+        "worker_id": "worker-39129-61c5d0",
+        "status": "released",
+        "claimed_at": "2026-07-19T07:16:08+00:00",
+        "lease_until": "2026-07-19T07:16:38+00:00",
+        "released_at": "2026-07-19T07:16:08+00:00",
+        "metadata": "{\"data_plane_milestone\": 1}"
+      }
+    },
+    {
+      "name": "ingest_run",
+      "ok": true,
+      "evidence": {
+        "id": "RUN-20260719071608-298196",
+        "created_at": "2026-07-19T07:16:08+00:00",
+        "updated_at": "2026-07-19T07:16:08+00:00",
+        "source_id": "SRC-20260719071606-002FFE",
+        "job_id": "JOB-20260719071607-277948",
+        "claim_id": "CLAIM-20260719071608-20AFC7",
+        "worker_id": "worker-39129-61c5d0",
+        "status": "succeeded",
+        "started_at": "2026-07-19T07:16:08+00:00",
+        "finished_at": "2026-07-19T07:16:08+00:00",
+        "created_items": 1,
+        "created_snapshots": 1,
+        "skipped_items": 0,
+        "error": "",
+        "metadata": "{\"data_plane_milestone\": 1}"
+      }
+    },
+    {
+      "name": "raw_snapshot",
+      "ok": true,
+      "evidence": {
+        "id": "SNAP-20260719071608-5E1137",
+        "run_id": "RUN-20260719071608-298196",
+        "source_id": "SRC-20260719071606-002FFE",
+        "content_hash": "581ea43bb03bc5b0900cfb79d211dbcce58d4917e8589a19f2c21ea7478a465a",
+        "connector_version": "data-plane-m1-fixture-url-rss-manual-v1"
+      }
+    },
+    {
+      "name": "source_health",
+      "ok": true,
+      "evidence": [
+        {
+          "id": "HEALTH-20260719071606-819E72",
+          "created_at": "2026-07-19T07:16:06+00:00",
+          "source_id": "SRC-20260719071606-002FFE",
+          "job_id": null,
+          "run_id": null,
+          "status": "never_run",
+          "message": "Source registered; waiting for scheduled data-plane ingest.",
+          "failure_count": 0,
+          "metadata": "{}"
+        },
+        {
+          "id": "HEALTH-20260719071608-06A372",
+          "created_at": "2026-07-19T07:16:08+00:00",
+          "source_id": "SRC-20260719071606-002FFE",
+          "job_id": "JOB-20260719071607-277948",
+          "run_id": "RUN-20260719071608-298196",
+          "status": "healthy",
+          "message": "Ingest run RUN-20260719071608-298196 completed; 1 new snapshot(s), 0 duplicate(s).",
+          "failure_count": 0,
+          "metadata": "{\"snapshot_ids\": [\"SNAP-20260719071608-5E1137\"], \"worker_id\": \"worker-39129-61c5d0\", \"claim_id\": \"CLAIM-20260719071608-20AFC7\"}"
+        }
+      ]
+    },
+    {
+      "name": "dedupe_same_payload",
+      "ok": true,
+      "evidence": {
+        "created_items": 0,
+        "created_signals": 0,
+        "skipped": 1,
+        "errors": [],
+        "signals": [],
+        "jobs": [
+          {
+            "id": "JOB-20260719071608-706B51",
+            "created_at": "2026-07-19T07:16:08+00:00",
+            "updated_at": "2026-07-19T07:16:08+00:00",
+            "source_id": "SRC-20260719071606-002FFE",
+            "job_type": "ingest",
+            "trigger_type": "manual",
+            "status": "succeeded",
+            "scheduled_for": "2026-07-19T07:16:08+00:00",
+            "attempts": 0,
+            "max_attempts": 3,
+            "next_attempt_at": "2026-07-19T07:16:08+00:00",
+            "worker_id": "manual-worker-39129-61c5d0",
+            "claim_id": "CLAIM-20260719071608-0136AF",
+            "run_id": "RUN-20260719071608-BA0FBD",
+            "last_error": "",
+            "finished_at": "2026-07-19T07:16:08+00:00",
+            "metadata": {
+              "source_name": "M1 Fixture Source 1784445366",
+              "data_plane_milestone": 1
+            }
+          }
+        ],
+        "runs": [
+          {
+            "id": "RUN-20260719071608-BA0FBD",
+            "created_at": "2026-07-19T07:16:08+00:00",
+            "updated_at": "2026-07-19T07:16:08+00:00",
+            "source_id": "SRC-20260719071606-002FFE",
+            "job_id": "JOB-20260719071608-706B51",
+            "claim_id": "CLAIM-20260719071608-0136AF",
+            "worker_id": "manual-worker-39129-61c5d0",
+            "status": "succeeded",
+            "started_at": "2026-07-19T07:16:08+00:00",
+            "finished_at": "2026-07-19T07:16:08+00:00",
+            "created_items": 0,
+            "created_snapshots": 0,
+            "skipped_items": 1,
+            "error": "",
+            "metadata": {
+              "data_plane_milestone": 1
+            }
+          }
+        ],
+        "snapshots": [],
+        "claims": [
+          {
+            "id": "CLAIM-20260719071608-0136AF",
+            "created_at": "2026-07-19T07:16:08+00:00",
+            "updated_at": "2026-07-19T07:16:08+00:00",
+            "job_id": "JOB-20260719071608-706B51",
+            "source_id": "SRC-20260719071606-002FFE",
+            "worker_id": "manual-worker-39129-61c5d0",
+            "status": "released",
+            "claimed_at": "2026-07-19T07:16:08+00:00",
+            "lease_until": "2026-07-19T07:16:38+00:00",
+            "released_at": "2026-07-19T07:16:08+00:00",
+            "metadata": {
+              "data_plane_milestone": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "changed_payload_new_snapshot",
+      "ok": true,
+      "evidence": "SRC-20260719071608-A56317"
+    },
+    {
+      "name": "retry_and_dead_letter",
+      "ok": true,
+      "evidence": [
+        {
+          "status": "never_run",
+          "failure_count": 0,
+          "message": "Source registered; waiting for scheduled data-plane ingest."
+        },
+        {
+          "status": "failed",
+          "failure_count": 1,
+          "message": "<urlopen error [Errno 61] Connection refused>"
+        },
+        {
+          "status": "failed",
+          "failure_count": 2,
+          "message": "<urlopen error [Errno 61] Connection refused>"
+        },
+        {
+          "status": "dead_letter",
+          "failure_count": 3,
+          "message": "<urlopen error [Errno 61] Connection refused>"
+        }
+      ]
+    },
+    {
+      "name": "stale_state",
+      "ok": true,
+      "evidence": "stale"
+    },
+    {
+      "name": "restart_persistence",
+      "ok": true,
+      "evidence": {
+        "jobs": 6,
+        "claims": 8,
+        "runs": 8,
+        "snapshots": 2,
+        "health_events": 15
+      }
+    }
+  ]
+}

@@ -1341,6 +1341,14 @@ async function runPatternEngine(){
 
 function liveSignalHTML(signal){
   const sourceUrl = signal.metadata?.source_url || "";
+  const ids = [
+    ["Job", signal.metadata?.job_id],
+    ["Claim", signal.metadata?.claim_id],
+    ["Worker", signal.metadata?.worker_id],
+    ["Run", signal.metadata?.run_id],
+    ["Snapshot", signal.metadata?.snapshot_id],
+    ["Hash", signal.metadata?.content_hash],
+  ].filter(([,v])=>v);
   const buttons = `
     <button class="primary small" type="button" data-live-form-status="acted" data-live-id="${esc(signal.id)}">Act</button>
     <button class="secondary small" type="button" data-live-status="watching" data-live-id="${esc(signal.id)}" data-live-note="Watching for trigger.">Watch</button>
@@ -1359,6 +1367,7 @@ function liveSignalHTML(signal){
           <span class="tag">${esc(signal.domain || "Other")}</span>
           ${signal.entity ? `<span class="tag">${esc(signal.entity)}</span>` : ""}
           <span class="tag">${esc(signal.related_memory_count || 0)} related memories</span>
+          ${ids.map(([k,v])=>`<span class="tag">${esc(k)} ${esc(String(v)).slice(0,22)}</span>`).join("")}
         </div>
       </div>
       <span class="pill">${esc(signal.source_name || "Source")}</span>
@@ -1373,6 +1382,11 @@ function liveSignalHTML(signal){
 }
 
 function ingestSourceHTML(source){
+  const job = source.latest_job || {};
+  const run = source.latest_run || {};
+  const snap = source.latest_snapshot || {};
+  const health = source.latest_health_event || {};
+  const healthStatus = source.health_status || source.last_health_status || "never_run";
   return `<div class="item">
     <h3>${esc(source.name)}</h3>
     <div class="meta">
@@ -1380,8 +1394,20 @@ function ingestSourceHTML(source){
       <span class="tag">${esc(source.domain || "Other")}</span>
       ${source.entity ? `<span class="tag">${esc(source.entity)}</span>` : ""}
       <span class="tag">${source.active ? "active" : "inactive"}</span>
+      <span class="tag status-${esc(healthStatus)}">${esc(healthStatus)}</span>
+      ${source.pending_job_count ? `<span class="tag">${esc(source.pending_job_count)} pending</span>` : ""}
     </div>
     <p class="muted">${esc(source.url || source.metadata?.manual_text || "").slice(0,180)}</p>
+    <div class="kv-grid">
+      ${kvHTML("Next Run", source.next_run_at || "")}
+      ${kvHTML("Last Run", source.last_run_at || "")}
+      ${kvHTML("Job ID", job.id || source.last_job_id || "")}
+      ${kvHTML("Worker / Claim", [job.worker_id, job.claim_id].filter(Boolean).join(" / "))}
+      ${kvHTML("Run ID", run.id || source.last_run_id || "")}
+      ${kvHTML("Snapshot ID", snap.id || source.last_snapshot_id || "")}
+      ${kvHTML("Payload Hash", snap.content_hash || "")}
+      ${kvHTML("Health Event", health.id ? `${health.status}: ${health.message || ""}` : "never_run: no ingest completed yet")}
+    </div>
     <div class="buttons compact">
       <button class="primary small" onclick="runIngest('${esc(source.id)}')">Run Source</button>
       <button class="ghost small" onclick="deleteIngestSource('${esc(source.id)}')">Delete</button>
@@ -1390,9 +1416,10 @@ function ingestSourceHTML(source){
 }
 
 async function loadLiveDashboard(){
-  const [sources, live] = await Promise.all([
+  const [sources, live, dataPlane] = await Promise.all([
     api("/ingest/sources"),
     api("/live-signals?limit=60"),
+    api("/data-plane/status"),
   ]);
   const stats = live.stats || {};
   const signals = live.signals || [];
@@ -1402,6 +1429,23 @@ async function loadLiveDashboard(){
     ["Acted", stats.acted || 0],
     ["Ignored", stats.ignored || 0],
   ].map(([k,v])=>`<div class="stat"><strong>${esc(v)}</strong><span class="muted">${esc(k)}</span></div>`).join("");
+  if($("dataPlaneStats")){
+    const scheduler = dataPlane.scheduler || {};
+    $("dataPlaneStats").innerHTML = `<div class="item">
+      <h3>Data Plane Backbone</h3>
+      <div class="meta">
+        <span class="tag">scheduler ${esc(scheduler.owner_id || "pending")}</span>
+        <span class="tag">worker ${esc(dataPlane.worker_id || "pending")}</span>
+        <span class="tag">schema ${esc(dataPlane.schema_version || "unknown")}</span>
+      </div>
+      <div class="kv-grid">
+        ${kvHTML("Scheduler Lease", scheduler.lease_until || "")}
+        ${kvHTML("Jobs", JSON.stringify(dataPlane.jobs || {}))}
+        ${kvHTML("Runs", JSON.stringify(dataPlane.runs || {}))}
+        ${kvHTML("Source Health", JSON.stringify(dataPlane.source_health || {}))}
+      </div>
+    </div>`;
+  }
   $("ingestSourcesList").innerHTML = (sources.sources || []).length
     ? sources.sources.map(ingestSourceHTML).join("")
     : `<div class="item"><h3>No sources yet</h3><p class="muted">Add a manual, URL, or RSS source, then run ingest.</p></div>`;
@@ -1423,10 +1467,12 @@ async function addIngestSource(){
     domain: $("ingestDomain").value,
     entity: $("ingestEntity").value.trim(),
     manual_text: $("ingestManualText").value.trim(),
+    poll_interval_minutes: $("ingestPollMinutes")?.value || "1",
+    stale_after_seconds: $("ingestStaleAfter")?.value || "8",
   };
   const res = await api("/ingest/sources", {method:"POST", body:JSON.stringify(payload)});
-  toast("Source added");
-  await runIngest(res.source.id);
+  toast("Source added. Scheduler will run it in the background.");
+  await loadLiveDashboard();
   $("ingestName").value = "";
   $("ingestUrl").value = "";
   $("ingestEntity").value = "";
@@ -1513,6 +1559,11 @@ async function deleteIngestSource(id){
 
 async function checkAiStatus(){
   try {
+    const health = await api("/health");
+    if($("appVersion") && health.version){
+      $("appVersion").textContent = health.version;
+      document.title = `Info Analyzer OS ${health.version}`;
+    }
     const s = await api("/ai/status");
     const note = $("aiStatusNote");
     if(s.ai_enabled){

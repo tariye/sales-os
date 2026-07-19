@@ -19,10 +19,12 @@ import json
 import os
 import re
 import sqlite3
+import threading
+import time
 import urllib.request
 import uuid
 import zipfile
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
@@ -62,7 +64,7 @@ DB_PATH = Path(DB_PATH_RAW).expanduser() if DB_PATH_RAW else DATA_DIR / "info_an
 if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
 
-APP_VERSION = "v0.87-external-runtime-chat-bridge"
+APP_VERSION = "v0.88-data-plane-milestone-1-rebuild"
 APP_VERSIONS = [
     {
         "version": "v0.87",
@@ -519,6 +521,16 @@ DOMAINS = ["Lab", "Investing", "Business", "Career", "Fitness", "Network+", "Mus
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def iso_to_dt(value: str) -> datetime | None:
+    raw = clean_text(value)
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except Exception:
+        return None
 
 
 def today_iso() -> str:
@@ -1345,6 +1357,106 @@ def init_db() -> None:
             FOREIGN KEY(source_id) REFERENCES ingest_sources(id)
         );
 
+        CREATE TABLE IF NOT EXISTS data_plane_jobs (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            job_type TEXT DEFAULT 'ingest',
+            trigger_type TEXT DEFAULT 'scheduled',
+            status TEXT DEFAULT 'queued',
+            scheduled_for TEXT NOT NULL,
+            attempts INTEGER DEFAULT 0,
+            max_attempts INTEGER DEFAULT 3,
+            next_attempt_at TEXT,
+            worker_id TEXT,
+            claim_id TEXT,
+            run_id TEXT,
+            last_error TEXT,
+            finished_at TEXT,
+            metadata TEXT DEFAULT '{}',
+            FOREIGN KEY(source_id) REFERENCES ingest_sources(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS worker_claims (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            job_id TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            worker_id TEXT NOT NULL,
+            status TEXT DEFAULT 'claimed',
+            claimed_at TEXT NOT NULL,
+            lease_until TEXT NOT NULL,
+            released_at TEXT,
+            metadata TEXT DEFAULT '{}',
+            FOREIGN KEY(job_id) REFERENCES data_plane_jobs(id),
+            FOREIGN KEY(source_id) REFERENCES ingest_sources(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS ingest_runs (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            job_id TEXT,
+            claim_id TEXT,
+            worker_id TEXT,
+            status TEXT DEFAULT 'running',
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            created_items INTEGER DEFAULT 0,
+            created_snapshots INTEGER DEFAULT 0,
+            skipped_items INTEGER DEFAULT 0,
+            error TEXT,
+            metadata TEXT DEFAULT '{}',
+            FOREIGN KEY(source_id) REFERENCES ingest_sources(id),
+            FOREIGN KEY(job_id) REFERENCES data_plane_jobs(id),
+            FOREIGN KEY(claim_id) REFERENCES worker_claims(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS raw_snapshots (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            url TEXT,
+            title TEXT,
+            raw_text TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            connector_version TEXT NOT NULL,
+            published_at TEXT,
+            metadata TEXT DEFAULT '{}',
+            UNIQUE(source_id, content_hash),
+            FOREIGN KEY(run_id) REFERENCES ingest_runs(id),
+            FOREIGN KEY(source_id) REFERENCES ingest_sources(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS source_health_events (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            job_id TEXT,
+            run_id TEXT,
+            status TEXT NOT NULL,
+            message TEXT,
+            failure_count INTEGER DEFAULT 0,
+            metadata TEXT DEFAULT '{}',
+            FOREIGN KEY(source_id) REFERENCES ingest_sources(id),
+            FOREIGN KEY(job_id) REFERENCES data_plane_jobs(id),
+            FOREIGN KEY(run_id) REFERENCES ingest_runs(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS scheduler_leases (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            lease_until TEXT NOT NULL,
+            heartbeat_at TEXT NOT NULL,
+            metadata TEXT DEFAULT '{}'
+        );
+
         CREATE INDEX IF NOT EXISTS idx_entries_created ON entries(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_entries_domain ON entries(domain);
         CREATE INDEX IF NOT EXISTS idx_entries_status ON entries(status);
@@ -1382,7 +1494,25 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_live_signals_status ON live_signals(status, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_live_signals_domain ON live_signals(domain, status);
         CREATE INDEX IF NOT EXISTS idx_live_signals_source ON live_signals(source_id, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_data_plane_jobs_status ON data_plane_jobs(status, scheduled_for, next_attempt_at);
+        CREATE INDEX IF NOT EXISTS idx_data_plane_jobs_source ON data_plane_jobs(source_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_worker_claims_job ON worker_claims(job_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_ingest_runs_source ON ingest_runs(source_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_raw_snapshots_source ON raw_snapshots(source_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_source_health_events_source ON source_health_events(source_id, created_at DESC);
         """)
+        ensure_column(conn, "ingest_sources", "last_success_at", "TEXT")
+        ensure_column(conn, "ingest_sources", "next_run_at", "TEXT")
+        ensure_column(conn, "ingest_sources", "last_health_status", "TEXT DEFAULT 'never_run'")
+        ensure_column(conn, "ingest_sources", "consecutive_failures", "INTEGER DEFAULT 0")
+        ensure_column(conn, "ingest_sources", "last_error", "TEXT")
+        ensure_column(conn, "ingest_sources", "last_error_at", "TEXT")
+        ensure_column(conn, "ingest_sources", "dead_letter_at", "TEXT")
+        ensure_column(conn, "ingest_sources", "last_job_id", "TEXT")
+        ensure_column(conn, "ingest_sources", "last_run_id", "TEXT")
+        ensure_column(conn, "ingest_sources", "last_snapshot_id", "TEXT")
+        ensure_column(conn, "ingest_items", "snapshot_id", "TEXT")
+        ensure_column(conn, "ingest_items", "run_id", "TEXT")
         ensure_column(conn, "entries", "actionability", "TEXT DEFAULT 'watch'")
         ensure_column(conn, "entries", "pull_trigger_type", "TEXT DEFAULT 'tag'")
         ensure_column(conn, "entries", "pull_trigger", "TEXT")
@@ -1502,6 +1632,9 @@ def init_db() -> None:
         # Full contextual rewiring is intentionally user-triggered from the
         # Command Center. Running it on every startup can block the server
         # from binding while the memory graph is recomputed.
+        conn.execute("UPDATE ingest_sources SET last_health_status=COALESCE(NULLIF(last_health_status, ''), CASE WHEN COALESCE(last_run_at, '')='' THEN 'never_run' ELSE 'healthy' END)")
+        conn.execute("UPDATE ingest_sources SET consecutive_failures=COALESCE(consecutive_failures, 0)")
+        conn.execute("PRAGMA user_version = 1")
         conn.commit()
 
 
@@ -1569,6 +1702,36 @@ def row_to_ingest_item(row) -> dict:
 
 
 def row_to_live_signal(row) -> dict:
+    d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_data_plane_job(row) -> dict:
+    d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_worker_claim(row) -> dict:
+    d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_ingest_run(row) -> dict:
+    d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_raw_snapshot(row) -> dict:
+    d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_source_health_event(row) -> dict:
     d = dict(row)
     d["metadata"] = json_loads(d.get("metadata"), {})
     return d
@@ -3863,6 +4026,498 @@ def extract_xml_text(node, tag: str) -> str:
     return ""
 
 
+DATA_PLANE_WORKER_ID = f"worker-{os.getpid()}-{uuid.uuid4().hex[:6]}"
+SCHEDULER_OWNER_ID = f"scheduler-{os.getpid()}-{uuid.uuid4().hex[:6]}"
+DATA_PLANE_CONNECTOR_VERSION = "data-plane-m1-fixture-url-rss-manual-v1"
+DATA_PLANE_THREADS_STARTED = False
+
+
+def seconds_from_now(seconds: int | float) -> str:
+    return (datetime.now(timezone.utc) + timedelta(seconds=float(seconds))).isoformat(timespec="seconds")
+
+
+def source_poll_seconds(source: dict) -> float:
+    try:
+        minutes = float(source.get("poll_interval_minutes") or 1)
+    except Exception:
+        minutes = 1
+    return max(minutes * 60, 1)
+
+
+def source_stale_after_seconds(source: dict) -> float:
+    metadata = source.get("metadata") or {}
+    try:
+        return max(float(metadata.get("stale_after_seconds") or source_poll_seconds(source) * 2), 2)
+    except Exception:
+        return max(source_poll_seconds(source) * 2, 2)
+
+
+def record_source_health(conn, source_id: str, status: str, message: str = "", job_id: str = "", run_id: str = "", failure_count: int = 0, metadata: dict | None = None) -> dict:
+    now = now_iso()
+    event = {
+        "id": make_id("HEALTH"),
+        "created_at": now,
+        "source_id": source_id,
+        "job_id": clean_text(job_id) or None,
+        "run_id": clean_text(run_id) or None,
+        "status": status,
+        "message": clean_text(message),
+        "failure_count": int(failure_count or 0),
+        "metadata": metadata or {},
+    }
+    conn.execute(
+        """INSERT INTO source_health_events
+           (id, created_at, source_id, job_id, run_id, status, message, failure_count, metadata)
+           VALUES (:id, :created_at, :source_id, :job_id, :run_id, :status, :message, :failure_count, :metadata)""",
+        {**event, "metadata": json.dumps(event["metadata"], ensure_ascii=False)},
+    )
+    return event
+
+
+def active_job_exists(conn, source_id: str) -> bool:
+    row = conn.execute(
+        "SELECT id FROM data_plane_jobs WHERE source_id=? AND status IN ('queued','retry','running') LIMIT 1",
+        (source_id,),
+    ).fetchone()
+    return bool(row)
+
+
+def enqueue_ingest_job(conn, source_id: str, trigger_type: str = "scheduled", scheduled_for: str | None = None, force: bool = False) -> dict | None:
+    source_row = conn.execute("SELECT * FROM ingest_sources WHERE id=?", (source_id,)).fetchone()
+    if not source_row:
+        raise KeyError("ingest source not found")
+    source = row_to_ingest_source(source_row)
+    if not source.get("active"):
+        return None
+    if not force and active_job_exists(conn, source_id):
+        return None
+    now = now_iso()
+    job = {
+        "id": make_id("JOB"),
+        "created_at": now,
+        "updated_at": now,
+        "source_id": source_id,
+        "job_type": "ingest",
+        "trigger_type": trigger_type,
+        "status": "queued",
+        "scheduled_for": scheduled_for or now,
+        "attempts": 0,
+        "max_attempts": int((source.get("metadata") or {}).get("max_attempts") or 3),
+        "next_attempt_at": scheduled_for or now,
+        "worker_id": "",
+        "claim_id": "",
+        "run_id": "",
+        "last_error": "",
+        "finished_at": "",
+        "metadata": {"source_name": source.get("name"), "data_plane_milestone": 1},
+    }
+    conn.execute(
+        """INSERT INTO data_plane_jobs
+           (id, created_at, updated_at, source_id, job_type, trigger_type, status, scheduled_for, attempts, max_attempts,
+            next_attempt_at, worker_id, claim_id, run_id, last_error, finished_at, metadata)
+           VALUES (:id, :created_at, :updated_at, :source_id, :job_type, :trigger_type, :status, :scheduled_for,
+            :attempts, :max_attempts, :next_attempt_at, :worker_id, :claim_id, :run_id, :last_error, :finished_at, :metadata)""",
+        {**job, "metadata": json.dumps(job["metadata"], ensure_ascii=False)},
+    )
+    conn.execute("UPDATE ingest_sources SET updated_at=?, next_run_at=?, last_job_id=? WHERE id=?", (now, job["scheduled_for"], job["id"], source_id))
+    return job
+
+
+def scheduler_heartbeat(conn) -> dict:
+    now = now_iso()
+    lease_until = seconds_from_now(8)
+    row = conn.execute("SELECT * FROM scheduler_leases WHERE id='default'").fetchone()
+    if row:
+        conn.execute(
+            "UPDATE scheduler_leases SET updated_at=?, owner_id=?, lease_until=?, heartbeat_at=? WHERE id='default'",
+            (now, SCHEDULER_OWNER_ID, lease_until, now),
+        )
+    else:
+        conn.execute(
+            """INSERT INTO scheduler_leases (id, created_at, updated_at, owner_id, lease_until, heartbeat_at, metadata)
+               VALUES ('default', ?, ?, ?, ?, ?, ?)""",
+            (now, now, SCHEDULER_OWNER_ID, lease_until, now, json.dumps({"data_plane_milestone": 1})),
+        )
+    return {"id": "default", "owner_id": SCHEDULER_OWNER_ID, "heartbeat_at": now, "lease_until": lease_until}
+
+
+def mark_stale_sources(conn) -> int:
+    rows = conn.execute("SELECT * FROM ingest_sources WHERE active=1").fetchall()
+    now_dt = datetime.now(timezone.utc)
+    changed = 0
+    for row in rows:
+        source = row_to_ingest_source(row)
+        if source.get("last_health_status") in {"never_run", "failed", "dead_letter"}:
+            continue
+        last_success = iso_to_dt(source.get("last_success_at") or source.get("last_run_at") or "")
+        if not last_success:
+            continue
+        if (now_dt - last_success).total_seconds() <= source_stale_after_seconds(source):
+            continue
+        if source.get("last_health_status") == "stale":
+            continue
+        message = "Source freshness threshold exceeded without a successful run."
+        conn.execute("UPDATE ingest_sources SET updated_at=?, last_health_status='stale', last_error=? WHERE id=?", (now_iso(), message, source["id"]))
+        record_source_health(conn, source["id"], "stale", message, failure_count=int(source.get("consecutive_failures") or 0))
+        changed += 1
+    return changed
+
+
+def scheduler_tick() -> dict:
+    now = now_iso()
+    created = []
+    with connect() as conn:
+        lease = scheduler_heartbeat(conn)
+        mark_stale_sources(conn)
+        rows = conn.execute("SELECT * FROM ingest_sources WHERE active=1 AND COALESCE(dead_letter_at, '')='' ORDER BY updated_at ASC").fetchall()
+        for row in rows:
+            source = row_to_ingest_source(row)
+            due_at = source.get("next_run_at") or source.get("last_run_at") or source.get("created_at") or now
+            due_dt = iso_to_dt(due_at) or datetime.now(timezone.utc)
+            if due_dt > datetime.now(timezone.utc):
+                continue
+            job = enqueue_ingest_job(conn, source["id"], "scheduled", now, force=False)
+            if job:
+                created.append(job)
+        conn.commit()
+    return {"lease": lease, "created_jobs": created}
+
+
+def claim_next_job(worker_id: str) -> dict | None:
+    now = now_iso()
+    with connect() as conn:
+        row = conn.execute(
+            """SELECT * FROM data_plane_jobs
+               WHERE status IN ('queued','retry') AND COALESCE(next_attempt_at, scheduled_for) <= ?
+               ORDER BY scheduled_for ASC, created_at ASC LIMIT 1""",
+            (now,),
+        ).fetchone()
+        if not row:
+            return None
+        job = row_to_data_plane_job(row)
+        claim = {
+            "id": make_id("CLAIM"),
+            "created_at": now,
+            "updated_at": now,
+            "job_id": job["id"],
+            "source_id": job["source_id"],
+            "worker_id": worker_id,
+            "status": "claimed",
+            "claimed_at": now,
+            "lease_until": seconds_from_now(30),
+            "released_at": "",
+            "metadata": {"data_plane_milestone": 1},
+        }
+        conn.execute(
+            """INSERT INTO worker_claims
+               (id, created_at, updated_at, job_id, source_id, worker_id, status, claimed_at, lease_until, released_at, metadata)
+               VALUES (:id, :created_at, :updated_at, :job_id, :source_id, :worker_id, :status, :claimed_at, :lease_until, :released_at, :metadata)""",
+            {**claim, "metadata": json.dumps(claim["metadata"], ensure_ascii=False)},
+        )
+        conn.execute(
+            "UPDATE data_plane_jobs SET updated_at=?, status='running', worker_id=?, claim_id=? WHERE id=? AND status IN ('queued','retry')",
+            (now, worker_id, claim["id"], job["id"]),
+        )
+        conn.commit()
+        job["claim_id"] = claim["id"]
+        job["worker_id"] = worker_id
+        return {"job": job, "claim": claim}
+
+
+def snapshot_content_hash(source_id: str, item: dict) -> str:
+    return text_fingerprint(source_id, item.get("url") or "", clean_text(item.get("raw_text")).lower())
+
+
+def complete_claim(conn, claim_id: str, status: str) -> None:
+    now = now_iso()
+    conn.execute("UPDATE worker_claims SET updated_at=?, status=?, released_at=? WHERE id=?", (now, status, now, claim_id))
+
+
+def execute_claimed_job(claimed: dict) -> dict:
+    job = claimed["job"]
+    claim = claimed["claim"]
+    now = now_iso()
+    run = {
+        "id": make_id("RUN"),
+        "created_at": now,
+        "updated_at": now,
+        "source_id": job["source_id"],
+        "job_id": job["id"],
+        "claim_id": claim["id"],
+        "worker_id": claim["worker_id"],
+        "status": "running",
+        "started_at": now,
+        "finished_at": "",
+        "created_items": 0,
+        "created_snapshots": 0,
+        "skipped_items": 0,
+        "error": "",
+        "metadata": {"data_plane_milestone": 1},
+    }
+    with connect() as conn:
+        source_row = conn.execute("SELECT * FROM ingest_sources WHERE id=?", (job["source_id"],)).fetchone()
+        if not source_row:
+            raise KeyError("ingest source not found")
+        source = row_to_ingest_source(source_row)
+        conn.execute(
+            """INSERT INTO ingest_runs
+               (id, created_at, updated_at, source_id, job_id, claim_id, worker_id, status, started_at, finished_at,
+                created_items, created_snapshots, skipped_items, error, metadata)
+               VALUES (:id, :created_at, :updated_at, :source_id, :job_id, :claim_id, :worker_id, :status, :started_at,
+                :finished_at, :created_items, :created_snapshots, :skipped_items, :error, :metadata)""",
+            {**run, "metadata": json.dumps(run["metadata"], ensure_ascii=False)},
+        )
+        conn.execute("UPDATE data_plane_jobs SET updated_at=?, run_id=? WHERE id=?", (now, run["id"], job["id"]))
+        conn.execute("UPDATE ingest_sources SET updated_at=?, last_run_id=?, last_job_id=? WHERE id=?", (now, run["id"], job["id"], source["id"]))
+        conn.commit()
+    created_items = []
+    created_signals = []
+    created_snapshots = []
+    skipped = 0
+    try:
+        items = fetch_source_items(source)
+        with connect() as conn:
+            for item in items:
+                raw = clean_text(item.get("raw_text"))
+                if not raw:
+                    skipped += 1
+                    continue
+                content_hash = snapshot_content_hash(source["id"], item)
+                existing_snapshot = conn.execute(
+                    "SELECT * FROM raw_snapshots WHERE source_id=? AND content_hash=?",
+                    (source["id"], content_hash),
+                ).fetchone()
+                if existing_snapshot:
+                    skipped += 1
+                    continue
+                snapshot = {
+                    "id": make_id("SNAP"),
+                    "created_at": now_iso(),
+                    "run_id": run["id"],
+                    "source_id": source["id"],
+                    "url": clean_text(item.get("url") or source.get("url") or ""),
+                    "title": clean_text(item.get("title")) or source.get("name") or "Live source update",
+                    "raw_text": raw,
+                    "content_hash": content_hash,
+                    "connector_version": DATA_PLANE_CONNECTOR_VERSION,
+                    "published_at": clean_text(item.get("published_at")),
+                    "metadata": {"job_id": job["id"], "claim_id": claim["id"], "worker_id": claim["worker_id"]},
+                }
+                conn.execute(
+                    """INSERT INTO raw_snapshots
+                       (id, created_at, run_id, source_id, url, title, raw_text, content_hash, connector_version, published_at, metadata)
+                       VALUES (:id, :created_at, :run_id, :source_id, :url, :title, :raw_text, :content_hash, :connector_version, :published_at, :metadata)""",
+                    {**snapshot, "metadata": json.dumps(snapshot["metadata"], ensure_ascii=False)},
+                )
+                created_snapshots.append(snapshot)
+                fp = text_fingerprint(source["id"], content_hash)
+                item_row = {
+                    "id": make_id("ITEM"),
+                    "created_at": now_iso(),
+                    "updated_at": now_iso(),
+                    "source_id": source["id"],
+                    "source_name": source.get("name") or "",
+                    "source_type": source.get("source_type") or "manual",
+                    "url": snapshot["url"],
+                    "title": snapshot["title"],
+                    "raw_text": raw,
+                    "published_at": snapshot["published_at"],
+                    "fingerprint": fp,
+                    "entity": clean_text(item.get("entity") or source.get("entity")),
+                    "domain": clean_text(item.get("domain") or source.get("domain")) or "Other",
+                    "status": "processed",
+                    "snapshot_id": snapshot["id"],
+                    "run_id": run["id"],
+                    "metadata": {
+                        "source_run_at": run["started_at"],
+                        "job_id": job["id"],
+                        "claim_id": claim["id"],
+                        "worker_id": claim["worker_id"],
+                        "snapshot_id": snapshot["id"],
+                        "content_hash": content_hash,
+                    },
+                }
+                conn.execute(
+                    """INSERT INTO ingest_items
+                       (id, created_at, updated_at, source_id, source_name, source_type, url, title, raw_text, published_at,
+                        fingerprint, entity, domain, status, metadata, snapshot_id, run_id)
+                       VALUES (:id, :created_at, :updated_at, :source_id, :source_name, :source_type, :url, :title, :raw_text,
+                        :published_at, :fingerprint, :entity, :domain, :status, :metadata, :snapshot_id, :run_id)""",
+                    {**item_row, "metadata": json.dumps(item_row["metadata"], ensure_ascii=False)},
+                )
+                live = insert_live_signal_from_item(conn, source, item_row)
+                created_items.append(item_row)
+                created_signals.append(live)
+            finished = now_iso()
+            next_run = seconds_from_now(source_poll_seconds(source))
+            last_snapshot_id = created_snapshots[-1]["id"] if created_snapshots else clean_text(source.get("last_snapshot_id"))
+            conn.execute(
+                "UPDATE ingest_runs SET updated_at=?, status='succeeded', finished_at=?, created_items=?, created_snapshots=?, skipped_items=? WHERE id=?",
+                (finished, finished, len(created_items), len(created_snapshots), skipped, run["id"]),
+            )
+            conn.execute(
+                "UPDATE data_plane_jobs SET updated_at=?, status='succeeded', finished_at=?, run_id=?, worker_id=?, claim_id=? WHERE id=?",
+                (finished, finished, run["id"], claim["worker_id"], claim["id"], job["id"]),
+            )
+            conn.execute(
+                """UPDATE ingest_sources SET updated_at=?, last_run_at=?, last_success_at=?, next_run_at=?, last_health_status='healthy',
+                   consecutive_failures=0, last_error='', last_error_at='', dead_letter_at='', last_job_id=?, last_run_id=?, last_snapshot_id=?
+                   WHERE id=?""",
+                (finished, finished, finished, next_run, job["id"], run["id"], last_snapshot_id, source["id"]),
+            )
+            complete_claim(conn, claim["id"], "released")
+            health = record_source_health(
+                conn,
+                source["id"],
+                "healthy",
+                f"Ingest run {run['id']} completed; {len(created_snapshots)} new snapshot(s), {skipped} duplicate(s).",
+                job_id=job["id"],
+                run_id=run["id"],
+                failure_count=0,
+                metadata={"snapshot_ids": [s["id"] for s in created_snapshots], "worker_id": claim["worker_id"], "claim_id": claim["id"]},
+            )
+            conn.commit()
+        return {
+            "job": {**job, "status": "succeeded", "run_id": run["id"], "finished_at": finished, "worker_id": claim["worker_id"], "claim_id": claim["id"]},
+            "claim": {**claim, "status": "released", "released_at": finished},
+            "run": {**run, "status": "succeeded", "finished_at": finished, "created_items": len(created_items), "created_snapshots": len(created_snapshots), "skipped_items": skipped},
+            "snapshots": created_snapshots,
+            "created_items": len(created_items),
+            "created_signals": len(created_signals),
+            "skipped": skipped,
+            "errors": [],
+            "signals": created_signals[:20],
+            "health_event": health,
+        }
+    except Exception as exc:
+        err = str(exc)
+        with connect() as conn:
+            job_row = conn.execute("SELECT * FROM data_plane_jobs WHERE id=?", (job["id"],)).fetchone()
+            job_state = row_to_data_plane_job(job_row) if job_row else job
+            attempts = int(job_state.get("attempts") or 0) + 1
+            max_attempts = int(job_state.get("max_attempts") or 3)
+            dead = attempts >= max_attempts
+            status = "dead_letter" if dead else "retry"
+            finished = now_iso()
+            next_attempt = "" if dead else seconds_from_now(2)
+            source_row = conn.execute("SELECT * FROM ingest_sources WHERE id=?", (job["source_id"],)).fetchone()
+            source_state = row_to_ingest_source(source_row) if source_row else {"consecutive_failures": 0}
+            source_name = source_state.get("name") or ""
+            failure_count = int(source_state.get("consecutive_failures") or 0) + 1
+            conn.execute(
+                "UPDATE ingest_runs SET updated_at=?, status='failed', finished_at=?, error=?, skipped_items=? WHERE id=?",
+                (finished, finished, err, skipped, run["id"]),
+            )
+            conn.execute(
+                """UPDATE data_plane_jobs SET updated_at=?, status=?, attempts=?, next_attempt_at=?, last_error=?, finished_at=?, run_id=?, worker_id=?, claim_id=?
+                   WHERE id=?""",
+                (finished, status, attempts, next_attempt, err, finished, run["id"], claim["worker_id"], claim["id"], job["id"]),
+            )
+            conn.execute(
+                """UPDATE ingest_sources SET updated_at=?, last_health_status=?, consecutive_failures=?, last_error=?, last_error_at=?,
+                   dead_letter_at=CASE WHEN ? THEN ? ELSE dead_letter_at END, last_job_id=?, last_run_id=?
+                   WHERE id=?""",
+                (finished, status if dead else "failed", failure_count, err, finished, 1 if dead else 0, finished, job["id"], run["id"], job["source_id"]),
+            )
+            complete_claim(conn, claim["id"], "failed")
+            health = record_source_health(
+                conn,
+                job["source_id"],
+                status if dead else "failed",
+                err,
+                job_id=job["id"],
+                run_id=run["id"],
+                failure_count=failure_count,
+                metadata={"attempts": attempts, "max_attempts": max_attempts, "worker_id": claim["worker_id"], "claim_id": claim["id"], "next_attempt_at": next_attempt},
+            )
+            conn.commit()
+        return {
+            "job": {**job, "status": status, "run_id": run["id"], "attempts": attempts, "last_error": err},
+            "claim": {**claim, "status": "failed"},
+            "run": {**run, "status": "failed", "error": err},
+            "snapshots": [],
+            "created_items": 0,
+            "created_signals": 0,
+            "skipped": skipped,
+            "errors": [{"source_id": job["source_id"], "source_name": source_name, "error": err}],
+            "signals": [],
+            "health_event": health,
+        }
+
+
+def worker_tick(worker_id: str = DATA_PLANE_WORKER_ID) -> dict:
+    claimed = claim_next_job(worker_id)
+    if not claimed:
+        return {"claimed": False}
+    result = execute_claimed_job(claimed)
+    result["claimed"] = True
+    return result
+
+
+def scheduler_loop(stop_event: threading.Event) -> None:
+    while not stop_event.is_set():
+        try:
+            scheduler_tick()
+        except Exception as exc:
+            print(f"[data-plane] scheduler error: {exc}")
+        stop_event.wait(1)
+
+
+def worker_loop(stop_event: threading.Event) -> None:
+    while not stop_event.is_set():
+        try:
+            result = worker_tick()
+            if not result.get("claimed"):
+                stop_event.wait(1)
+        except Exception as exc:
+            print(f"[data-plane] worker error: {exc}")
+            stop_event.wait(1)
+
+
+def start_data_plane_runtime() -> threading.Event:
+    global DATA_PLANE_THREADS_STARTED
+    stop_event = threading.Event()
+    if DATA_PLANE_THREADS_STARTED:
+        return stop_event
+    DATA_PLANE_THREADS_STARTED = True
+    threading.Thread(target=scheduler_loop, args=(stop_event,), name="info-analyzer-scheduler", daemon=True).start()
+    threading.Thread(target=worker_loop, args=(stop_event,), name="info-analyzer-worker", daemon=True).start()
+    print(f"Data Plane scheduler {SCHEDULER_OWNER_ID} and worker {DATA_PLANE_WORKER_ID} started")
+    return stop_event
+
+
+def enrich_ingest_source(conn, source: dict) -> dict:
+    latest_job = conn.execute("SELECT * FROM data_plane_jobs WHERE source_id=? ORDER BY created_at DESC LIMIT 1", (source["id"],)).fetchone()
+    latest_run = conn.execute("SELECT * FROM ingest_runs WHERE source_id=? ORDER BY created_at DESC LIMIT 1", (source["id"],)).fetchone()
+    latest_snapshot = conn.execute("SELECT * FROM raw_snapshots WHERE source_id=? ORDER BY created_at DESC LIMIT 1", (source["id"],)).fetchone()
+    latest_health = conn.execute("SELECT * FROM source_health_events WHERE source_id=? ORDER BY created_at DESC LIMIT 1", (source["id"],)).fetchone()
+    queued = conn.execute("SELECT COUNT(*) FROM data_plane_jobs WHERE source_id=? AND status IN ('queued','retry','running')", (source["id"],)).fetchone()[0]
+    source["latest_job"] = row_to_data_plane_job(latest_job) if latest_job else None
+    source["latest_run"] = row_to_ingest_run(latest_run) if latest_run else None
+    source["latest_snapshot"] = row_to_raw_snapshot(latest_snapshot) if latest_snapshot else None
+    source["latest_health_event"] = row_to_source_health_event(latest_health) if latest_health else None
+    source["pending_job_count"] = int(queued)
+    source["health_status"] = source.get("last_health_status") or (source["latest_health_event"] or {}).get("status") or "never_run"
+    return source
+
+
+def data_plane_status() -> dict:
+    with connect() as conn:
+        scheduler = conn.execute("SELECT * FROM scheduler_leases WHERE id='default'").fetchone()
+        jobs = {r["status"]: r["count"] for r in conn.execute("SELECT status, COUNT(*) AS count FROM data_plane_jobs GROUP BY status").fetchall()}
+        runs = {r["status"]: r["count"] for r in conn.execute("SELECT status, COUNT(*) AS count FROM ingest_runs GROUP BY status").fetchall()}
+        health = {r["status"]: r["count"] for r in conn.execute("SELECT COALESCE(last_health_status, 'never_run') AS status, COUNT(*) AS count FROM ingest_sources GROUP BY COALESCE(last_health_status, 'never_run')").fetchall()}
+    return {
+        "application_version": APP_VERSION,
+        "scheduler": dict(scheduler) if scheduler else None,
+        "worker_id": DATA_PLANE_WORKER_ID,
+        "jobs": jobs,
+        "runs": runs,
+        "source_health": health,
+        "schema_version": 1,
+    }
+
+
 def source_manual_text(source: dict) -> str:
     metadata = source.get("metadata") or {}
     return clean_text(
@@ -3947,10 +4602,10 @@ def parse_html_item(raw: str, source: dict) -> dict:
 
 def fetch_source_items(source: dict) -> list[dict]:
     source_type = normalize_text(source.get("source_type") or "manual")
-    if source_type == "manual":
+    if source_type in {"manual", "fixture"}:
         raw = source_manual_text(source)
         if not raw:
-            raise ValueError("manual source requires manual_text")
+            raise ValueError(f"{source_type} source requires manual_text")
         return [{
             "title": source.get("name") or raw[:90],
             "url": source.get("url") or "",
@@ -4021,20 +4676,25 @@ def live_signal_translation(raw: str, title: str, entity: str, domain: str) -> d
 def create_ingest_source(payload: dict) -> dict:
     name = clean_text(payload.get("name"))
     source_type = normalize_text(payload.get("source_type") or "manual")
-    if source_type not in {"manual", "url", "rss"}:
+    if source_type not in {"manual", "fixture", "url", "rss"}:
         source_type = "manual"
     url = clean_text(payload.get("url"))
     metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
     manual_text = clean_text(payload.get("manual_text"))
     if manual_text:
         metadata["manual_text"] = manual_text
+    if clean_text(payload.get("stale_after_seconds")):
+        metadata["stale_after_seconds"] = clean_text(payload.get("stale_after_seconds"))
+    if clean_text(payload.get("max_attempts")):
+        metadata["max_attempts"] = clean_text(payload.get("max_attempts"))
     if not name:
         name = clean_text(payload.get("entity")) or (manual_text[:60] if manual_text else "Live source")
     if source_type in {"url", "rss"} and not url:
         raise ValueError("url is required for url/rss sources")
-    if source_type == "manual" and not source_manual_text({"metadata": metadata, "url": url}):
-        raise ValueError("manual_text is required for manual sources")
+    if source_type in {"manual", "fixture"} and not source_manual_text({"metadata": metadata, "url": url}):
+        raise ValueError("manual_text is required for manual/fixture sources")
     now = now_iso()
+    poll_interval = float(payload.get("poll_interval_minutes") or 1)
     source = {
         "id": clean_text(payload.get("id")) or make_id("SRC"),
         "created_at": now,
@@ -4044,18 +4704,33 @@ def create_ingest_source(payload: dict) -> dict:
         "url": url,
         "domain": clean_text(payload.get("domain")) or "Other",
         "entity": clean_text(payload.get("entity")) or "",
-        "poll_interval_minutes": int(payload.get("poll_interval_minutes") or 60),
+        "poll_interval_minutes": poll_interval,
         "active": 1 if payload.get("active", True) else 0,
         "last_run_at": "",
+        "last_success_at": "",
+        "next_run_at": now,
+        "last_health_status": "never_run",
+        "consecutive_failures": 0,
+        "last_error": "",
+        "last_error_at": "",
+        "dead_letter_at": "",
+        "last_job_id": "",
+        "last_run_id": "",
+        "last_snapshot_id": "",
         "metadata": metadata,
     }
     with connect() as conn:
         conn.execute(
             """INSERT INTO ingest_sources
-               (id, created_at, updated_at, name, source_type, url, domain, entity, poll_interval_minutes, active, last_run_at, metadata)
-               VALUES (:id, :created_at, :updated_at, :name, :source_type, :url, :domain, :entity, :poll_interval_minutes, :active, :last_run_at, :metadata)""",
+               (id, created_at, updated_at, name, source_type, url, domain, entity, poll_interval_minutes, active, last_run_at,
+                last_success_at, next_run_at, last_health_status, consecutive_failures, last_error, last_error_at, dead_letter_at,
+                last_job_id, last_run_id, last_snapshot_id, metadata)
+               VALUES (:id, :created_at, :updated_at, :name, :source_type, :url, :domain, :entity, :poll_interval_minutes, :active, :last_run_at,
+                :last_success_at, :next_run_at, :last_health_status, :consecutive_failures, :last_error, :last_error_at, :dead_letter_at,
+                :last_job_id, :last_run_id, :last_snapshot_id, :metadata)""",
             {**source, "metadata": json.dumps(metadata, ensure_ascii=False)},
         )
+        record_source_health(conn, source["id"], "never_run", "Source registered; waiting for scheduled data-plane ingest.")
         audit(conn, "create", "ingest_source", source["id"], {"name": name, "source_type": source_type})
         conn.commit()
     return {"source": source}
@@ -4064,7 +4739,8 @@ def create_ingest_source(payload: dict) -> dict:
 def list_ingest_sources() -> dict:
     with connect() as conn:
         rows = conn.execute("SELECT * FROM ingest_sources ORDER BY updated_at DESC, created_at DESC").fetchall()
-    return {"sources": [row_to_ingest_source(r) for r in rows]}
+        sources = [enrich_ingest_source(conn, row_to_ingest_source(r)) for r in rows]
+    return {"sources": sources}
 
 
 def related_memory_count(conn, domain: str, entity: str, raw_text: str) -> int:
@@ -4117,6 +4793,12 @@ def insert_live_signal_from_item(conn, source: dict, item: dict) -> dict:
             "source_name": source.get("name"),
             "source_url": item.get("url") or source.get("url"),
             "published_at": item.get("published_at"),
+            "job_id": (item.get("metadata") or {}).get("job_id"),
+            "claim_id": (item.get("metadata") or {}).get("claim_id"),
+            "worker_id": (item.get("metadata") or {}).get("worker_id"),
+            "run_id": item.get("run_id") or (item.get("metadata") or {}).get("run_id"),
+            "snapshot_id": item.get("snapshot_id") or (item.get("metadata") or {}).get("snapshot_id"),
+            "content_hash": (item.get("metadata") or {}).get("content_hash"),
         },
     })
     entry = insert_entry(conn, entry_payload)
@@ -4152,6 +4834,12 @@ def insert_live_signal_from_item(conn, source: dict, item: dict) -> dict:
             "source_url": item.get("url") or source.get("url"),
             "published_at": item.get("published_at"),
             "action_id": (action or {}).get("id"),
+            "job_id": (item.get("metadata") or {}).get("job_id"),
+            "claim_id": (item.get("metadata") or {}).get("claim_id"),
+            "worker_id": (item.get("metadata") or {}).get("worker_id"),
+            "run_id": item.get("run_id") or (item.get("metadata") or {}).get("run_id"),
+            "snapshot_id": item.get("snapshot_id") or (item.get("metadata") or {}).get("snapshot_id"),
+            "content_hash": (item.get("metadata") or {}).get("content_hash"),
         },
     }
     conn.execute(
@@ -4169,6 +4857,8 @@ def insert_live_signal_from_item(conn, source: dict, item: dict) -> dict:
 
 def run_ingest(payload: dict) -> dict:
     source_id = clean_text(payload.get("source_id"))
+    scheduled_jobs = []
+    results = []
     with connect() as conn:
         if source_id:
             rows = conn.execute("SELECT * FROM ingest_sources WHERE id=?", (source_id,)).fetchall()
@@ -4176,65 +4866,32 @@ def run_ingest(payload: dict) -> dict:
             rows = conn.execute("SELECT * FROM ingest_sources WHERE active=1 ORDER BY updated_at DESC").fetchall()
         if not rows:
             raise KeyError("ingest source not found")
-        created_items = []
-        created_signals = []
-        skipped = 0
-        errors = []
         for row in rows:
             source = row_to_ingest_source(row)
-            try:
-                items = fetch_source_items(source)
-            except Exception as exc:
-                errors.append({"source_id": source["id"], "source_name": source.get("name"), "error": str(exc)})
-                continue
-            for item in items:
-                raw = clean_text(item.get("raw_text"))
-                if not raw:
-                    skipped += 1
-                    continue
-                fp = text_fingerprint(source["id"], item.get("url") or "", item.get("title") or "", raw)
-                exists = conn.execute("SELECT id FROM ingest_items WHERE fingerprint=?", (fp,)).fetchone()
-                if exists:
-                    skipped += 1
-                    continue
-                now = now_iso()
-                item_id = make_id("ITEM")
-                item_row = {
-                    "id": item_id,
-                    "created_at": now,
-                    "updated_at": now,
-                    "source_id": source["id"],
-                    "source_name": source.get("name") or "",
-                    "source_type": source.get("source_type") or "manual",
-                    "url": clean_text(item.get("url") or source.get("url") or ""),
-                    "title": clean_text(item.get("title")) or source.get("name") or "Live source update",
-                    "raw_text": raw,
-                    "published_at": clean_text(item.get("published_at")),
-                    "fingerprint": fp,
-                    "entity": clean_text(item.get("entity") or source.get("entity")),
-                    "domain": clean_text(item.get("domain") or source.get("domain")) or "Other",
-                    "status": "processed",
-                    "metadata": {"source_run_at": now},
-                }
-                conn.execute(
-                    """INSERT INTO ingest_items
-                       (id, created_at, updated_at, source_id, source_name, source_type, url, title, raw_text, published_at,
-                        fingerprint, entity, domain, status, metadata)
-                       VALUES (:id, :created_at, :updated_at, :source_id, :source_name, :source_type, :url, :title, :raw_text,
-                        :published_at, :fingerprint, :entity, :domain, :status, :metadata)""",
-                    {**item_row, "metadata": json.dumps(item_row["metadata"], ensure_ascii=False)},
-                )
-                live = insert_live_signal_from_item(conn, source, item_row)
-                created_items.append(item_row)
-                created_signals.append(live)
-            conn.execute("UPDATE ingest_sources SET updated_at=?, last_run_at=? WHERE id=?", (now_iso(), now_iso(), source["id"]))
+            job = enqueue_ingest_job(conn, source["id"], "manual", now_iso(), force=True)
+            if job:
+                scheduled_jobs.append(job)
         conn.commit()
+    for job in scheduled_jobs:
+        claimed = claim_next_job(f"manual-{DATA_PLANE_WORKER_ID}")
+        if not claimed:
+            continue
+        results.append(execute_claimed_job(claimed))
+    created_items = sum(int(r.get("created_items") or 0) for r in results)
+    created_signals = sum(int(r.get("created_signals") or 0) for r in results)
+    skipped = sum(int(r.get("skipped") or 0) for r in results)
+    errors = [error for r in results for error in (r.get("errors") or [])]
+    signals = [signal for r in results for signal in (r.get("signals") or [])]
     return {
-        "created_items": len(created_items),
-        "created_signals": len(created_signals),
+        "created_items": created_items,
+        "created_signals": created_signals,
         "skipped": skipped,
         "errors": errors,
-        "signals": created_signals[:20],
+        "signals": signals[:20],
+        "jobs": [r.get("job") for r in results if r.get("job")],
+        "runs": [r.get("run") for r in results if r.get("run")],
+        "snapshots": [snap for r in results for snap in (r.get("snapshots") or [])],
+        "claims": [r.get("claim") for r in results if r.get("claim")],
     }
 
 
@@ -6759,7 +7416,7 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/style.css":
                 return self.send_file(WEB_DIR / "style.css", "text/css; charset=utf-8")
             if path == "/api/health":
-                return self.send_json({"ok": True, "app": "Info Analyzer OS", "version": APP_VERSION, "db_path": str(DB_PATH), "sqlite": sqlite_runtime_status()})
+                return self.send_json({"ok": True, "app": "Info Analyzer OS", "version": APP_VERSION, "db_path": str(DB_PATH), "sqlite": sqlite_runtime_status(), "data_plane": data_plane_status()})
             if path == "/api/ai/status":
                 key_set = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
                 sdk_ok = _anthropic is not None
@@ -6781,6 +7438,24 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(list_ingest_sources())
             if path == "/api/live-signals":
                 return self.send_json(list_live_signals(params))
+            if path == "/api/data-plane/status":
+                return self.send_json(data_plane_status())
+            if path == "/api/data-plane/jobs":
+                with connect() as conn:
+                    rows = conn.execute("SELECT * FROM data_plane_jobs ORDER BY created_at DESC LIMIT 100").fetchall()
+                return self.send_json({"jobs": [row_to_data_plane_job(r) for r in rows]})
+            if path == "/api/data-plane/runs":
+                with connect() as conn:
+                    rows = conn.execute("SELECT * FROM ingest_runs ORDER BY created_at DESC LIMIT 100").fetchall()
+                return self.send_json({"runs": [row_to_ingest_run(r) for r in rows]})
+            if path == "/api/data-plane/snapshots":
+                with connect() as conn:
+                    rows = conn.execute("SELECT id, created_at, run_id, source_id, url, title, content_hash, connector_version, published_at, metadata FROM raw_snapshots ORDER BY created_at DESC LIMIT 100").fetchall()
+                return self.send_json({"snapshots": [row_to_raw_snapshot(r) for r in rows]})
+            if path == "/api/data-plane/health-events":
+                with connect() as conn:
+                    rows = conn.execute("SELECT * FROM source_health_events ORDER BY created_at DESC LIMIT 100").fetchall()
+                return self.send_json({"health_events": [row_to_source_health_event(r) for r in rows]})
             if path == "/api/stock/analyze":
                 return self.send_json(stock_intel(
                     symbol=(params.get("symbol") or params.get("ticker") or [""])[0],
@@ -6922,6 +7597,10 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(create_ingest_source(payload), 201)
             if path == "/api/ingest/run":
                 return self.send_json(run_ingest(payload), 201)
+            if path == "/api/data-plane/scheduler/tick":
+                return self.send_json(scheduler_tick(), 201)
+            if path == "/api/data-plane/worker/tick":
+                return self.send_json(worker_tick(clean_text(payload.get("worker_id")) or DATA_PLANE_WORKER_ID), 201)
             if path == "/api/stock/analyze":
                 return self.send_json(stock_intel(
                     symbol=payload.get("symbol") or payload.get("ticker") or "",
@@ -7074,6 +7753,7 @@ def main(argv=None):
             print(result["notes"])
     if args.no_serve:
         return
+    stop_data_plane = start_data_plane_runtime()
     httpd = Server((args.host, args.port), Handler)
     print(f"Info Analyzer OS {APP_VERSION} running at http://{args.host}:{args.port}")
     print(f"SQLite DB: {DB_PATH}")
@@ -7082,6 +7762,7 @@ def main(argv=None):
     except KeyboardInterrupt:
         print("\nShutting down.")
     finally:
+        stop_data_plane.set()
         httpd.server_close()
 
 
