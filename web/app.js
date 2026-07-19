@@ -1043,6 +1043,20 @@ function fmtPct(value){
   if(!Number.isFinite(n)) return String(value || "n/a");
   return `${n.toFixed(1)}%`;
 }
+function fmtAgeSeconds(value){
+  const n = Number(value);
+  if(!Number.isFinite(n) || n < 0) return "n/a";
+  if(n < 60) return `${Math.round(n)}s`;
+  const mins = Math.floor(n / 60);
+  const secs = Math.round(n % 60);
+  if(mins < 60) return `${mins}m ${secs}s`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  if(hours < 24) return `${hours}h ${remMins}m`;
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return `${days}d ${remHours}h`;
+}
 function stockAnalysisHTML(res){
   const a = res.analysis || {};
   const company = a.company || {};
@@ -1386,7 +1400,11 @@ function ingestSourceHTML(source){
   const run = source.latest_run || {};
   const snap = source.latest_snapshot || {};
   const health = source.latest_health_event || {};
-  const healthStatus = source.health_status || source.last_health_status || "never_run";
+  const retry = source.retry_state || {};
+  const healthStatus = retry.status || source.health_status || source.last_health_status || "never_run";
+  const showRetry = healthStatus === "retrying" || healthStatus === "dead_letter" || source.last_health_status === "retrying";
+  const latestSuccess = retry.latest_success_at || source.last_success_at || "";
+  const freshnessAge = retry.freshness_age_seconds;
   return `<div class="item">
     <h3>${esc(source.name)}</h3>
     <div class="meta">
@@ -1401,6 +1419,13 @@ function ingestSourceHTML(source){
     <div class="kv-grid">
       ${kvHTML("Next Run", source.next_run_at || "")}
       ${kvHTML("Last Run", source.last_run_at || "")}
+      ${showRetry ? kvHTML("Status", healthStatus) : ""}
+      ${showRetry ? kvHTML("Current Attempt", `${retry.attempts || job.attempts || 0} / ${retry.max_attempts || job.max_attempts || 3}`) : ""}
+      ${showRetry ? kvHTML("Last Error", retry.last_error || source.last_error || "") : ""}
+      ${showRetry ? kvHTML("Last Failure", retry.last_failure_at || source.last_error_at || "") : ""}
+      ${showRetry ? kvHTML("Next Retry", retry.next_retry_at || job.next_attempt_at || "") : ""}
+      ${showRetry ? kvHTML("Latest Success", latestSuccess || "") : ""}
+      ${showRetry ? kvHTML("Freshness Age", freshnessAge == null ? "" : fmtAgeSeconds(freshnessAge)) : ""}
       ${kvHTML("Job ID", job.id || source.last_job_id || "")}
       ${kvHTML("Worker / Claim", [job.worker_id, job.claim_id].filter(Boolean).join(" / "))}
       ${kvHTML("Run ID", run.id || source.last_run_id || "")}

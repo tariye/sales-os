@@ -11,11 +11,14 @@ import argparse
 import json
 import os
 from pathlib import Path
+from datetime import datetime, timezone
 import signal
 import sqlite3
 import subprocess
 import sys
 import time
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import urllib.error
 import urllib.request
 
@@ -64,6 +67,31 @@ def count(db_path: str, table: str, where: str = "1=1", args=()) -> int:
     return int(rows[0]["c"])
 
 
+def start_test_source_server(routes: dict[str, list[tuple[int, str]]]):
+    state = {"routes": {k: list(v) for k, v in routes.items()}, "counts": {}}
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_args, **_kwargs):
+            return
+
+        def do_GET(self):
+            state["counts"][self.path] = state["counts"].get(self.path, 0) + 1
+            attempts = state["counts"][self.path]
+            steps = state["routes"].get(self.path, [(200, "default fixture payload")])
+            status, body = steps[min(attempts - 1, len(steps) - 1)]
+            body = body.replace("{attempts}", str(attempts))
+            self.send_response(status)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body.encode("utf-8"))))
+            self.end_headers()
+            self.wfile.write(body.encode("utf-8"))
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8031)
@@ -92,6 +120,7 @@ def main() -> int:
         stderr=subprocess.STDOUT,
         text=True,
     )
+    retry_server = None
     checks = []
     try:
         wait_for(lambda: request(base_url, "GET", "/api/health"), 15, "server health")
@@ -127,6 +156,35 @@ def main() -> int:
         checks.append({"name": "raw_snapshot", "ok": bool(snaps and snaps[0]["connector_version"]), "evidence": snaps[0] if snaps else None})
         checks.append({"name": "source_health", "ok": any(e["status"] == "healthy" for e in health_events), "evidence": health_events[-2:]})
 
+        def get_source(source_id: str):
+            rows = request(base_url, "GET", "/api/ingest/sources").get("sources", [])
+            return next((row for row in rows if row["id"] == source_id), None)
+
+        def wait_for_source(source_id: str, predicate, timeout: float, label: str):
+            return wait_for(lambda: predicate(get_source(source_id) or {}), timeout, label)
+
+        def freeze_retrying_job(source_id: str, timeout: float, label: str):
+            end = time.time() + timeout
+            last = None
+            while time.time() < end:
+                source = get_source(source_id) or {}
+                last = source
+                if source.get("health_status") == "retrying" or (source.get("retry_state") or {}).get("status") == "retrying":
+                    conn = sqlite3.connect(str(db_path))
+                    try:
+                        conn.execute(
+                            "UPDATE data_plane_jobs SET next_attempt_at=? WHERE source_id=? AND status='retry'",
+                            ("2999-01-01T00:00:00+00:00", source_id),
+                        )
+                        conn.commit()
+                    finally:
+                        conn.close()
+                    return get_source(source_id) or source
+                time.sleep(0.05)
+            raise AssertionError(f"timed out waiting for {label}; last={last!r}")
+
+        trim = lambda value: str(value or "").strip()
+
         before_snapshots = count(str(db_path), "raw_snapshots", "source_id=?", (source_id,))
         repeat = request(base_url, "POST", "/api/ingest/run", {"source_id": source_id})
         after_snapshots = count(str(db_path), "raw_snapshots", "source_id=?", (source_id,))
@@ -156,6 +214,149 @@ def main() -> int:
         wait_for(lambda: count(str(db_path), "data_plane_jobs", "source_id=? AND status='dead_letter'", (failed["id"],)) >= 1, 15, "dead letter")
         failed_events = db_rows(str(db_path), "SELECT status, failure_count, message FROM source_health_events WHERE source_id=? ORDER BY created_at", (failed["id"],))
         checks.append({"name": "retry_and_dead_letter", "ok": any(e["status"] == "failed" for e in failed_events) and any(e["status"] == "dead_letter" for e in failed_events), "evidence": failed_events})
+
+        retry_server = start_test_source_server({
+            "/fail-then-success": [
+                (500, "temporary failure"),
+                (200, "retry success payload"),
+            ],
+            "/success-then-fail": [
+                (200, "initial success payload"),
+                (500, "later failure"),
+                (500, "later failure"),
+            ],
+            "/always-fail": [
+                (500, "permanent failure"),
+            ],
+        })
+        retry_port = retry_server.server_address[1]
+
+        retrying = request(base_url, "POST", "/api/ingest/sources", {
+            "name": f"M1 Retry Fixture {nonce}",
+            "source_type": "url",
+            "url": f"http://127.0.0.1:{retry_port}/fail-then-success",
+            "domain": "Business",
+            "entity": "Retrying Source",
+            "poll_interval_minutes": 0.02,
+            "max_attempts": 3,
+            "stale_after_seconds": 60,
+        })["source"]
+        retrying_id = retrying["id"]
+        retry_view = freeze_retrying_job(
+            retrying_id,
+            15,
+            "retrying state",
+        )
+        checks.append({
+            "name": "retrying_state_visible",
+            "ok": retry_view.get("health_status") == "retrying" and int((retry_view.get("retry_state") or {}).get("attempts") or 0) == 1,
+            "evidence": retry_view,
+        })
+        retry_events = db_rows(str(db_path), "SELECT status, failure_count, message, metadata FROM source_health_events WHERE source_id=? ORDER BY created_at", (retrying_id,))
+        checks.append({
+            "name": "retrying_state_persisted",
+            "ok": any(e["status"] == "failed" for e in retry_events) and any(e["status"] == "retrying" for e in retry_events),
+            "evidence": retry_events[-3:],
+        })
+
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "UPDATE data_plane_jobs SET next_attempt_at=? WHERE source_id=? AND status='retry'",
+            ("2999-01-01T00:00:00+00:00", retrying_id),
+        )
+        conn.commit()
+        conn.close()
+
+        proc.send_signal(signal.SIGINT)
+        try:
+            proc.wait(timeout=8)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        proc = subprocess.Popen(
+            [sys.executable, "server.py", "--host", "127.0.0.1", "--port", str(args.port)],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        wait_for(lambda: request(base_url, "GET", "/api/health"), 15, "restart after retrying")
+        restarted_retry = get_source(retrying_id) or {}
+        checks.append({
+            "name": "retrying_survives_restart",
+            "ok": restarted_retry.get("health_status") == "retrying",
+            "evidence": restarted_retry,
+        })
+
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "UPDATE data_plane_jobs SET next_attempt_at=?, status='retry' WHERE source_id=? AND status='retry'",
+            (datetime.now(timezone.utc).isoformat(timespec="seconds"), retrying_id),
+        )
+        conn.commit()
+        conn.close()
+        wait_for_source(
+            retrying_id,
+            lambda s: s.get("health_status") == "healthy"
+            and trim(s.get("last_success_at"))
+            and trim(s.get("last_snapshot_id")),
+            20,
+            "successful retry",
+        )
+        healthy_after_retry = get_source(retrying_id) or {}
+        checks.append({
+            "name": "successful_retry_returns_healthy",
+            "ok": healthy_after_retry.get("health_status") == "healthy" and trim(healthy_after_retry.get("last_success_at")),
+            "evidence": healthy_after_retry,
+        })
+
+        success_then_fail = request(base_url, "POST", "/api/ingest/sources", {
+            "name": f"M1 Success Then Fail {nonce}",
+            "source_type": "url",
+            "url": f"http://127.0.0.1:{retry_port}/success-then-fail",
+            "domain": "Business",
+            "entity": "Prior Success Source",
+            "poll_interval_minutes": 0.02,
+            "max_attempts": 3,
+            "stale_after_seconds": 60,
+        })["source"]
+        success_fail_id = success_then_fail["id"]
+        wait_for_source(
+            success_fail_id,
+            lambda s: s.get("health_status") == "healthy" and trim(s.get("last_success_at")),
+            15,
+            "initial success before retry",
+        )
+        success_fail_view = freeze_retrying_job(success_fail_id, 20, "retrying with prior success")
+        checks.append({
+            "name": "old_success_does_not_hide_retrying",
+            "ok": success_fail_view.get("health_status") == "retrying" and trim(success_fail_view.get("last_success_at")),
+            "evidence": success_fail_view,
+        })
+
+        dead_letter = request(base_url, "POST", "/api/ingest/sources", {
+            "name": f"M1 Always Fail {nonce}",
+            "source_type": "url",
+            "url": f"http://127.0.0.1:{retry_port}/always-fail",
+            "domain": "Business",
+            "entity": "Permanent Failure Source",
+            "poll_interval_minutes": 0.02,
+            "max_attempts": 2,
+            "stale_after_seconds": 60,
+        })["source"]
+        dead_letter_id = dead_letter["id"]
+        wait_for_source(
+            dead_letter_id,
+            lambda s: s.get("health_status") == "dead_letter" or trim(s.get("dead_letter_at")),
+            20,
+            "dead letter after retries",
+        )
+        dead_letter_view = get_source(dead_letter_id) or {}
+        checks.append({
+            "name": "dead_letter_after_exhausted_retries",
+            "ok": dead_letter_view.get("health_status") == "dead_letter" and trim(dead_letter_view.get("dead_letter_at")),
+            "evidence": dead_letter_view,
+        })
 
         # Force a stale check by aging the successful source in the clean proof DB.
         conn = sqlite3.connect(str(db_path))
@@ -205,6 +406,9 @@ def main() -> int:
             proof.write_text(json.dumps(result, indent=2) + "\n")
         return 0 if result["status"] == "pass" else 1
     finally:
+        if retry_server is not None:
+            retry_server.shutdown()
+            retry_server.server_close()
         if proc.poll() is None:
             proc.send_signal(signal.SIGINT)
             try:
