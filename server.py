@@ -56,6 +56,28 @@ def _get_anthropic_client():
 def configured_api_key() -> str:
     return os.environ.get("INFO_ANALYZER_API_KEY", "").strip()
 
+
+def git_commit_sha() -> str:
+    head = BASE_DIR / ".git" / "HEAD"
+    try:
+        raw = head.read_text(encoding="utf-8").strip()
+        if raw.startswith("ref:"):
+            ref = raw.split(" ", 1)[1].strip()
+            ref_path = BASE_DIR / ".git" / ref
+            if ref_path.exists():
+                return clean_text(ref_path.read_text(encoding="utf-8")).strip()
+        return raw[:40]
+    except Exception:
+        return ""
+
+
+def db_path_category() -> str:
+    if DB_PATH_RAW:
+        return "configured_path"
+    if DB_PATH.parent == DATA_DIR:
+        return "default_repo_data"
+    return "derived_path"
+
 BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
@@ -65,6 +87,10 @@ if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
 
 APP_VERSION = "v0.88-data-plane-milestone-1-rebuild"
+SCHEMA_VERSION = 1
+DATA_PLANE_LEASE_SECONDS = 30
+SCHEDULER_LEASE_SECONDS = 8
+RECOVERY_RETRY_DELAY_SECONDS = 2
 APP_VERSIONS = [
     {
         "version": "v0.87",
@@ -1371,6 +1397,13 @@ def init_db() -> None:
             next_attempt_at TEXT,
             worker_id TEXT,
             claim_id TEXT,
+            claimed_by TEXT,
+            claimed_at TEXT,
+            claim_expires_at TEXT,
+            recovered_at TEXT,
+            recovery_count INTEGER DEFAULT 0,
+            previous_worker_id TEXT,
+            recovery_reason TEXT,
             run_id TEXT,
             last_error TEXT,
             finished_at TEXT,
@@ -1389,6 +1422,8 @@ def init_db() -> None:
             claimed_at TEXT NOT NULL,
             lease_until TEXT NOT NULL,
             released_at TEXT,
+            recovered_at TEXT,
+            recovery_reason TEXT,
             metadata TEXT DEFAULT '{}',
             FOREIGN KEY(job_id) REFERENCES data_plane_jobs(id),
             FOREIGN KEY(source_id) REFERENCES ingest_sources(id)
@@ -1457,6 +1492,27 @@ def init_db() -> None:
             metadata TEXT DEFAULT '{}'
         );
 
+        CREATE TABLE IF NOT EXISTS scheduler_events (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            previous_owner_id TEXT,
+            owner_id TEXT NOT NULL,
+            lease_until TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            metadata TEXT DEFAULT '{}'
+        );
+
+        CREATE TABLE IF NOT EXISTS worker_heartbeats (
+            worker_id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            heartbeat_at TEXT NOT NULL,
+            status TEXT NOT NULL,
+            current_job_id TEXT,
+            current_claim_id TEXT,
+            metadata TEXT DEFAULT '{}'
+        );
+
         CREATE INDEX IF NOT EXISTS idx_entries_created ON entries(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_entries_domain ON entries(domain);
         CREATE INDEX IF NOT EXISTS idx_entries_status ON entries(status);
@@ -1497,9 +1553,11 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_data_plane_jobs_status ON data_plane_jobs(status, scheduled_for, next_attempt_at);
         CREATE INDEX IF NOT EXISTS idx_data_plane_jobs_source ON data_plane_jobs(source_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_worker_claims_job ON worker_claims(job_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_worker_claims_status ON worker_claims(status, lease_until);
         CREATE INDEX IF NOT EXISTS idx_ingest_runs_source ON ingest_runs(source_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_raw_snapshots_source ON raw_snapshots(source_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_source_health_events_source ON source_health_events(source_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_scheduler_events_created ON scheduler_events(created_at DESC);
         """)
         ensure_column(conn, "ingest_sources", "last_success_at", "TEXT")
         ensure_column(conn, "ingest_sources", "next_run_at", "TEXT")
@@ -1511,6 +1569,15 @@ def init_db() -> None:
         ensure_column(conn, "ingest_sources", "last_job_id", "TEXT")
         ensure_column(conn, "ingest_sources", "last_run_id", "TEXT")
         ensure_column(conn, "ingest_sources", "last_snapshot_id", "TEXT")
+        ensure_column(conn, "data_plane_jobs", "claimed_by", "TEXT")
+        ensure_column(conn, "data_plane_jobs", "claimed_at", "TEXT")
+        ensure_column(conn, "data_plane_jobs", "claim_expires_at", "TEXT")
+        ensure_column(conn, "data_plane_jobs", "recovered_at", "TEXT")
+        ensure_column(conn, "data_plane_jobs", "recovery_count", "INTEGER DEFAULT 0")
+        ensure_column(conn, "data_plane_jobs", "previous_worker_id", "TEXT")
+        ensure_column(conn, "data_plane_jobs", "recovery_reason", "TEXT")
+        ensure_column(conn, "worker_claims", "recovered_at", "TEXT")
+        ensure_column(conn, "worker_claims", "recovery_reason", "TEXT")
         ensure_column(conn, "ingest_items", "snapshot_id", "TEXT")
         ensure_column(conn, "ingest_items", "run_id", "TEXT")
         ensure_column(conn, "entries", "actionability", "TEXT DEFAULT 'watch'")
@@ -1634,6 +1701,10 @@ def init_db() -> None:
         # from binding while the memory graph is recomputed.
         conn.execute("UPDATE ingest_sources SET last_health_status=COALESCE(NULLIF(last_health_status, ''), CASE WHEN COALESCE(last_run_at, '')='' THEN 'never_run' ELSE 'healthy' END)")
         conn.execute("UPDATE ingest_sources SET consecutive_failures=COALESCE(consecutive_failures, 0)")
+        conn.execute("UPDATE data_plane_jobs SET claimed_by=COALESCE(NULLIF(claimed_by, ''), worker_id)")
+        conn.execute("UPDATE data_plane_jobs SET claimed_at=COALESCE(NULLIF(claimed_at, ''), updated_at) WHERE COALESCE(claim_id, '')<>''")
+        conn.execute("UPDATE data_plane_jobs SET claim_expires_at=COALESCE(NULLIF(claim_expires_at, ''), next_attempt_at) WHERE status='retry' AND COALESCE(next_attempt_at, '')<>''")
+        conn.execute("UPDATE data_plane_jobs SET recovery_count=COALESCE(recovery_count, 0)")
         conn.execute("PRAGMA user_version = 1")
         conn.commit()
 
@@ -1641,7 +1712,11 @@ def init_db() -> None:
 def ensure_column(conn, table: str, column: str, definition: str) -> None:
     cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
     if column not in cols:
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
 
 
 def row_to_entry(row) -> dict:
@@ -1732,6 +1807,18 @@ def row_to_raw_snapshot(row) -> dict:
 
 
 def row_to_source_health_event(row) -> dict:
+    d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_scheduler_event(row) -> dict:
+    d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_worker_heartbeat(row) -> dict:
     d = dict(row)
     d["metadata"] = json_loads(d.get("metadata"), {})
     return d
@@ -4091,6 +4178,12 @@ def source_retry_state(source: dict, latest_job: dict | None = None, latest_snap
     ):
         status = "retrying"
 
+    if status not in {"retrying", "dead_letter"}:
+        attempts = 0
+        last_error = ""
+        last_failure_at = ""
+        next_retry_at = ""
+
     return {
         "status": status,
         "attempts": attempts,
@@ -4157,6 +4250,13 @@ def enqueue_ingest_job(conn, source_id: str, trigger_type: str = "scheduled", sc
         "next_attempt_at": scheduled_for or now,
         "worker_id": "",
         "claim_id": "",
+        "claimed_by": "",
+        "claimed_at": "",
+        "claim_expires_at": "",
+        "recovered_at": "",
+        "recovery_count": 0,
+        "previous_worker_id": "",
+        "recovery_reason": "",
         "run_id": "",
         "last_error": "",
         "finished_at": "",
@@ -4165,31 +4265,184 @@ def enqueue_ingest_job(conn, source_id: str, trigger_type: str = "scheduled", sc
     conn.execute(
         """INSERT INTO data_plane_jobs
            (id, created_at, updated_at, source_id, job_type, trigger_type, status, scheduled_for, attempts, max_attempts,
-            next_attempt_at, worker_id, claim_id, run_id, last_error, finished_at, metadata)
+            next_attempt_at, worker_id, claim_id, claimed_by, claimed_at, claim_expires_at, recovered_at, recovery_count,
+            previous_worker_id, recovery_reason, run_id, last_error, finished_at, metadata)
            VALUES (:id, :created_at, :updated_at, :source_id, :job_type, :trigger_type, :status, :scheduled_for,
-            :attempts, :max_attempts, :next_attempt_at, :worker_id, :claim_id, :run_id, :last_error, :finished_at, :metadata)""",
+            :attempts, :max_attempts, :next_attempt_at, :worker_id, :claim_id, :claimed_by, :claimed_at, :claim_expires_at,
+            :recovered_at, :recovery_count, :previous_worker_id, :recovery_reason, :run_id, :last_error, :finished_at, :metadata)""",
         {**job, "metadata": json.dumps(job["metadata"], ensure_ascii=False)},
     )
     conn.execute("UPDATE ingest_sources SET updated_at=?, next_run_at=?, last_job_id=? WHERE id=?", (now, job["scheduled_for"], job["id"], source_id))
     return job
 
 
-def scheduler_heartbeat(conn) -> dict:
+def record_scheduler_event(conn, owner_id: str, lease_until: str, reason: str, previous_owner_id: str = "", metadata: dict | None = None) -> dict:
+    event = {
+        "id": make_id("SCHED"),
+        "created_at": now_iso(),
+        "previous_owner_id": clean_text(previous_owner_id) or None,
+        "owner_id": owner_id,
+        "lease_until": lease_until,
+        "reason": reason,
+        "metadata": metadata or {},
+    }
+    conn.execute(
+        """INSERT INTO scheduler_events
+           (id, created_at, previous_owner_id, owner_id, lease_until, reason, metadata)
+           VALUES (:id, :created_at, :previous_owner_id, :owner_id, :lease_until, :reason, :metadata)""",
+        {**event, "metadata": json.dumps(event["metadata"], ensure_ascii=False)},
+    )
+    return event
+
+
+def update_worker_heartbeat(conn, worker_id: str, status: str, current_job_id: str = "", current_claim_id: str = "", metadata: dict | None = None) -> dict:
     now = now_iso()
-    lease_until = seconds_from_now(8)
-    row = conn.execute("SELECT * FROM scheduler_leases WHERE id='default'").fetchone()
+    row = conn.execute("SELECT * FROM worker_heartbeats WHERE worker_id=?", (worker_id,)).fetchone()
+    payload = {
+        "worker_id": worker_id,
+        "created_at": row["created_at"] if row else now,
+        "updated_at": now,
+        "heartbeat_at": now,
+        "status": status,
+        "current_job_id": clean_text(current_job_id) or None,
+        "current_claim_id": clean_text(current_claim_id) or None,
+        "metadata": metadata or {},
+    }
     if row:
         conn.execute(
-            "UPDATE scheduler_leases SET updated_at=?, owner_id=?, lease_until=?, heartbeat_at=? WHERE id='default'",
-            (now, SCHEDULER_OWNER_ID, lease_until, now),
+            """UPDATE worker_heartbeats
+               SET updated_at=:updated_at, heartbeat_at=:heartbeat_at, status=:status,
+                   current_job_id=:current_job_id, current_claim_id=:current_claim_id, metadata=:metadata
+               WHERE worker_id=:worker_id""",
+            {**payload, "metadata": json.dumps(payload["metadata"], ensure_ascii=False)},
         )
     else:
         conn.execute(
+            """INSERT INTO worker_heartbeats
+               (worker_id, created_at, updated_at, heartbeat_at, status, current_job_id, current_claim_id, metadata)
+               VALUES (:worker_id, :created_at, :updated_at, :heartbeat_at, :status, :current_job_id, :current_claim_id, :metadata)""",
+            {**payload, "metadata": json.dumps(payload["metadata"], ensure_ascii=False)},
+        )
+    return payload
+
+
+def scheduler_heartbeat(conn, owner_id: str = SCHEDULER_OWNER_ID) -> dict:
+    now = now_iso()
+    now_dt = iso_to_dt(now) or datetime.now(timezone.utc)
+    lease_until = (now_dt + timedelta(seconds=SCHEDULER_LEASE_SECONDS)).isoformat()
+    row = conn.execute("SELECT * FROM scheduler_leases WHERE id='default'").fetchone()
+    if not row:
+        conn.execute(
             """INSERT INTO scheduler_leases (id, created_at, updated_at, owner_id, lease_until, heartbeat_at, metadata)
                VALUES ('default', ?, ?, ?, ?, ?, ?)""",
-            (now, now, SCHEDULER_OWNER_ID, lease_until, now, json.dumps({"data_plane_milestone": 1})),
+            (now, now, owner_id, lease_until, now, json.dumps({"data_plane_milestone": 1, "leadership_changes": 1}, ensure_ascii=False)),
         )
-    return {"id": "default", "owner_id": SCHEDULER_OWNER_ID, "heartbeat_at": now, "lease_until": lease_until}
+        record_scheduler_event(conn, owner_id, lease_until, "acquired_initial", metadata={"data_plane_milestone": 1})
+        return {"id": "default", "owner_id": owner_id, "heartbeat_at": now, "lease_until": lease_until, "is_leader": True}
+    lease = dict(row)
+    active_until = iso_to_dt(lease.get("lease_until") or "")
+    lease_meta = json_loads(lease.get("metadata"), {})
+    if lease.get("owner_id") == owner_id:
+        conn.execute(
+            "UPDATE scheduler_leases SET updated_at=?, lease_until=?, heartbeat_at=?, metadata=? WHERE id='default'",
+            (now, lease_until, now, json.dumps(lease_meta, ensure_ascii=False)),
+        )
+        return {"id": "default", "owner_id": owner_id, "heartbeat_at": now, "lease_until": lease_until, "is_leader": True}
+    if active_until and active_until > now_dt:
+        return {"id": lease["id"], "owner_id": lease["owner_id"], "heartbeat_at": lease["heartbeat_at"], "lease_until": lease["lease_until"], "is_leader": False}
+    lease_meta["leadership_changes"] = int(lease_meta.get("leadership_changes") or 0) + 1
+    previous_owner = clean_text(lease.get("owner_id"))
+    conn.execute(
+        "UPDATE scheduler_leases SET updated_at=?, owner_id=?, lease_until=?, heartbeat_at=?, metadata=? WHERE id='default'",
+        (now, owner_id, lease_until, now, json.dumps(lease_meta, ensure_ascii=False)),
+    )
+    record_scheduler_event(conn, owner_id, lease_until, "lease_expired_takeover", previous_owner_id=previous_owner, metadata={"data_plane_milestone": 1})
+    return {"id": "default", "owner_id": owner_id, "heartbeat_at": now, "lease_until": lease_until, "is_leader": True}
+
+
+def mark_claim_recovered(conn, claim_id: str, reason: str, recovered_at: str) -> None:
+    conn.execute(
+        "UPDATE worker_claims SET updated_at=?, status='recovered', recovered_at=?, recovery_reason=? WHERE id=?",
+        (recovered_at, recovered_at, reason, claim_id),
+    )
+
+
+def recover_expired_jobs(conn) -> list[dict]:
+    now = now_iso()
+    recovered = []
+    rows = conn.execute(
+        """SELECT * FROM data_plane_jobs
+           WHERE status='running'
+             AND COALESCE(claim_expires_at, '')<>''
+             AND claim_expires_at<=?
+           ORDER BY updated_at ASC""",
+        (now,),
+    ).fetchall()
+    for row in rows:
+        job = row_to_data_plane_job(row)
+        claim_id = clean_text(job.get("claim_id"))
+        reason = "claim_expired"
+        previous_worker = clean_text(job.get("claimed_by") or job.get("worker_id"))
+        recovery_count = int(job.get("recovery_count") or 0) + 1
+        mark_claim_recovered(conn, claim_id, reason, now)
+        if previous_worker:
+            update_worker_heartbeat(
+                conn,
+                previous_worker,
+                "expired",
+                metadata={"recovered_at": now, "recovery_reason": reason, "data_plane_milestone": 1},
+            )
+        conn.execute(
+            """UPDATE data_plane_jobs
+               SET updated_at=?, status='retry', next_attempt_at=?, worker_id='', claim_id='', claimed_by='',
+                   claimed_at='', claim_expires_at='', recovered_at=?, recovery_count=?, previous_worker_id=?,
+                   recovery_reason=?
+               WHERE id=?""",
+            (now, now, now, recovery_count, previous_worker, reason, job["id"]),
+        )
+        run_id = clean_text(job.get("run_id"))
+        if run_id:
+            run_row = conn.execute("SELECT * FROM ingest_runs WHERE id=? AND status='running'", (run_id,)).fetchone()
+            if run_row:
+                run_meta = json_loads(run_row["metadata"], {})
+                run_meta["recovered_at"] = now
+                run_meta["previous_worker_id"] = previous_worker
+                run_meta["recovery_reason"] = reason
+                conn.execute("UPDATE ingest_runs SET updated_at=?, metadata=? WHERE id=?", (now, json.dumps(run_meta, ensure_ascii=False), run_id))
+        audit(conn, "recover", "data_plane_job", job["id"], {
+            "previous_worker_id": previous_worker,
+            "recovered_at": now,
+            "recovery_count": recovery_count,
+            "recovery_reason": reason,
+            "claim_id": claim_id,
+            "run_id": run_id,
+        })
+        record_source_health(
+            conn,
+            job["source_id"],
+            "retrying",
+            f"Recovered abandoned claim from {previous_worker or 'unknown worker'}.",
+            job_id=job["id"],
+            run_id=run_id,
+            failure_count=int(job.get("attempts") or 0),
+            metadata={
+                "recovered_at": now,
+                "previous_worker_id": previous_worker,
+                "recovery_count": recovery_count,
+                "recovery_reason": reason,
+                "claim_id": claim_id,
+            },
+        )
+        recovered.append({
+            "job_id": job["id"],
+            "source_id": job["source_id"],
+            "run_id": run_id,
+            "previous_worker_id": previous_worker,
+            "recovered_at": now,
+            "recovery_count": recovery_count,
+            "recovery_reason": reason,
+        })
+    return recovered
 
 
 def mark_stale_sources(conn) -> int:
@@ -4218,7 +4471,12 @@ def scheduler_tick() -> dict:
     now = now_iso()
     created = []
     with connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         lease = scheduler_heartbeat(conn)
+        if not lease.get("is_leader"):
+            conn.commit()
+            return {"lease": lease, "created_jobs": created, "recovered_jobs": []}
+        recovered = recover_expired_jobs(conn)
         mark_stale_sources(conn)
         rows = conn.execute("SELECT * FROM ingest_sources WHERE active=1 AND COALESCE(dead_letter_at, '')='' ORDER BY updated_at ASC").fetchall()
         for row in rows:
@@ -4231,12 +4489,14 @@ def scheduler_tick() -> dict:
             if job:
                 created.append(job)
         conn.commit()
-    return {"lease": lease, "created_jobs": created}
+    return {"lease": lease, "created_jobs": created, "recovered_jobs": recovered}
 
 
 def claim_next_job(worker_id: str) -> dict | None:
     now = now_iso()
     with connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        recover_expired_jobs(conn)
         row = conn.execute(
             """SELECT * FROM data_plane_jobs
                WHERE status IN ('queued','retry') AND COALESCE(next_attempt_at, scheduled_for) <= ?
@@ -4244,8 +4504,11 @@ def claim_next_job(worker_id: str) -> dict | None:
             (now,),
         ).fetchone()
         if not row:
+            update_worker_heartbeat(conn, worker_id, "idle", metadata={"data_plane_milestone": 1})
+            conn.commit()
             return None
         job = row_to_data_plane_job(row)
+        claim_expires_at = seconds_from_now(DATA_PLANE_LEASE_SECONDS)
         claim = {
             "id": make_id("CLAIM"),
             "created_at": now,
@@ -4255,23 +4518,35 @@ def claim_next_job(worker_id: str) -> dict | None:
             "worker_id": worker_id,
             "status": "claimed",
             "claimed_at": now,
-            "lease_until": seconds_from_now(30),
+            "lease_until": claim_expires_at,
             "released_at": "",
+            "recovered_at": "",
+            "recovery_reason": "",
             "metadata": {"data_plane_milestone": 1},
         }
         conn.execute(
             """INSERT INTO worker_claims
-               (id, created_at, updated_at, job_id, source_id, worker_id, status, claimed_at, lease_until, released_at, metadata)
-               VALUES (:id, :created_at, :updated_at, :job_id, :source_id, :worker_id, :status, :claimed_at, :lease_until, :released_at, :metadata)""",
+               (id, created_at, updated_at, job_id, source_id, worker_id, status, claimed_at, lease_until, released_at, recovered_at, recovery_reason, metadata)
+               VALUES (:id, :created_at, :updated_at, :job_id, :source_id, :worker_id, :status, :claimed_at, :lease_until, :released_at, :recovered_at, :recovery_reason, :metadata)""",
             {**claim, "metadata": json.dumps(claim["metadata"], ensure_ascii=False)},
         )
-        conn.execute(
-            "UPDATE data_plane_jobs SET updated_at=?, status='running', worker_id=?, claim_id=? WHERE id=? AND status IN ('queued','retry')",
-            (now, worker_id, claim["id"], job["id"]),
-        )
+        updated = conn.execute(
+            """UPDATE data_plane_jobs
+               SET updated_at=?, status='running', worker_id=?, claim_id=?, claimed_by=?, claimed_at=?, claim_expires_at=?, recovery_reason=''
+               WHERE id=? AND status IN ('queued','retry')""",
+            (now, worker_id, claim["id"], worker_id, now, claim_expires_at, job["id"]),
+        ).rowcount
+        if not updated:
+            update_worker_heartbeat(conn, worker_id, "idle", metadata={"data_plane_milestone": 1, "claim_lost": True})
+            conn.commit()
+            return None
+        update_worker_heartbeat(conn, worker_id, "claimed", current_job_id=job["id"], current_claim_id=claim["id"], metadata={"data_plane_milestone": 1})
         conn.commit()
         job["claim_id"] = claim["id"]
         job["worker_id"] = worker_id
+        job["claimed_by"] = worker_id
+        job["claimed_at"] = now
+        job["claim_expires_at"] = claim_expires_at
         return {"job": job, "claim": claim}
 
 
@@ -4284,42 +4559,69 @@ def complete_claim(conn, claim_id: str, status: str) -> None:
     conn.execute("UPDATE worker_claims SET updated_at=?, status=?, released_at=? WHERE id=?", (now, status, now, claim_id))
 
 
+def maybe_test_crash(source: dict, stage: str) -> None:
+    metadata = source.get("metadata") or {}
+    crash_once = clean_text(metadata.get("test_crash_once"))
+    if crash_once != stage:
+        return
+    marker = DB_PATH.parent / f".{source['id']}.{stage}.done"
+    if marker.exists():
+        return
+    marker.write_text(now_iso(), encoding="utf-8")
+    raise SystemExit(f"intentional test crash at {stage}")
+
+
 def execute_claimed_job(claimed: dict) -> dict:
     job = claimed["job"]
     claim = claimed["claim"]
     now = now_iso()
-    run = {
-        "id": make_id("RUN"),
-        "created_at": now,
-        "updated_at": now,
-        "source_id": job["source_id"],
-        "job_id": job["id"],
-        "claim_id": claim["id"],
-        "worker_id": claim["worker_id"],
-        "status": "running",
-        "started_at": now,
-        "finished_at": "",
-        "created_items": 0,
-        "created_snapshots": 0,
-        "skipped_items": 0,
-        "error": "",
-        "metadata": {"data_plane_milestone": 1},
-    }
     with connect() as conn:
         source_row = conn.execute("SELECT * FROM ingest_sources WHERE id=?", (job["source_id"],)).fetchone()
         if not source_row:
             raise KeyError("ingest source not found")
         source = row_to_ingest_source(source_row)
-        conn.execute(
-            """INSERT INTO ingest_runs
-               (id, created_at, updated_at, source_id, job_id, claim_id, worker_id, status, started_at, finished_at,
-                created_items, created_snapshots, skipped_items, error, metadata)
-               VALUES (:id, :created_at, :updated_at, :source_id, :job_id, :claim_id, :worker_id, :status, :started_at,
-                :finished_at, :created_items, :created_snapshots, :skipped_items, :error, :metadata)""",
-            {**run, "metadata": json.dumps(run["metadata"], ensure_ascii=False)},
-        )
+        maybe_test_crash(source, "before_run")
+        existing_run_id = clean_text(job.get("run_id"))
+        existing_run_row = conn.execute("SELECT * FROM ingest_runs WHERE id=?", (existing_run_id,)).fetchone() if existing_run_id else None
+        if existing_run_row and clean_text(existing_run_row["status"]) == "running":
+            run = row_to_ingest_run(existing_run_row)
+            run_meta = run.get("metadata") or {}
+            run_meta["recovered_by"] = claim["worker_id"]
+            run_meta["recovered_claim_id"] = claim["id"]
+            run_meta["recovery_count"] = int(job.get("recovery_count") or 0)
+            conn.execute(
+                "UPDATE ingest_runs SET updated_at=?, claim_id=?, worker_id=?, metadata=? WHERE id=?",
+                (now, claim["id"], claim["worker_id"], json.dumps(run_meta, ensure_ascii=False), run["id"]),
+            )
+        else:
+            run = {
+                "id": make_id("RUN"),
+                "created_at": now,
+                "updated_at": now,
+                "source_id": job["source_id"],
+                "job_id": job["id"],
+                "claim_id": claim["id"],
+                "worker_id": claim["worker_id"],
+                "status": "running",
+                "started_at": now,
+                "finished_at": "",
+                "created_items": 0,
+                "created_snapshots": 0,
+                "skipped_items": 0,
+                "error": "",
+                "metadata": {"data_plane_milestone": 1},
+            }
+            conn.execute(
+                """INSERT INTO ingest_runs
+                   (id, created_at, updated_at, source_id, job_id, claim_id, worker_id, status, started_at, finished_at,
+                    created_items, created_snapshots, skipped_items, error, metadata)
+                   VALUES (:id, :created_at, :updated_at, :source_id, :job_id, :claim_id, :worker_id, :status, :started_at,
+                    :finished_at, :created_items, :created_snapshots, :skipped_items, :error, :metadata)""",
+                {**run, "metadata": json.dumps(run["metadata"], ensure_ascii=False)},
+            )
         conn.execute("UPDATE data_plane_jobs SET updated_at=?, run_id=? WHERE id=?", (now, run["id"], job["id"]))
         conn.execute("UPDATE ingest_sources SET updated_at=?, last_run_id=?, last_job_id=? WHERE id=?", (now, run["id"], job["id"], source["id"]))
+        update_worker_heartbeat(conn, claim["worker_id"], "running", current_job_id=job["id"], current_claim_id=claim["id"], metadata={"run_id": run["id"], "data_plane_milestone": 1})
         conn.commit()
     created_items = []
     created_signals = []
@@ -4399,6 +4701,8 @@ def execute_claimed_job(claimed: dict) -> dict:
                 live = insert_live_signal_from_item(conn, source, item_row)
                 created_items.append(item_row)
                 created_signals.append(live)
+                conn.commit()
+                maybe_test_crash(source, "during_run")
             finished = now_iso()
             next_run = seconds_from_now(source_poll_seconds(source))
             last_snapshot_id = created_snapshots[-1]["id"] if created_snapshots else clean_text(source.get("last_snapshot_id"))
@@ -4407,8 +4711,11 @@ def execute_claimed_job(claimed: dict) -> dict:
                 (finished, finished, len(created_items), len(created_snapshots), skipped, run["id"]),
             )
             conn.execute(
-                "UPDATE data_plane_jobs SET updated_at=?, status='succeeded', finished_at=?, run_id=?, worker_id=?, claim_id=? WHERE id=?",
-                (finished, finished, run["id"], claim["worker_id"], claim["id"], job["id"]),
+                """UPDATE data_plane_jobs
+                   SET updated_at=?, status='succeeded', finished_at=?, run_id=?, worker_id=?, claim_id=?, claimed_by=?,
+                       claimed_at=?, claim_expires_at='', next_attempt_at='', last_error=''
+                   WHERE id=?""",
+                (finished, finished, run["id"], claim["worker_id"], claim["id"], claim["worker_id"], claim["claimed_at"], job["id"]),
             )
             conn.execute(
                 """UPDATE ingest_sources SET updated_at=?, last_run_at=?, last_success_at=?, next_run_at=?, last_health_status='healthy',
@@ -4417,6 +4724,7 @@ def execute_claimed_job(claimed: dict) -> dict:
                 (finished, finished, finished, next_run, job["id"], run["id"], last_snapshot_id, source["id"]),
             )
             complete_claim(conn, claim["id"], "released")
+            update_worker_heartbeat(conn, claim["worker_id"], "idle", metadata={"last_run_id": run["id"], "data_plane_milestone": 1})
             health = record_source_health(
                 conn,
                 source["id"],
@@ -4425,7 +4733,12 @@ def execute_claimed_job(claimed: dict) -> dict:
                 job_id=job["id"],
                 run_id=run["id"],
                 failure_count=0,
-                metadata={"snapshot_ids": [s["id"] for s in created_snapshots], "worker_id": claim["worker_id"], "claim_id": claim["id"]},
+                metadata={
+                    "snapshot_ids": [s["id"] for s in created_snapshots],
+                    "worker_id": claim["worker_id"],
+                    "claim_id": claim["id"],
+                    "recovery_count": int(job.get("recovery_count") or 0),
+                },
             )
             conn.commit()
         return {
@@ -4451,7 +4764,7 @@ def execute_claimed_job(claimed: dict) -> dict:
             status = "dead_letter" if dead else "retry"
             source_status = "dead_letter" if dead else "retrying"
             finished = now_iso()
-            next_attempt = "" if dead else seconds_from_now(2)
+            next_attempt = "" if dead else seconds_from_now(RECOVERY_RETRY_DELAY_SECONDS)
             source_row = conn.execute("SELECT * FROM ingest_sources WHERE id=?", (job["source_id"],)).fetchone()
             source_state = row_to_ingest_source(source_row) if source_row else {"consecutive_failures": 0}
             source_name = source_state.get("name") or ""
@@ -4461,9 +4774,11 @@ def execute_claimed_job(claimed: dict) -> dict:
                 (finished, finished, err, skipped, run["id"]),
             )
             conn.execute(
-                """UPDATE data_plane_jobs SET updated_at=?, status=?, attempts=?, next_attempt_at=?, last_error=?, finished_at=?, run_id=?, worker_id=?, claim_id=?
+                """UPDATE data_plane_jobs
+                   SET updated_at=?, status=?, attempts=?, next_attempt_at=?, last_error=?, finished_at=?, run_id=?, worker_id=?, claim_id=?,
+                       claimed_by=?, claimed_at=?, claim_expires_at='', recovery_reason=CASE WHEN ? THEN 'max_attempts_exhausted' ELSE recovery_reason END
                    WHERE id=?""",
-                (finished, status, attempts, next_attempt, err, finished, run["id"], claim["worker_id"], claim["id"], job["id"]),
+                (finished, status, attempts, next_attempt, err, finished, run["id"], claim["worker_id"], claim["id"], claim["worker_id"], claim["claimed_at"], 1 if dead else 0, job["id"]),
             )
             conn.execute(
                 """UPDATE ingest_sources SET updated_at=?, last_health_status=?, consecutive_failures=?, last_error=?, last_error_at=?,
@@ -4472,6 +4787,7 @@ def execute_claimed_job(claimed: dict) -> dict:
                 (finished, source_status, failure_count, err, finished, 1 if dead else 0, finished, job["id"], run["id"], job["source_id"]),
             )
             complete_claim(conn, claim["id"], "failed")
+            update_worker_heartbeat(conn, claim["worker_id"], "idle", metadata={"last_error": err, "data_plane_milestone": 1})
             record_source_health(
                 conn,
                 job["source_id"],
@@ -4539,6 +4855,9 @@ def worker_loop(stop_event: threading.Event) -> None:
 def start_data_plane_runtime() -> threading.Event:
     global DATA_PLANE_THREADS_STARTED
     stop_event = threading.Event()
+    if os.environ.get("INFO_ANALYZER_DISABLE_DATA_PLANE_THREADS", "").strip() == "1":
+        print("Data Plane runtime threads disabled by INFO_ANALYZER_DISABLE_DATA_PLANE_THREADS")
+        return stop_event
     if DATA_PLANE_THREADS_STARTED:
         return stop_event
     DATA_PLANE_THREADS_STARTED = True
@@ -4553,12 +4872,16 @@ def enrich_ingest_source(conn, source: dict) -> dict:
     latest_run = conn.execute("SELECT * FROM ingest_runs WHERE source_id=? ORDER BY created_at DESC LIMIT 1", (source["id"],)).fetchone()
     latest_snapshot = conn.execute("SELECT * FROM raw_snapshots WHERE source_id=? ORDER BY created_at DESC LIMIT 1", (source["id"],)).fetchone()
     latest_health = conn.execute("SELECT * FROM source_health_events WHERE source_id=? ORDER BY created_at DESC LIMIT 1", (source["id"],)).fetchone()
+    claim_rows = conn.execute("SELECT * FROM worker_claims WHERE source_id=? ORDER BY created_at DESC LIMIT 5", (source["id"],)).fetchall()
+    health_rows = conn.execute("SELECT * FROM source_health_events WHERE source_id=? ORDER BY created_at DESC LIMIT 5", (source["id"],)).fetchall()
     queued = conn.execute("SELECT COUNT(*) FROM data_plane_jobs WHERE source_id=? AND status IN ('queued','retry','running')", (source["id"],)).fetchone()[0]
     retry_state = source_retry_state(source, row_to_data_plane_job(latest_job) if latest_job else None, row_to_raw_snapshot(latest_snapshot) if latest_snapshot else None)
     source["latest_job"] = row_to_data_plane_job(latest_job) if latest_job else None
     source["latest_run"] = row_to_ingest_run(latest_run) if latest_run else None
     source["latest_snapshot"] = row_to_raw_snapshot(latest_snapshot) if latest_snapshot else None
     source["latest_health_event"] = row_to_source_health_event(latest_health) if latest_health else None
+    source["recent_claims"] = [row_to_worker_claim(r) for r in claim_rows]
+    source["recent_health_events"] = [row_to_source_health_event(r) for r in health_rows]
     source["pending_job_count"] = int(queued)
     source["health_status"] = retry_state["status"]
     source["retry_state"] = retry_state
@@ -4568,17 +4891,23 @@ def enrich_ingest_source(conn, source: dict) -> dict:
 def data_plane_status() -> dict:
     with connect() as conn:
         scheduler = conn.execute("SELECT * FROM scheduler_leases WHERE id='default'").fetchone()
+        scheduler_events = conn.execute("SELECT * FROM scheduler_events ORDER BY created_at DESC LIMIT 8").fetchall()
+        workers = conn.execute("SELECT * FROM worker_heartbeats ORDER BY heartbeat_at DESC LIMIT 8").fetchall()
         jobs = {r["status"]: r["count"] for r in conn.execute("SELECT status, COUNT(*) AS count FROM data_plane_jobs GROUP BY status").fetchall()}
         runs = {r["status"]: r["count"] for r in conn.execute("SELECT status, COUNT(*) AS count FROM ingest_runs GROUP BY status").fetchall()}
         health = {r["status"]: r["count"] for r in conn.execute("SELECT COALESCE(last_health_status, 'never_run') AS status, COUNT(*) AS count FROM ingest_sources GROUP BY COALESCE(last_health_status, 'never_run')").fetchall()}
     return {
         "application_version": APP_VERSION,
+        "git_commit": git_commit_sha(),
+        "db_path_category": db_path_category(),
         "scheduler": dict(scheduler) if scheduler else None,
+        "scheduler_events": [row_to_scheduler_event(r) for r in scheduler_events],
         "worker_id": DATA_PLANE_WORKER_ID,
+        "workers": [row_to_worker_heartbeat(r) for r in workers],
         "jobs": jobs,
         "runs": runs,
         "source_health": health,
-        "schema_version": 1,
+        "schema_version": SCHEMA_VERSION,
     }
 
 

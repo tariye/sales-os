@@ -1400,6 +1400,8 @@ function ingestSourceHTML(source){
   const run = source.latest_run || {};
   const snap = source.latest_snapshot || {};
   const health = source.latest_health_event || {};
+  const claimHistory = source.recent_claims || [];
+  const healthHistory = source.recent_health_events || [];
   const retry = source.retry_state || {};
   const healthStatus = retry.status || source.health_status || source.last_health_status || "never_run";
   const showRetry = healthStatus === "retrying" || healthStatus === "dead_letter" || source.last_health_status === "retrying";
@@ -1426,13 +1428,22 @@ function ingestSourceHTML(source){
       ${showRetry ? kvHTML("Next Retry", retry.next_retry_at || job.next_attempt_at || "") : ""}
       ${showRetry ? kvHTML("Latest Success", latestSuccess || "") : ""}
       ${showRetry ? kvHTML("Freshness Age", freshnessAge == null ? "" : fmtAgeSeconds(freshnessAge)) : ""}
-      ${kvHTML("Job ID", job.id || source.last_job_id || "")}
-      ${kvHTML("Worker / Claim", [job.worker_id, job.claim_id].filter(Boolean).join(" / "))}
-      ${kvHTML("Run ID", run.id || source.last_run_id || "")}
-      ${kvHTML("Snapshot ID", snap.id || source.last_snapshot_id || "")}
-      ${kvHTML("Payload Hash", snap.content_hash || "")}
-      ${kvHTML("Health Event", health.id ? `${health.status}: ${health.message || ""}` : "never_run: no ingest completed yet")}
+      ${kvHTML("Health", health.status ? `${health.status}: ${health.message || ""}` : "never_run: no ingest completed yet")}
     </div>
+    <details class="item" style="margin-top:12px">
+      <summary>Diagnostics</summary>
+      <div class="kv-grid" style="margin-top:10px">
+        ${kvHTML("Job ID", job.id || source.last_job_id || "")}
+        ${kvHTML("Claim", [job.worker_id, job.claim_id].filter(Boolean).join(" / "))}
+        ${kvHTML("Run ID", run.id || source.last_run_id || "")}
+        ${kvHTML("Snapshot ID", snap.id || source.last_snapshot_id || "")}
+        ${kvHTML("Payload Hash", snap.content_hash || "")}
+        ${kvHTML("Recovery", [job.recovery_count ? `count ${job.recovery_count}` : "", job.recovery_reason || "", job.previous_worker_id ? `prev ${job.previous_worker_id}` : ""].filter(Boolean).join(" • "))}
+        ${kvHTML("Claim Window", [job.claimed_at || "", job.claim_expires_at || ""].filter(Boolean).join(" -> "))}
+        ${kvHTML("Recent Claims", claimHistory.map(c => `${c.id} ${c.status} ${c.worker_id}`).join(" | "))}
+        ${kvHTML("Health History", healthHistory.map(h => `${h.id} ${h.status}`).join(" | "))}
+      </div>
+    </details>
     <div class="buttons compact">
       <button class="primary small" onclick="runIngest('${esc(source.id)}')">Run Source</button>
       <button class="ghost small" onclick="deleteIngestSource('${esc(source.id)}')">Delete</button>
@@ -1456,19 +1467,35 @@ async function loadLiveDashboard(){
   ].map(([k,v])=>`<div class="stat"><strong>${esc(v)}</strong><span class="muted">${esc(k)}</span></div>`).join("");
   if($("dataPlaneStats")){
     const scheduler = dataPlane.scheduler || {};
+    const worker = (dataPlane.workers || [])[0] || {};
     $("dataPlaneStats").innerHTML = `<div class="item">
-      <h3>Data Plane Backbone</h3>
+      <h3>Build Information</h3>
       <div class="meta">
         <span class="tag">scheduler ${esc(scheduler.owner_id || "pending")}</span>
         <span class="tag">worker ${esc(dataPlane.worker_id || "pending")}</span>
         <span class="tag">schema ${esc(dataPlane.schema_version || "unknown")}</span>
       </div>
       <div class="kv-grid">
+        ${kvHTML("App Version", dataPlane.application_version || "")}
+        ${kvHTML("Git Commit", dataPlane.git_commit || "unavailable")}
+        ${kvHTML("Schema Version", dataPlane.schema_version || "")}
+        ${kvHTML("Database Path", dataPlane.db_path_category || "unknown")}
+        ${kvHTML("Scheduler Leader", scheduler.owner_id || "")}
         ${kvHTML("Scheduler Lease", scheduler.lease_until || "")}
+        ${kvHTML("Worker Heartbeat", worker.heartbeat_at || "")}
         ${kvHTML("Jobs", JSON.stringify(dataPlane.jobs || {}))}
         ${kvHTML("Runs", JSON.stringify(dataPlane.runs || {}))}
         ${kvHTML("Source Health", JSON.stringify(dataPlane.source_health || {}))}
       </div>
+      <details class="item" style="margin-top:12px">
+        <summary>Diagnostics</summary>
+        <div class="kv-grid" style="margin-top:10px">
+          ${kvHTML("Current Worker", worker.worker_id || dataPlane.worker_id || "")}
+          ${kvHTML("Worker Status", worker.status || "")}
+          ${kvHTML("Worker Claim", [worker.current_job_id || "", worker.current_claim_id || ""].filter(Boolean).join(" / "))}
+          ${kvHTML("Scheduler Events", (dataPlane.scheduler_events || []).map(e => `${e.id} ${e.reason} ${e.owner_id}`).join(" | "))}
+        </div>
+      </details>
     </div>`;
   }
   $("ingestSourcesList").innerHTML = (sources.sources || []).length
