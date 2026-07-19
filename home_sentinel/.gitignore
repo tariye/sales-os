@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+db/
+images/
+config/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.mp4
+*.jpg
+*.png
