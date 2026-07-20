@@ -17,8 +17,10 @@ import hashlib
 import hmac
 import json
 import os
+from html import escape as html_escape
 import re
 import sqlite3
+import sys
 import threading
 import time
 import urllib.request
@@ -29,6 +31,18 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 from xml.etree import ElementTree as ET
+
+from cutover_support import (
+    ACTIVE_DATA_PLANE_TABLES,
+    ACTIVE_DB_PATH,
+    BACKUPS_DIR,
+    LEGACY_DB_PATH,
+    MANIFEST_PATH,
+    backup_snapshot,
+    ensure_cutover_dirs,
+    inventory_sqlite,
+    write_json,
+)
 
 try:
     import anthropic as _anthropic
@@ -72,17 +86,21 @@ def git_commit_sha() -> str:
 
 
 def db_path_category() -> str:
-    if DB_PATH_RAW:
-        return "configured_path"
+    if not DB_PATH_RAW:
+        return "unconfigured"
+    if DB_PATH == ACTIVE_DB_PATH:
+        return "app_support_active"
+    if DB_PATH == LEGACY_DB_PATH:
+        return "app_support_legacy"
     if DB_PATH.parent == DATA_DIR:
-        return "default_repo_data"
-    return "derived_path"
+        return "repo_data"
+    return "configured_path"
 
 BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "web"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH_RAW = os.environ.get("INFO_ANALYZER_DB_PATH", "").strip()
-DB_PATH = Path(DB_PATH_RAW).expanduser() if DB_PATH_RAW else DATA_DIR / "info_analyzer.db"
+DB_PATH = Path(DB_PATH_RAW).expanduser() if DB_PATH_RAW else ACTIVE_DB_PATH
 if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
 
@@ -91,6 +109,218 @@ SCHEMA_VERSION = 1
 DATA_PLANE_LEASE_SECONDS = 30
 SCHEDULER_LEASE_SECONDS = 8
 RECOVERY_RETRY_DELAY_SECONDS = 2
+
+FEATURE_REGISTRY = [
+    {
+        "feature_key": "overview",
+        "display_name": "Overview",
+        "lifecycle_status": "active",
+        "architecture": "product-shell",
+        "data_source": "active data plane",
+        "user_visible": True,
+        "replacement_feature": "",
+        "deprecated_at": "",
+        "notes": "Truthful active-state summary only.",
+    },
+    {
+        "feature_key": "sources",
+        "display_name": "Sources",
+        "lifecycle_status": "active",
+        "architecture": "active data plane",
+        "data_source": "ingest_sources and source_health_events",
+        "user_visible": True,
+        "replacement_feature": "",
+        "deprecated_at": "",
+        "notes": "Source status, freshness, retry, and evidence summaries.",
+    },
+    {
+        "feature_key": "evidence",
+        "display_name": "Evidence",
+        "lifecycle_status": "active",
+        "architecture": "active data plane",
+        "data_source": "raw_snapshots",
+        "user_visible": True,
+        "replacement_feature": "",
+        "deprecated_at": "",
+        "notes": "Immutable raw snapshot inspection.",
+    },
+    {
+        "feature_key": "system_health",
+        "display_name": "System Health",
+        "lifecycle_status": "active",
+        "architecture": "data-plane diagnostics",
+        "data_source": "scheduler_leases and worker_heartbeats",
+        "user_visible": True,
+        "replacement_feature": "",
+        "deprecated_at": "",
+        "notes": "Leader, lease, and worker truth.",
+    },
+    {
+        "feature_key": "stock_intel",
+        "display_name": "Stock Intel · Pilot",
+        "lifecycle_status": "pilot",
+        "architecture": "legacy analysis surface",
+        "data_source": "active data plane",
+        "user_visible": True,
+        "replacement_feature": "",
+        "deprecated_at": "",
+        "notes": "Operational but visibly pilot-bounded. Save-to-memory is disabled in the shell.",
+    },
+    {
+        "feature_key": "jobs_runs",
+        "display_name": "Jobs & Runs",
+        "lifecycle_status": "active",
+        "architecture": "data-plane diagnostics",
+        "data_source": "data_plane_jobs and ingest_runs",
+        "user_visible": True,
+        "replacement_feature": "",
+        "deprecated_at": "",
+        "notes": "Operator diagnostics for work claims and run history.",
+    },
+    {
+        "feature_key": "build_information",
+        "display_name": "Build Information",
+        "lifecycle_status": "active",
+        "architecture": "product metadata",
+        "data_source": "server metadata and manifest",
+        "user_visible": True,
+        "replacement_feature": "",
+        "deprecated_at": "",
+        "notes": "Version, commit, schema, DB category, leader, and heartbeat.",
+    },
+    {
+        "feature_key": "legacy_archive",
+        "display_name": "Legacy Archive",
+        "lifecycle_status": "active",
+        "architecture": "read-only archive",
+        "data_source": "legacy archive database",
+        "user_visible": True,
+        "replacement_feature": "",
+        "deprecated_at": "",
+        "notes": "Historical archive is visible but read-only.",
+    },
+    {
+        "feature_key": "help",
+        "display_name": "Help",
+        "lifecycle_status": "active",
+        "architecture": "static docs",
+        "data_source": "readme",
+        "user_visible": True,
+        "replacement_feature": "",
+        "deprecated_at": "",
+        "notes": "Documentation and operational guidance.",
+    },
+    {
+        "feature_key": "new_entry",
+        "display_name": "New Entry",
+        "lifecycle_status": "hidden",
+        "architecture": "legacy cockpit",
+        "data_source": "legacy entries",
+        "user_visible": False,
+        "replacement_feature": "Sources",
+        "deprecated_at": now_iso() if "now_iso" in globals() else "",
+        "notes": "Hidden during product cutover.",
+    },
+    {
+        "feature_key": "queue",
+        "display_name": "Queue",
+        "lifecycle_status": "hidden",
+        "architecture": "legacy cockpit",
+        "data_source": "legacy queue",
+        "user_visible": False,
+        "replacement_feature": "Jobs & Runs",
+        "deprecated_at": now_iso() if "now_iso" in globals() else "",
+        "notes": "Hidden during product cutover.",
+    },
+    {
+        "feature_key": "command_center",
+        "display_name": "Command Center",
+        "lifecycle_status": "hidden",
+        "architecture": "legacy cockpit",
+        "data_source": "legacy command surface",
+        "user_visible": False,
+        "replacement_feature": "Overview",
+        "deprecated_at": now_iso() if "now_iso" in globals() else "",
+        "notes": "Hidden during product cutover.",
+    },
+    {
+        "feature_key": "live_signals",
+        "display_name": "Live Signals",
+        "lifecycle_status": "deprecated",
+        "architecture": "legacy cockpit",
+        "data_source": "legacy live signal surface",
+        "user_visible": False,
+        "replacement_feature": "Sources / Evidence",
+        "deprecated_at": now_iso() if "now_iso" in globals() else "",
+        "notes": "Legacy surface replaced by truthful active views.",
+    },
+    {
+        "feature_key": "asset_lab",
+        "display_name": "Asset Lab",
+        "lifecycle_status": "deprecated",
+        "architecture": "legacy cockpit",
+        "data_source": "legacy memory shaping",
+        "user_visible": False,
+        "replacement_feature": "Evidence",
+        "deprecated_at": now_iso() if "now_iso" in globals() else "",
+        "notes": "Legacy surface retained only in code.",
+    },
+    {
+        "feature_key": "memory_db",
+        "display_name": "Memory DB",
+        "lifecycle_status": "hidden",
+        "architecture": "legacy cockpit",
+        "data_source": "legacy memory tables",
+        "user_visible": False,
+        "replacement_feature": "Sources / Evidence",
+        "deprecated_at": now_iso() if "now_iso" in globals() else "",
+        "notes": "Hidden during product cutover.",
+    },
+    {
+        "feature_key": "actions",
+        "display_name": "Actions",
+        "lifecycle_status": "hidden",
+        "architecture": "legacy cockpit",
+        "data_source": "legacy actions",
+        "user_visible": False,
+        "replacement_feature": "Jobs & Runs",
+        "deprecated_at": now_iso() if "now_iso" in globals() else "",
+        "notes": "Hidden during product cutover.",
+    },
+    {
+        "feature_key": "patterns",
+        "display_name": "Patterns",
+        "lifecycle_status": "deprecated",
+        "architecture": "legacy cockpit",
+        "data_source": "legacy pattern engine",
+        "user_visible": False,
+        "replacement_feature": "Evidence",
+        "deprecated_at": now_iso() if "now_iso" in globals() else "",
+        "notes": "Legacy surface retained only in code.",
+    },
+    {
+        "feature_key": "changelog",
+        "display_name": "Changelog",
+        "lifecycle_status": "hidden",
+        "architecture": "legacy cockpit",
+        "data_source": "legacy version ledger",
+        "user_visible": False,
+        "replacement_feature": "Build Information",
+        "deprecated_at": now_iso() if "now_iso" in globals() else "",
+        "notes": "Hidden during product cutover.",
+    },
+    {
+        "feature_key": "sample_data",
+        "display_name": "Load Sample Data",
+        "lifecycle_status": "retired",
+        "architecture": "demo affordance",
+        "data_source": "seeded examples",
+        "user_visible": False,
+        "replacement_feature": "",
+        "deprecated_at": now_iso() if "now_iso" in globals() else "",
+        "notes": "Removed from the active product.",
+    },
+]
 APP_VERSIONS = [
     {
         "version": "v0.87",
@@ -4898,6 +5128,7 @@ def enrich_ingest_source(conn, source: dict) -> dict:
     claim_rows = conn.execute("SELECT * FROM worker_claims WHERE source_id=? ORDER BY created_at DESC LIMIT 5", (source["id"],)).fetchall()
     health_rows = conn.execute("SELECT * FROM source_health_events WHERE source_id=? ORDER BY created_at DESC LIMIT 5", (source["id"],)).fetchall()
     queued = conn.execute("SELECT COUNT(*) FROM data_plane_jobs WHERE source_id=? AND status IN ('queued','retry','running')", (source["id"],)).fetchone()[0]
+    evidence_count = conn.execute("SELECT COUNT(*) FROM raw_snapshots WHERE source_id=?", (source["id"],)).fetchone()[0]
     active_retry_job_row = row_to_data_plane_job(active_retry_job) if active_retry_job else None
     retry_state = source_retry_state(
         source,
@@ -4913,6 +5144,9 @@ def enrich_ingest_source(conn, source: dict) -> dict:
     source["recent_claims"] = [row_to_worker_claim(r) for r in claim_rows]
     source["recent_health_events"] = [row_to_source_health_event(r) for r in health_rows]
     source["pending_job_count"] = int(queued)
+    source["evidence_count"] = int(evidence_count)
+    source["current_job_id"] = clean_text((active_retry_job_row or source["latest_job"] or {}).get("id")) if (active_retry_job_row or source["latest_job"]) else ""
+    source["current_claim_id"] = clean_text((active_retry_job_row or source["latest_job"] or {}).get("claim_id")) if (active_retry_job_row or source["latest_job"]) else ""
     source["current_health"] = {"status": current_health_status, "message": current_health_message}
     source["health_status"] = current_health_status
     source["health_message"] = current_health_message
@@ -4940,6 +5174,327 @@ def data_plane_status() -> dict:
         "runs": runs,
         "source_health": health,
         "schema_version": SCHEMA_VERSION,
+    }
+
+
+def feature_registry_payload() -> dict:
+    stamped = []
+    for feature in FEATURE_REGISTRY:
+        item = dict(feature)
+        if item.get("lifecycle_status") in {"hidden", "deprecated", "retired"} and not item.get("deprecated_at"):
+            item["deprecated_at"] = now_iso()
+        stamped.append(item)
+    return {
+        "generated_at": now_iso(),
+        "features": stamped,
+    }
+
+
+def _table_exists(conn, table: str) -> bool:
+    row = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
+    return bool(row)
+
+
+def _row_dicts(conn, table: str, limit: int | None = None) -> list[dict]:
+    if not _table_exists(conn, table):
+        return []
+    sql = f"SELECT * FROM {table} ORDER BY created_at DESC"
+    if limit is not None:
+        sql += f" LIMIT {int(limit)}"
+    return [dict(r) for r in conn.execute(sql).fetchall()]
+
+
+def active_overview() -> dict:
+    today = today_iso()
+    with connect() as conn:
+        source_rows = conn.execute("SELECT * FROM ingest_sources ORDER BY updated_at DESC, created_at DESC").fetchall()
+        sources = [enrich_ingest_source(conn, row_to_ingest_source(r)) for r in source_rows]
+        health_counts: dict[str, int] = {}
+        for source in sources:
+            health = clean_text(source.get("health_status") or source.get("last_health_status") or "never_run") or "never_run"
+            health_counts[health] = health_counts.get(health, 0) + 1
+        jobs_pending = conn.execute("SELECT COUNT(*) FROM data_plane_jobs WHERE status IN ('queued','retry')").fetchone()[0]
+        jobs_running = conn.execute("SELECT COUNT(*) FROM data_plane_jobs WHERE status='running'").fetchone()[0]
+        latest_evidence = conn.execute("SELECT * FROM raw_snapshots ORDER BY created_at DESC LIMIT 1").fetchone()
+        evidence_today = conn.execute("SELECT COUNT(*) FROM raw_snapshots WHERE substr(created_at, 1, 10)=?", (today,)).fetchone()[0]
+        latest_failure = conn.execute(
+            """SELECT * FROM source_health_events
+               WHERE status IN ('failed', 'dead_letter')
+               ORDER BY created_at DESC LIMIT 1"""
+        ).fetchone()
+        scheduler = conn.execute("SELECT * FROM scheduler_leases WHERE id='default'").fetchone()
+        workers = conn.execute("SELECT * FROM worker_heartbeats ORDER BY heartbeat_at DESC LIMIT 1").fetchone()
+        intervention_sources = [
+            {
+                "id": source["id"],
+                "name": source.get("name") or source["id"],
+                "status": source.get("health_status") or "never_run",
+                "message": source.get("health_message") or source_health_message(source.get("health_status") or "never_run"),
+                "next_retry_at": source.get("retry_state", {}).get("next_retry_at", ""),
+            }
+            for source in sources
+            if source.get("health_status") in {"retrying", "stale", "failed", "dead_letter"}
+        ]
+    return {
+        "runtime_health": sqlite_runtime_status(),
+        "application_version": APP_VERSION,
+        "git_commit": git_commit_sha(),
+        "schema_version": SCHEMA_VERSION,
+        "db_path_category": db_path_category(),
+        "scheduler": dict(scheduler) if scheduler else None,
+        "worker": row_to_worker_heartbeat(workers) if workers else None,
+        "source_counts": {
+            "active": sum(1 for source in sources if source.get("active")),
+            "healthy": health_counts.get("healthy", 0),
+            "retrying": health_counts.get("retrying", 0),
+            "stale": health_counts.get("stale", 0),
+            "failed": health_counts.get("failed", 0),
+            "dead_letter": health_counts.get("dead_letter", 0),
+            "never_run": health_counts.get("never_run", 0),
+        },
+        "latest_evidence_at": latest_evidence["created_at"] if latest_evidence else "",
+        "evidence_captured_today": int(evidence_today),
+        "jobs_pending": int(jobs_pending),
+        "jobs_running": int(jobs_running),
+        "latest_failure": row_to_source_health_event(latest_failure) if latest_failure else None,
+        "actions_requiring_intervention": intervention_sources,
+        "unavailable": [
+            {"key": "normalization", "message": "Normalization not activated"},
+            {"key": "comparisons", "message": "No item comparisons available"},
+            {"key": "merchant_decisions", "message": "No merchant decisions available"},
+            {"key": "outcome_history", "message": "No outcome history available"},
+        ],
+        "sources": sources,
+    }
+
+
+def sources_report() -> dict:
+    report = active_overview()
+    return {
+        "sources": report["sources"],
+        "summary": report["source_counts"],
+        "latest_evidence_at": report["latest_evidence_at"],
+        "actions_requiring_intervention": report["actions_requiring_intervention"],
+    }
+
+
+def evidence_report(limit: int = 100) -> dict:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT s.*, src.name AS source_name, src.source_type AS source_type, src.url AS source_url, src.domain AS source_domain
+            FROM raw_snapshots s
+            LEFT JOIN ingest_sources src ON src.id = s.source_id
+            ORDER BY s.created_at DESC, s.id DESC
+            LIMIT ?
+            """,
+            (max(1, min(500, limit)),),
+        ).fetchall()
+    snapshots = []
+    for row in rows:
+        snap = row_to_raw_snapshot(row)
+        metadata = snap.get("metadata") or {}
+        snapshots.append({
+            "id": snap.get("id"),
+            "snapshot_id": snap.get("id"),
+            "created_at": snap.get("created_at"),
+            "captured_at": snap.get("created_at"),
+            "source_id": snap.get("source_id"),
+            "source_name": row["source_name"] or "",
+            "source_type": row["source_type"] or "",
+            "source_domain": row["source_domain"] or "",
+            "captured_time": snap.get("created_at"),
+            "payload_hash": snap.get("content_hash") or "",
+            "content_hash": snap.get("content_hash") or "",
+            "content_type": metadata.get("content_type") or "text/plain",
+            "evidence_url": snap.get("url") or row["source_url"] or "",
+            "immutable_status": "immutable",
+            "raw_payload": snap.get("raw_text") or "",
+            "run_id": snap.get("run_id") or "",
+            "metadata": metadata,
+        })
+    return {
+        "snapshots": snapshots,
+        "count": len(snapshots),
+        "generated_at": now_iso(),
+    }
+
+
+def jobs_runs_report(limit: int = 100) -> dict:
+    with connect() as conn:
+        jobs = [row_to_data_plane_job(r) for r in conn.execute("SELECT * FROM data_plane_jobs ORDER BY created_at DESC LIMIT ?", (max(1, min(500, limit)),)).fetchall()]
+        runs = [row_to_ingest_run(r) for r in conn.execute("SELECT * FROM ingest_runs ORDER BY created_at DESC LIMIT ?", (max(1, min(500, limit)),)).fetchall()]
+        claims = [row_to_worker_claim(r) for r in conn.execute("SELECT * FROM worker_claims ORDER BY created_at DESC LIMIT ?", (max(1, min(500, limit)),)).fetchall()]
+        workers = [row_to_worker_heartbeat(r) for r in conn.execute("SELECT * FROM worker_heartbeats ORDER BY heartbeat_at DESC LIMIT ?", (max(1, min(500, limit)),)).fetchall()]
+        scheduler = conn.execute("SELECT * FROM scheduler_leases WHERE id='default'").fetchone()
+    return {
+        "jobs": jobs,
+        "runs": runs,
+        "claims": claims,
+        "workers": workers,
+        "scheduler": dict(scheduler) if scheduler else None,
+    }
+
+
+def legacy_archive_status() -> dict:
+    ensure_cutover_dirs()
+    exists = LEGACY_DB_PATH.exists()
+    inventory = inventory_sqlite(LEGACY_DB_PATH, role="legacy_archive") if exists else {
+        "role": "legacy_archive",
+        "absolute_path": str(LEGACY_DB_PATH),
+        "exists": False,
+        "sha256": "",
+        "file_size": 0,
+        "modified_at": "",
+        "table_names": [],
+        "row_counts": {},
+        "schema_version": None,
+    }
+    connection_status = "connected_read_only" if exists else "missing"
+    return {
+        "archive_path": str(LEGACY_DB_PATH),
+        "connection_status": connection_status,
+        "read_only": exists,
+        "table_counts": len(inventory["table_names"]),
+        "record_counts": inventory["row_counts"],
+        "schema_version": inventory["schema_version"],
+        "inventory": inventory,
+    }
+
+
+def cutover_manifest() -> dict:
+    ensure_cutover_dirs()
+    manifest = {
+        "generated_at": now_iso(),
+        "app_version": APP_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "db_path": str(DB_PATH),
+        "db_path_category": db_path_category(),
+        "active": inventory_sqlite(DB_PATH, role="active"),
+        "legacy": inventory_sqlite(LEGACY_DB_PATH, role="legacy") if LEGACY_DB_PATH.exists() else {
+            "role": "legacy",
+            "absolute_path": str(LEGACY_DB_PATH),
+            "exists": False,
+            "sha256": "",
+            "file_size": 0,
+            "modified_at": "",
+            "table_names": [],
+            "row_counts": {},
+            "schema_version": None,
+        },
+    }
+    return manifest
+
+
+def cutover_bootstrap_payload() -> dict:
+    payload = data_plane_status()
+    payload["manifest"] = cutover_manifest()
+    payload["feature_registry"] = feature_registry_payload()
+    payload["db_path_category"] = db_path_category()
+    payload["overview"] = active_overview()
+    return payload
+
+
+def _overview_card_html(data: dict) -> dict:
+    def stat(value, label):
+        text = "n/a" if value in {None, ""} else str(value)
+        return f'<div class="stat"><strong>{html_escape(text)}</strong><span class="muted">{html_escape(label)}</span></div>'
+
+    def kv(label, value):
+        if value in {None, ""}:
+            return ""
+        return f'<div class="kv"><b>{html_escape(label)}</b><span>{html_escape(str(value))}</span></div>'
+
+    overview_stats = "".join([
+        stat(data.get("runtime_health", {}).get("quick_check") or "n/a", "Runtime Health"),
+        stat(data.get("scheduler", {}).get("owner_id") or "unassigned", "Scheduler Leader"),
+        stat(data.get("worker", {}).get("heartbeat_at") or "n/a", "Worker Heartbeat"),
+        stat(data.get("source_counts", {}).get("active", 0), "Active Sources"),
+        stat(data.get("source_counts", {}).get("healthy", 0), "Healthy"),
+        stat(data.get("source_counts", {}).get("retrying", 0), "Retrying"),
+        stat(data.get("source_counts", {}).get("stale", 0), "Stale"),
+        stat(data.get("source_counts", {}).get("failed", 0), "Failed"),
+        stat(data.get("source_counts", {}).get("dead_letter", 0), "Dead Letter"),
+        stat(data.get("evidence_captured_today", 0), "Evidence Captured Today"),
+        stat(f'{data.get("jobs_pending", 0)} / {data.get("jobs_running", 0)}', "Jobs Pending / Running"),
+        stat(data.get("latest_evidence_at") or "n/a", "Latest Evidence"),
+    ])
+
+    intervention = data.get("actions_requiring_intervention") or []
+    if intervention:
+        intervention_html = "".join(
+            f'<div class="item"><h3>{html_escape(item.get("name") or item.get("id") or "")}</h3>'
+            f'<div class="meta"><span class="tag">{html_escape(item.get("status") or "")}</span></div>'
+            f'<p class="muted">{html_escape(item.get("message") or "")}</p>'
+            f'{kv("Next Retry", item.get("next_retry_at") or "")}</div>'
+            for item in intervention
+        )
+    else:
+        intervention_html = '<div class="item"><h3>No active intervention</h3><p class="muted">All sources are either healthy, never run, or not yet due for retry.</p></div>'
+
+    unavailable = data.get("unavailable") or []
+    unavailable_html = "".join(
+        f'<div class="item"><h3>{html_escape(item.get("message") or "")}</h3><p class="muted">{html_escape(item.get("key") or "")}</p></div>'
+        for item in unavailable
+    ) or '<div class="item"><h3>No unavailable states</h3><p class="muted">All requested product states are activated.</p></div>'
+
+    failure = data.get("latest_failure")
+    if failure:
+        latest_failure_html = (
+            f'<div class="item"><h3>{html_escape(failure.get("source_id") or failure.get("id") or "Latest failure")}</h3>'
+            f'<div class="meta"><span class="tag">{html_escape(failure.get("status") or "")}</span>'
+            f'<span class="tag">{html_escape(failure.get("created_at") or "")}</span></div>'
+            f'<p class="muted">{html_escape(failure.get("message") or "")}</p></div>'
+        )
+    else:
+        latest_failure_html = '<div class="item"><h3>No recent failure</h3><p class="muted">No failed or dead-letter health event is available yet.</p></div>'
+
+    return {
+        "app_version": data.get("application_version") or APP_VERSION,
+        "overview_stats_html": overview_stats,
+        "overview_intervention_html": intervention_html,
+        "overview_unavailable_html": unavailable_html,
+        "overview_latest_failure_html": latest_failure_html,
+    }
+
+
+def write_cutover_manifest_file() -> dict:
+    manifest = cutover_manifest()
+    write_json(MANIFEST_PATH, manifest)
+    return manifest
+
+
+def export_database_payload(path: Path, label: str, tables: list[str] | None = None) -> dict:
+    db_path = Path(path).expanduser()
+    if not db_path.exists():
+        return {
+            "exported_at": now_iso(),
+            "label": label,
+            "db_path": str(db_path),
+            "tables": {},
+            "metadata": {"exists": False},
+        }
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        if tables is None:
+            tables = [row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").fetchall()]
+        payload_tables = {}
+        for table in tables:
+            if not _table_exists(conn, table):
+                continue
+            rows = [dict(r) for r in conn.execute(f"SELECT * FROM {table}").fetchall()]
+            payload_tables[table] = rows
+        schema_version = int(conn.execute("PRAGMA user_version").fetchone()[0] or 0)
+    return {
+        "exported_at": now_iso(),
+        "label": label,
+        "db_path": str(db_path),
+        "tables": payload_tables,
+        "metadata": {
+            "app_version": APP_VERSION,
+            "schema_version": schema_version,
+            "db_path_category": "active" if db_path == DB_PATH else ("legacy" if db_path == LEGACY_DB_PATH else "configured"),
+        },
     }
 
 
@@ -7703,6 +8258,31 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_cutover_index(self, params: dict | None = None):
+        path = WEB_DIR / "index.html"
+        if not path.exists():
+            return self.send_json({"error": "file not found"}, 404)
+        bootstrap = json.dumps(cutover_bootstrap_payload(), ensure_ascii=False).replace("<", "\\u003c")
+        requested_view = clean_text((params or {}).get("view", [""])[0] if isinstance((params or {}).get("view"), list) else (params or {}).get("view", ""))
+        if requested_view == "overview":
+            render_payload = _overview_card_html(active_overview())
+        else:
+            render_payload = {"app_version": APP_VERSION}
+        render = json.dumps(render_payload, ensure_ascii=False).replace("<", "\\u003c")
+        body = (
+            path.read_text(encoding="utf-8")
+            .replace("__CUTOVER_BOOTSTRAP_RENDER_JSON__", render)
+            .replace("__CUTOVER_BOOTSTRAP_JSON__", bootstrap)
+            .encode("utf-8")
+        )
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
+
     def read_json(self):
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0:
@@ -7835,13 +8415,25 @@ class Handler(SimpleHTTPRequestHandler):
             if path.startswith("/api/v1/"):
                 return self.handle_v1_read(path, params)
             if path in {"/", "/index.html"}:
-                return self.send_file(WEB_DIR / "index.html", "text/html; charset=utf-8")
+                return self.send_cutover_index(params)
             if path == "/app.js":
                 return self.send_file(WEB_DIR / "app.js", "application/javascript; charset=utf-8")
+            if path == "/app-cutover.js":
+                return self.send_file(WEB_DIR / "app-cutover.js", "application/javascript; charset=utf-8")
             if path == "/style.css":
                 return self.send_file(WEB_DIR / "style.css", "text/css; charset=utf-8")
             if path == "/api/health":
                 return self.send_json({"ok": True, "app": "Info Analyzer OS", "version": APP_VERSION, "db_path": str(DB_PATH), "sqlite": sqlite_runtime_status(), "data_plane": data_plane_status()})
+            if path == "/api/overview":
+                return self.send_json(active_overview())
+            if path == "/api/build-info":
+                payload = data_plane_status()
+                payload["manifest"] = cutover_manifest()
+                payload["feature_registry"] = feature_registry_payload()
+                payload["db_path_category"] = db_path_category()
+                payload["worker"] = payload["workers"][0] if payload.get("workers") else None
+                payload["overview"] = active_overview()
+                return self.send_json(payload)
             if path == "/api/ai/status":
                 key_set = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
                 sdk_ok = _anthropic is not None
@@ -7857,10 +8449,16 @@ class Handler(SimpleHTTPRequestHandler):
                 })
             if path == "/api/versions":
                 return self.send_json(version_history())
+            if path == "/api/feature-registry":
+                return self.send_json(feature_registry_payload())
+            if path == "/api/cutover/manifest":
+                return self.send_json(cutover_manifest())
             if path == "/api/import/capabilities":
                 return self.send_json(workbook_import_capabilities())
             if path == "/api/ingest/sources":
                 return self.send_json(list_ingest_sources())
+            if path == "/api/sources":
+                return self.send_json(sources_report())
             if path == "/api/live-signals":
                 return self.send_json(list_live_signals(params))
             if path == "/api/data-plane/status":
@@ -7874,13 +8472,18 @@ class Handler(SimpleHTTPRequestHandler):
                     rows = conn.execute("SELECT * FROM ingest_runs ORDER BY created_at DESC LIMIT 100").fetchall()
                 return self.send_json({"runs": [row_to_ingest_run(r) for r in rows]})
             if path == "/api/data-plane/snapshots":
-                with connect() as conn:
-                    rows = conn.execute("SELECT id, created_at, run_id, source_id, url, title, content_hash, connector_version, published_at, metadata FROM raw_snapshots ORDER BY created_at DESC LIMIT 100").fetchall()
-                return self.send_json({"snapshots": [row_to_raw_snapshot(r) for r in rows]})
+                return self.send_json(evidence_report(limit=100))
             if path == "/api/data-plane/health-events":
                 with connect() as conn:
                     rows = conn.execute("SELECT * FROM source_health_events ORDER BY created_at DESC LIMIT 100").fetchall()
                 return self.send_json({"health_events": [row_to_source_health_event(r) for r in rows]})
+            if path == "/api/jobs-runs":
+                return self.send_json(jobs_runs_report(limit=100))
+            if path == "/api/evidence":
+                limit = int(clean_text((params.get("limit") or ["100"])[0]) or 100)
+                return self.send_json(evidence_report(limit=limit))
+            if path == "/api/legacy-archive":
+                return self.send_json(legacy_archive_status())
             if path == "/api/stock/analyze":
                 return self.send_json(stock_intel(
                     symbol=(params.get("symbol") or params.get("ticker") or [""])[0],
@@ -7981,11 +8584,40 @@ class Handler(SimpleHTTPRequestHandler):
                 if path == "/api/sales/opportunities":
                     return self.send_json(get_sales_opportunities())
             if path == "/api/export":
-                payload = export_all()
+                payload = export_database_payload(DB_PATH, "active system export", ACTIVE_DATA_PLANE_TABLES)
+                payload["metadata"]["export_kind"] = "active_system"
+                payload["metadata"]["manifest"] = cutover_manifest()
+                payload["metadata"]["feature_registry"] = feature_registry_payload()
                 body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Content-Disposition", "attachment; filename=info-analyzer-os-export.json")
+                self.send_header("Content-Disposition", "attachment; filename=info-analyzer-active-export.json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if path == "/api/export/active":
+                payload = export_database_payload(DB_PATH, "active system export", ACTIVE_DATA_PLANE_TABLES)
+                payload["metadata"]["export_kind"] = "active_system"
+                payload["metadata"]["manifest"] = cutover_manifest()
+                payload["metadata"]["feature_registry"] = feature_registry_payload()
+                body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Disposition", "attachment; filename=info-analyzer-active-export.json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if path == "/api/export/legacy":
+                payload = export_database_payload(LEGACY_DB_PATH, "legacy archive export")
+                payload["metadata"]["export_kind"] = "legacy_archive"
+                payload["metadata"]["read_only"] = True
+                payload["metadata"]["manifest"] = cutover_manifest()
+                body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Disposition", "attachment; filename=info-analyzer-legacy-export.json")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -8169,7 +8801,13 @@ def main(argv=None):
     parser.add_argument("--import-workbook", action="append", default=[], help="Absolute path to a local .xlsx or .xlsb workbook")
     parser.add_argument("--no-serve", action="store_true", help="Run import tasks and exit without starting the web server")
     args = parser.parse_args(argv)
+    if not DB_PATH_RAW:
+        print("ERROR: INFO_ANALYZER_DB_PATH is required for normal startup.", file=sys.stderr)
+        print(f"Use the active App Support database: {ACTIVE_DB_PATH}", file=sys.stderr)
+        return 2
+    ensure_cutover_dirs()
     init_db()
+    write_cutover_manifest_file()
     for workbook_path in args.import_workbook:
         result = import_workbook_path(workbook_path)
         print(f"Imported {result['file_name']} -> batch {result['id']} ({result.get('status', 'imported')})")
@@ -8182,6 +8820,7 @@ def main(argv=None):
     httpd = Server((args.host, args.port), Handler)
     print(f"Info Analyzer OS {APP_VERSION} running at http://{args.host}:{args.port}")
     print(f"SQLite DB: {DB_PATH}")
+    print(f"Cutover manifest: {MANIFEST_PATH}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

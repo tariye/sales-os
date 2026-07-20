@@ -3,430 +3,254 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Info Analyzer OS v0.88</title>
-  <link rel="stylesheet" href="/style.css?v=0.88.0" />
+  <title>Info Analyzer OS</title>
+  <link rel="stylesheet" href="/style.css?v=2.0.0" />
 </head>
 <body>
-  <!-- WELCOME MODAL -->
-  <div id="welcomeModal" class="modal-overlay" style="display: none;">
-    <div class="modal-card">
-      <h2>Welcome to Info Analyzer OS</h2>
-      <p class="subtitle">Turn raw information into trackable decisions, actions, and reusable memory.</p>
-
-      <div class="value-prop">
-        <div><span>📥</span><h4>Capture</h4><p>Paste observations, articles, plans, and signals</p></div>
-        <div><span>⚙</span><h4>Translate</h4><p>Convert raw input into trackable memory</p></div>
-        <div><span>📊</span><h4>Decide</h4><p>Surface only what changes an action</p></div>
-      </div>
-
-      <h3>3-Step Quick Start</h3>
-      <ol>
-        <li>Click <strong>New Entry</strong> and paste an observation</li>
-        <li>Click <strong>Save Entry</strong> to translate and store it</li>
-        <li>Go to <strong>Command Center</strong> or <strong>Live Signals</strong> to act</li>
-      </ol>
-
-      <div style="background: #e8f4f1; padding: 0.75rem; border-radius: 4px; font-size: 0.85rem; margin-top: 1rem;">
-        <strong>How it works:</strong> raw data stays attached as evidence, but the cockpit shows translated signals, actions, triggers, and feedback loops.
-      </div>
-
-      <div class="modal-buttons">
-        <button id="loadDemoBtn" class="primary">Load Sample Data</button>
-        <button id="closeWelcomeBtn" class="secondary">Start Fresh</button>
-      </div>
+  <header class="hero-band app-shell">
+    <div class="brand-block">
+      <p class="eyebrow">Cutover Shell</p>
+      <h1>Info Analyzer OS <span id="appVersion">loading</span></h1>
+      <p class="subtitle">Active data plane only. Legacy data is archived and read-only. Product navigation is reduced to truthful operational views.</p>
     </div>
-  </div>
-
-  <header class="app-header">
-    <div>
-      <p class="eyebrow">Intelligence OS</p>
-      <h1>Info Analyzer OS <span id="appVersion">v0.88</span></h1>
-      <p class="subtitle">Capture raw input, contextualize it into memory, and resurface only what changes a decision.</p>
-    </div>
-    <div class="header-actions">
-      <a href="https://github.com/tariye/sales-os#readme" target="_blank" class="ghost small" title="View documentation">📖 Help</a>
-      <button id="exportBtn" class="ghost small" title="Export all data">⬇ Export</button>
+    <div class="hero-actions">
+      <a class="ghost small" href="https://github.com/tariye/sales-os" target="_blank" rel="noreferrer">Help</a>
     </div>
   </header>
 
-  <nav class="tabs">
-    <button class="tab active" data-tab="dump" title="Paste raw observations and turn them into signal memory">New Entry</button>
-    <button class="tab" data-tab="queue" title="Entries waiting for stronger translation" >Queue <span id="queueBadge" class="queue-badge hidden">0</span></button>
-    <button class="tab" data-tab="command" title="Dashboard showing all signals and actions">Command Center</button>
-    <button class="tab" data-tab="live" title="Real-time source ingest and signal routing">Live Signals</button>
-    <button class="tab" data-tab="asset" title="Lab projects and asset breakdown">Asset Lab</button>
-    <button class="tab" data-tab="stock" title="Stock research and investment signals">Stock Intel</button>
-    <button class="tab" data-tab="memory" title="All saved observations and patterns">Memory DB</button>
-    <button class="tab" data-tab="actions" title="Next actions and tasks to execute">Actions</button>
-    <button class="tab" data-tab="patterns" title="Cross-domain insights and themes">Patterns</button>
-    <button class="tab" data-tab="changelog" title="Version history and features">Changelog</button>
+  <nav class="tabs" aria-label="Primary">
+    <button class="tab active" data-view="overview">Overview</button>
+    <button class="tab" data-view="sources">Sources</button>
+    <button class="tab" data-view="evidence">Evidence</button>
+    <button class="tab" data-view="system-health">System Health</button>
+    <button class="tab" data-view="stock-intel">Stock Intel · Pilot</button>
+    <button class="tab" data-view="jobs-runs">Jobs &amp; Runs</button>
+    <button class="tab" data-view="build-information">Build Information</button>
+    <button class="tab" data-view="legacy-archive">Legacy Archive</button>
+    <button class="tab" data-view="help">Help</button>
   </nav>
 
-  <main>
-
-    <!-- ① DUMP ─────────────────────────────────────────────────── -->
-    <section id="dump" class="panel active">
-      <div class="card hero">
-        <div class="card-head">
-          <div><p class="eyebrow">Raw Input</p><h2>New Entry</h2></div>
-          <button id="clearBtn" class="ghost small">Clear</button>
-        </div>
-        <textarea id="rawInput" rows="9" placeholder="Paste anything — lab event, investing thought, job post, Network+ miss, workout note, business signal, paragraph, article excerpt, conversation note..."></textarea>
-        <div class="grid two hint-grid">
-          <label>Domain
-            <select id="domainInput">
-              <option value="">Auto-detect</option><option>Lab</option><option>Investing</option><option>Business</option><option>Career</option><option>Fitness</option><option>Network+</option><option>Music</option><option>AI Project</option><option>Personal Finance</option><option>Personal Preference</option><option>Other</option>
-            </select>
-          </label>
-          <label>Entity <span class="label-hint">optional hint</span><input id="entityInput" placeholder="Company, system, person, protocol..." /></label>
-          <label>Tags <span class="label-hint">optional hint</span><input id="tagsInput" placeholder="earnings, dns, sop, fitness, ai..." /></label>
-          <label>Source Type
-            <select id="sourceTypeInput">
-              <option value="">Auto</option><option>Observation</option><option>Document</option><option>Conversation</option><option>Measurement</option><option>Question</option><option>Idea</option><option>Event</option><option>Preference</option><option>Result</option>
-            </select>
-          </label>
-        </div>
-        <p class="workflow-guide"><span>① Paste raw input</span><span class="wf-sep">→</span><span>② Translate into signal</span><span class="wf-sep">→</span><span>③ Save with action + metric</span></p>
-        <div class="buttons">
-          <button id="saveBtn" class="primary">Save Entry</button>
-        </div>
-        <div id="aiStatusNote" class="ai-status-note hidden"></div>
-      </div>
-
-      <!-- Collapsible manual translation — for power users / pre-filled imports -->
-      <details class="contract-panel" id="contractDetails">
-        <summary class="contract-toggle">
-          Fill manually <span class="contract-toggle-hint">— optional, the translation layer fills these when possible</span>
-          <span id="draftPill" class="pill muted" style="margin-left:auto">empty</span>
-        </summary>
-        <div class="card contract-card">
-          <p class="field-hint">Fill any fields you already know before saving. Leave the rest empty — the translation layer will infer a signal, action, metric, trigger, and context.</p>
-          <div class="grid one">
-            <label>Title<input id="titleInput" /></label>
-            <div class="grid two">
-              <label>Signal Type<select id="signalRoleInput" title="What kind of signal is this?"><option>action</option><option>watch</option><option>pattern</option><option>risk</option><option>opportunity</option><option>contradiction</option><option>proof</option><option>preference</option><option>reference</option><option>archive</option></select></label>
-              <label>Confidence<select id="confidenceInput"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
-            </div>
-            <label>Signal<textarea id="signalInput" rows="2" placeholder="Key takeaway"></textarea></label>
-            <label>Interpretation<textarea id="interpretationInput" rows="2" placeholder="What this means for decisions"></textarea></label>
-            <div class="grid two">
-              <label>Actionability<select id="actionabilityInput"><option>now</option><option>next</option><option selected>watch</option><option>review</option><option>link_only</option><option>proof</option><option>no_action</option></select></label>
-              <label>Card Type<select id="cardTypeInput"><option>Action Card</option><option>Watch Card</option><option>Pattern Card</option><option>Risk Card</option><option>Opportunity Card</option><option>Contradiction Card</option><option>Proof Card</option><option>Review Card</option><option>Preference Card</option><option>Reference Card</option><option>Archive Card</option></select></label>
-              <label>Pull Trigger Type<select id="pullTriggerTypeInput"><option>tag</option><option>entity</option><option>domain</option><option>review_date</option><option>threshold</option><option>repetition</option><option>contradiction</option><option>action</option><option>preference</option><option>reference</option></select></label>
-              <label>Relationship Type<select id="relationshipTypeInput"><option>connects</option><option>validates</option><option>contradicts</option><option>expands</option><option>refines</option><option>supersedes</option><option>produces</option><option>repeats</option></select></label>
-            </div>
-            <div class="grid two">
-              <label>Trackable As<input id="trackableAsInput" /></label>
-              <label>Tracking Metric<input id="trackingMetricInput" /></label>
-              <label>Baseline<input id="baselineInput" /></label>
-              <label>Target / Threshold<input id="targetInput" /></label>
-            </div>
-            <label>Pull Trigger<textarea id="pullTriggerInput" rows="2"></textarea></label>
-            <label>Trigger Condition<textarea id="triggerInput" rows="2"></textarea></label>
-            <label>Result To Track<textarea id="resultToTrackInput" rows="2"></textarea></label>
-            <label>First Executable Step<textarea id="firstStepInput" rows="2"></textarea></label>
-            <label>Impact Metric<textarea id="impactMetricInput" rows="2"></textarea></label>
-            <label>Feedback To Capture<textarea id="feedbackInput" rows="2"></textarea></label>
-            <label>Related Memory Query<textarea id="relatedQueryInput" rows="2"></textarea></label>
-            <label>Pattern<textarea id="patternInput" rows="2"></textarea></label>
-            <label>Returned Action<textarea id="actionInput" rows="2"></textarea></label>
-            <label>Lesson<textarea id="lessonInput" rows="2"></textarea></label>
-            <div class="grid two">
-              <label>Review Date<input id="reviewDateInput" type="date" /></label>
-              <label>Proof Artifact<input id="proofInput" placeholder="SOP, resume bullet, checklist..." /></label>
-            </div>
-            <label>Next Step<textarea id="nextStepInput" rows="2"></textarea></label>
-          </div>
-          <div class="buttons" style="margin-top:14px">
-            <button id="codifyBtn" class="secondary">Translate Signal</button>
-            <button id="loopBtn" class="secondary">Loop Analysis</button>
-          </div>
-        </div>
-      </details>
-
-      <div class="card">
-        <div class="card-head"><div><p class="eyebrow">After Save</p><h2>Processing Status</h2></div></div>
-        <div id="saveOutput" class="list"></div>
-      </div>
-    </section>
-
-    <!-- ② QUEUE ────────────────────────────────────────────────── -->
-    <section id="queue" class="panel">
-      <div class="card hero">
-        <div class="card-head">
-          <div><p class="eyebrow">Processing Queue</p><h2>Needs Stronger Translation</h2></div>
-          <button id="refreshQueue" class="ghost small">Refresh</button>
-        </div>
-        <p class="field-hint">These entries are saved but still need stronger signal definition. Re-translate, decompose, or process them with Claude Code when you want deeper analysis.</p>
-        <div id="queueMeta" class="stats"></div>
-      </div>
-      <div id="queueList" class="list"></div>
-    </section>
-
-    <!-- ③ COMMAND CENTER ────────────────────────────────────────── -->
-    <section id="command" class="panel">
-      <div class="card hero inn-hero">
+  <main class="app-shell">
+    <section id="overview" class="panel active">
+      <div class="card overview">
         <div class="card-head">
           <div>
-            <p class="eyebrow">INNBANK</p>
-            <h2>The Value Creation & Capital Routing Engine</h2>
-            <p class="subtitle">The Command Center is the control plane that tracks every data plane, coordinates every sub-control plane, and helps route money, data, tools, time, and attention toward the highest-value next move.</p>
+            <p class="eyebrow">Active State</p>
+            <h2>Overview</h2>
           </div>
-          <div class="buttons compact">
-            <button id="rewireMemory" class="primary small">Rewire Memory</button>
-            <button id="refreshCommand" class="ghost small">Refresh</button>
-          </div>
+          <button id="refreshOverview" class="ghost small">Refresh</button>
         </div>
-        <div id="commandStats" class="stats"></div>
-      </div>
-      <div class="card">
-        <div class="card-head">
-          <div><p class="eyebrow">Decision Inbox</p><h2>What Needs A Decision Now</h2></div>
-          <button id="refreshDecisionInbox" class="ghost small">Refresh</button>
-        </div>
-        <p class="field-hint">This is the cockpit lane: only signals that should confirm, change, or challenge a decision belong here.</p>
-        <div id="commandDecisionInbox" class="list"></div>
-      </div>
-      <div class="grid two inn-topology">
-        <div class="card">
-          <div class="card-head"><div><p class="eyebrow">Core Definition</p><h2>What INNBANK Does</h2></div></div>
-          <div id="innbankArchitecture" class="list"></div>
-        </div>
-        <div class="card">
-          <div class="card-head"><div><p class="eyebrow">Command Questions</p><h2>What The Control Plane Answers</h2></div></div>
-          <div id="innbankQuestions" class="question-grid"></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-head"><div><p class="eyebrow">Data Planes</p><h2>Reality Feeds The Control Plane</h2></div></div>
-        <div id="innbankDataPlanes" class="plane-grid"></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><div><p class="eyebrow">Plane Drilldown</p><h2 id="dataPlaneTitle">Select A Data Plane</h2></div></div>
-        <div id="dataPlaneDrilldown" class="list"><div class="item"><h3>No plane selected</h3><p class="muted">Click a data plane to view its signals and active routes.</p></div></div>
-      </div>
-      <div class="card">
-        <div class="card-head">
-          <div><p class="eyebrow">Decision Intelligence Layer</p><h2>No Signal Is Complete Until It Changes A Decision</h2></div>
-          <button id="refreshDecisions" class="ghost small">Refresh</button>
-        </div>
-        <div id="decisionStats" class="stats"></div>
-        <div class="grid two" style="margin-top:14px">
-          <div><div class="item"><h3>Decision Queue</h3><p class="muted">Signals that should change, confirm, or review a decision.</p></div><div id="decisionQueueList" class="list"></div></div>
-          <div><div class="item"><h3>Decision Rules</h3><p class="muted">Reusable heuristics being strengthened or weakened by feedback.</p></div><div id="decisionRulesList" class="list"></div></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-head"><div><p class="eyebrow">Sub-Control Planes</p><h2>Systems That Convert Signal Into Results</h2></div></div>
-        <div id="innbankSubplanes" class="plane-grid"></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><div><p class="eyebrow">Imported Data Planes</p><h2>Structured Source Systems In SQLite</h2></div></div>
-        <div id="importPlanes" class="list"></div>
-      </div>
-      <div class="grid three cockpit-grid">
-        <div class="card cockpit-card warning"><div class="card-head"><div><p class="eyebrow">Bottlenecks</p><h2>Needs Action Now</h2></div></div><div id="warningLane" class="list"></div></div>
-        <div class="card cockpit-card caution"><div class="card-head"><div><p class="eyebrow">Routing Review</p><h2>Adjust Next</h2></div></div><div id="cautionLane" class="list"></div></div>
-        <div class="card cockpit-card advisory"><div class="card-head"><div><p class="eyebrow">System Watch</p><h2>Monitor</h2></div></div><div id="advisoryLane" class="list"></div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><div><p class="eyebrow">Routing Directives</p><h2>How To Use The Control Plane</h2></div></div>
-        <div id="cockpitChecklist" class="checklist"></div>
-      </div>
-      <div class="card hero">
-        <div class="card-head"><div><p class="eyebrow">Capital Routing Query</p><h2>What Should Be Routed Next?</h2></div></div>
-        <div class="grid two">
-          <input id="pullInput" placeholder="Search: sales, cashflow, SOP, training, portfolio, relationships..." />
-          <select id="pullDomain"><option value="">Any domain</option><option>Lab</option><option>Investing</option><option>Business</option><option>Career</option><option>Fitness</option><option>Network+</option><option>Music</option><option>AI Project</option><option>Personal Finance</option><option>Personal Preference</option><option>Other</option></select>
-        </div>
-        <div class="buttons"><button id="pullBtn" class="primary">Route Next Moves</button></div>
-      </div>
-      <div class="grid two">
-        <div class="card"><div class="card-head"><div><p class="eyebrow">Immediate Routing Moves</p><h2>Act Now</h2></div></div><div id="quickActionsList" class="list"></div></div>
-        <div class="card"><div class="card-head"><div><p class="eyebrow">System-Level Moves</p><h2>Re-route The Engine</h2></div></div><div id="bigActionsList" class="list"></div></div>
+        <div id="overviewStats" class="stats"></div>
       </div>
       <div class="grid two">
         <div class="card">
-          <div class="card-head"><div><p class="eyebrow">Bottleneck Detector</p><h2>Systems Missing Actionability</h2></div><button id="dormantBtn" class="primary small">Detect</button></div>
-          <div id="dormantList" class="list"></div>
+          <div class="card-head"><div><p class="eyebrow">Intervention</p><h2>Requires Attention</h2></div></div>
+          <div id="overviewIntervention" class="list"></div>
         </div>
         <div class="card">
-          <div class="card-head"><div><p class="eyebrow">Build Ledger</p><h2>Platform History</h2></div></div>
-          <div id="versionsList" class="list"></div>
+          <div class="card-head"><div><p class="eyebrow">Unavailable</p><h2>Not Activated</h2></div></div>
+          <div id="overviewUnavailable" class="list"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><p class="eyebrow">Latest Failure</p><h2>Diagnostics</h2></div></div>
+        <div id="overviewLatestFailure" class="list"></div>
+      </div>
+    </section>
+
+    <section id="sources" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div><p class="eyebrow">Active Sources</p><h2>Sources</h2></div>
+          <button id="refreshSources" class="ghost small">Refresh</button>
+        </div>
+        <div id="sourcesSummary" class="stats"></div>
+      </div>
+      <div id="sourcesList" class="list"></div>
+    </section>
+
+    <section id="evidence" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div><p class="eyebrow">Immutable Evidence</p><h2>Evidence</h2></div>
+          <button id="refreshEvidence" class="ghost small">Refresh</button>
+        </div>
+        <div id="evidenceSummary" class="stats"></div>
+      </div>
+      <div class="grid two">
+        <div>
+          <div id="evidenceList" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Controlled Detail</p><h2>Raw Payload</h2></div></div>
+          <div id="evidenceDetail" class="list">
+            <div class="item"><h3>No snapshot selected</h3><p class="muted">Select a snapshot to inspect the raw payload.</p></div>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- ④ LIVE SIGNALS ──────────────────────────────────────────── -->
-    <section id="live" class="panel">
-      <div class="card hero">
+    <section id="system-health" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div><p class="eyebrow">Runtime</p><h2>System Health</h2></div>
+          <button id="refreshSystemHealth" class="ghost small">Refresh</button>
+        </div>
+        <div id="systemHealthStats" class="stats"></div>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Leader</p><h2>Scheduler</h2></div></div>
+          <div id="schedulerPanel" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Worker</p><h2>Heartbeat</h2></div></div>
+          <div id="workerPanel" class="list"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><p class="eyebrow">Health History</p><h2>Events</h2></div></div>
+        <div id="healthEventsList" class="list"></div>
+      </div>
+    </section>
+
+    <section id="stock-intel" class="panel">
+      <div class="card">
         <div class="card-head">
           <div>
-            <p class="eyebrow">Real-Time Ingest</p>
-            <h2>Live Signal Dashboard</h2>
-            <p class="subtitle">Register sources, ingest new evidence, and route only the signals that can change a decision.</p>
+            <p class="eyebrow">Pilot Surface</p>
+            <h2>Stock Intel · Pilot</h2>
+            <p class="subtitle">Live analysis remains visible, but memory writes are disabled in this cutover shell.</p>
           </div>
-          <div class="buttons compact">
-            <button id="runIngestBtn" class="primary small">Run Ingest</button>
-            <button id="refreshLiveBtn" class="ghost small">Refresh</button>
-          </div>
-        </div>
-        <div id="liveStats" class="stats"></div>
-        <div id="dataPlaneStats" class="list"></div>
-      </div>
-
-      <div class="grid two">
-        <div class="card">
-          <div class="card-head"><div><p class="eyebrow">Source Registry</p><h2>Add A Feed</h2></div></div>
-          <div class="grid two">
-            <label>Name<input id="ingestName" placeholder="Sales trend feed, Apple news, SK Hynix watch..." /></label>
-            <label>Type
-              <select id="ingestType"><option value="manual">Manual Test</option><option value="fixture">Fixture Test</option><option value="url">URL</option><option value="rss">RSS/Atom</option></select>
-            </label>
-            <label>Domain
-              <select id="ingestDomain"><option>Business</option><option>Investing</option><option>Lab</option><option>Career</option><option>Fitness</option><option>Network+</option><option>Music</option><option>AI Project</option><option>Personal Finance</option><option>Personal Preference</option><option>Other</option></select>
-            </label>
-            <label>Entity<input id="ingestEntity" placeholder="Company, product, source, system..." /></label>
-            <label>Poll Minutes<input id="ingestPollMinutes" type="number" step="0.05" min="0.05" value="1" /></label>
-            <label>Stale After Seconds<input id="ingestStaleAfter" type="number" step="1" min="2" value="8" /></label>
-          </div>
-          <label>URL <span class="label-hint">for URL/RSS sources</span><input id="ingestUrl" placeholder="https://..." /></label>
-          <label>Manual Source Text <span class="label-hint">for testing or phone dumps</span><textarea id="ingestManualText" rows="5" placeholder="Paste a live signal here, e.g. Sales signal: customer objections are clustering around pricing. Track conversion rate and objections before increasing traffic."></textarea></label>
-          <div class="buttons"><button id="addIngestSourceBtn" class="primary">Add Source</button></div>
-        </div>
-
-        <div class="card">
-          <div class="card-head"><div><p class="eyebrow">Active Sources</p><h2>What The System Watches</h2></div></div>
-          <div id="ingestSourcesList" class="list"></div>
-        </div>
-      </div>
-
-      <div class="grid two">
-        <div class="card">
-          <div class="card-head"><div><p class="eyebrow">New Signals</p><h2>Needs Decision</h2></div></div>
-          <div id="liveNewList" class="list"></div>
-        </div>
-        <div class="card">
-          <div class="card-head"><div><p class="eyebrow">Signal Routing</p><h2>Watch / Acted / Closed</h2></div></div>
-          <div id="liveRoutedList" class="list"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ⑤ ASSET LAB ─────────────────────────────────────────────── -->
-    <section id="asset" class="panel">
-      <div class="card hero">
-        <div class="card-head">
-          <div>
-            <p class="eyebrow">Asset Lab</p>
-            <h2>Signal Breakdown Workbench</h2>
-            <p class="subtitle">Drop any signal, break it down to the clearest understanding, then save it as a reusable intelligence asset.</p>
-          </div>
-          <button id="refreshAssetLab" class="ghost small">Refresh</button>
+          <button id="refreshStockIntel" class="ghost small">Refresh</button>
         </div>
         <div class="grid two">
-          <label>Signal / Asset Name<input id="assetTitle" placeholder="Sales pattern, company signal, lab issue, idea, asset..." /></label>
-          <label>Entity / Source<input id="assetEntity" placeholder="Company, product, system, person, source..." /></label>
-        </div>
-        <div class="grid two">
-          <label>Domain
-            <select id="assetDomain"><option>Business</option><option>Investing</option><option>Lab</option><option>Career</option><option>Fitness</option><option>Network+</option><option>Music</option><option>AI Project</option><option>Personal Finance</option><option>Personal Preference</option><option>Other</option></select>
-          </label>
-          <label>Source URL<input id="assetUrl" placeholder="Article, filing, product page, note source..." /></label>
-        </div>
-        <label>Raw Signal<textarea id="assetNotes" rows="4" placeholder="Paste the signal, observation, excerpt, idea, issue, trend, quote, or question you want broken down clearly..."></textarea></label>
-        <div class="buttons">
-          <button id="createAssetProject" class="primary">Create Asset</button>
-        </div>
-      </div>
-
-      <div class="grid two">
-        <div class="card">
-          <div class="card-head"><div><p class="eyebrow">Assets</p><h2>Open Or Delete</h2></div></div>
-          <div id="assetProjects" class="list"></div>
-        </div>
-        <div class="card">
-          <div class="card-head"><div><p class="eyebrow">Open Asset</p><h2 id="openAssetTitle">No Asset Open</h2></div></div>
-          <div id="openAssetProject" class="list"></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-head">
-          <div><p class="eyebrow">Asset Library</p><h2>Reusable Signal Intelligence</h2></div>
-          <input id="assetLibrarySearch" class="inline-search" placeholder="Search labels, entities, tags..." />
-        </div>
-        <div id="assetLibrary" class="list"></div>
-      </div>
-    </section>
-
-    <!-- ⑥ STOCK INTEL ───────────────────────────────────────────── -->
-    <section id="stock" class="panel">
-      <div class="card hero">
-        <div class="card-head">
-          <div><p class="eyebrow">Stock Pattern Recognition</p><h2>Company Intelligence Card</h2></div>
-          <button id="saveStockIntel" class="ghost small" disabled>Save To Memory</button>
-        </div>
-        <div class="grid two">
-          <input id="stockSymbolInput" placeholder="AAPL, NVDA, SK Hynix, 000660.KS..." />
-          <input id="stockCompanyInput" placeholder="Optional company name hint" />
+          <label>Ticker<input id="stockTicker" placeholder="AAPL" /></label>
+          <label>Company Hint<input id="stockCompany" placeholder="Optional company name" /></label>
         </div>
         <div class="buttons">
-          <button id="analyzeStockBtn" class="primary">Analyze Stock</button>
+          <button id="analyzeStockBtn" class="primary">Analyze</button>
+          <button id="saveStockBtn" class="secondary" disabled title="Save to memory is disabled in the cutover shell">Save To Memory Disabled</button>
         </div>
       </div>
       <div id="stockOutput" class="list"></div>
     </section>
 
-    <!-- ⑦ MEMORY DB ─────────────────────────────────────────────── -->
-    <section id="memory" class="panel">
+    <section id="jobs-runs" class="panel">
       <div class="card">
-        <div class="card-head"><div><p class="eyebrow">SQLite Memory</p><h2>Ledger</h2></div><button id="refreshMemory" class="ghost small">Refresh</button></div>
-        <div class="grid two">
-          <input id="searchInput" placeholder="Search signal, interpretation, lesson, raw input, tags..." />
-          <select id="filterDomain"><option value="">All domains</option><option>Lab</option><option>Investing</option><option>Business</option><option>Career</option><option>Fitness</option><option>Network+</option><option>Music</option><option>AI Project</option><option>Personal Finance</option><option>Personal Preference</option><option>Other</option></select>
-        </div>
-        <div id="memoryList" class="list"></div>
-      </div>
-    </section>
-
-    <!-- ⑧ ACTIONS ───────────────────────────────────────────────── -->
-    <section id="actions" class="panel">
-      <div class="card hero">
-        <div class="card-head"><div><p class="eyebrow">Execution Queue</p><h2>Next Actions</h2></div><button id="refreshActions" class="ghost small">Refresh</button></div>
-        <p class="field-hint">Returned actions are concrete next steps tied to translated signals. Track progress, log results, or recategorize weak actions here.</p>
-      </div>
-      <div class="card">
-        <div id="actionsList" class="list"></div>
-      </div>
-    </section>
-
-    <!-- ⑨ PATTERNS ──────────────────────────────────────────────── -->
-    <section id="patterns" class="panel">
-      <div class="card hero">
-        <div class="card-head"><div><p class="eyebrow">Pattern Engine</p><h2>Recurring Themes</h2></div><div class="buttons compact"><button id="scanPatterns" class="primary small">Scan for Patterns</button><button id="refreshPatterns" class="ghost small">Refresh</button></div></div>
-        <p class="field-hint">Patterns emerge when repeated signals cross the database. Click Scan to detect recurring themes, contradictions, risks, and opportunity patterns.</p>
-      </div>
-      <div class="card">
-        <div id="patternsList" class="list"></div>
-      </div>
-    </section>
-
-    <!-- ⑩ CHANGELOG ─────────────────────────────────────────────── -->
-    <section id="changelog" class="panel">
-      <div class="card hero">
         <div class="card-head">
-          <div><p class="eyebrow">Build Ledger</p><h2>Version History</h2></div>
-          <button id="refreshChangelog" class="ghost small">Refresh</button>
+          <div><p class="eyebrow">Diagnostics</p><h2>Jobs &amp; Runs</h2></div>
+          <button id="refreshJobsRuns" class="ghost small">Refresh</button>
         </div>
-        <p class="subtitle" id="changelogMeta"></p>
+        <div id="jobsRunsStats" class="stats"></div>
       </div>
-      <div id="changelogList"></div>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Jobs</p><h2>Queued / Running</h2></div></div>
+          <div id="jobsList" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Runs</p><h2>Ingest Runs</h2></div></div>
+          <div id="runsList" class="list"></div>
+        </div>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Claims</p><h2>Worker Claims</h2></div></div>
+          <div id="claimsList" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Workers</p><h2>Heartbeats</h2></div></div>
+          <div id="workersList" class="list"></div>
+        </div>
+      </div>
     </section>
 
+    <section id="build-information" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div><p class="eyebrow">Build</p><h2>Build Information</h2></div>
+          <button id="refreshBuildInfo" class="ghost small">Refresh</button>
+        </div>
+        <div id="buildInfoStats" class="stats"></div>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Feature Registry</p><h2>Lifecycle</h2></div></div>
+          <div id="featureRegistry" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Exports</p><h2>Active / Legacy</h2></div></div>
+          <div class="buttons">
+            <a class="primary" href="/api/export/active">Active System Export</a>
+            <a class="secondary" href="/api/export/legacy">Legacy Archive Export</a>
+          </div>
+          <div id="buildManifest" class="list" style="margin-top:14px"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="legacy-archive" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div><p class="eyebrow">Archive</p><h2>Legacy Archive</h2></div>
+          <button id="refreshLegacyArchive" class="ghost small">Refresh</button>
+        </div>
+        <div id="legacyArchiveStats" class="stats"></div>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Boundary</p><h2>Status</h2></div></div>
+          <div id="legacyArchiveStatus" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><p class="eyebrow">Record Counts</p><h2>Read-Only</h2></div></div>
+          <div id="legacyArchiveCounts" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="help" class="panel">
+      <div class="card">
+        <div class="card-head"><div><p class="eyebrow">Help</p><h2>Working Notes</h2></div></div>
+        <div class="list">
+          <div class="item">
+            <h3>What this shell shows</h3>
+            <p class="muted">Only active data-plane state, read-only legacy archive inventory, and pilot-labeled stock analysis.</p>
+          </div>
+          <div class="item">
+            <h3>What is hidden</h3>
+            <p class="muted">New Entry, Queue, Command Center, legacy Live Signals, Asset Lab, Memory DB, Actions, Patterns, Changelog, and sample-data controls are not in the primary navigation.</p>
+          </div>
+          <div class="item">
+            <h3>Where to look next</h3>
+            <p class="muted">Use Sources for state, Evidence for immutable snapshots, System Health for scheduler and worker truth, and Build Information for version and schema details.</p>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="/app.js?v=0.88.0"></script>
+  <script>window.__CUTOVER_BOOTSTRAP__ = __CUTOVER_BOOTSTRAP_JSON__;</script>
+  <script>
+    window.__CUTOVER_BOOTSTRAP_RENDER__ = __CUTOVER_BOOTSTRAP_RENDER_JSON__;
+    (function () {
+      const data = window.__CUTOVER_BOOTSTRAP_RENDER__;
+      if (!data) return;
+      if (data.app_version && document.getElementById("appVersion")) {
+        document.getElementById("appVersion").textContent = data.app_version;
+      }
+      const stats = document.getElementById("overviewStats");
+      if (stats) stats.innerHTML = data.overview_stats_html || "";
+      const intervention = document.getElementById("overviewIntervention");
+      if (intervention) intervention.innerHTML = data.overview_intervention_html || "";
+      const unavailable = document.getElementById("overviewUnavailable");
+      if (unavailable) unavailable.innerHTML = data.overview_unavailable_html || "";
+      const failure = document.getElementById("overviewLatestFailure");
+      if (failure) failure.innerHTML = data.overview_latest_failure_html || "";
+    })();
+  </script>
+  <script src="/app-cutover.js?v=2.0.0"></script>
 </body>
 </html>
