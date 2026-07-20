@@ -4154,8 +4154,38 @@ def source_freshness_age_seconds(source: dict, latest_snapshot: dict | None = No
     return max(int((datetime.now(timezone.utc) - anchor).total_seconds()), 0)
 
 
+def source_effective_health_status(source: dict, active_retry_job: dict | None = None, latest_job: dict | None = None) -> str:
+    raw_status = clean_text(source.get("last_health_status") or "")
+    if source.get("dead_letter_at") or raw_status == "dead_letter":
+        return "dead_letter"
+    if raw_status in {"healthy", "retrying", "stale", "failed"}:
+        return raw_status
+    active_job = active_retry_job or {}
+    active_status = clean_text(active_job.get("status"))
+    if active_status in {"queued", "retry", "running"}:
+        return "retrying"
+    latest_job = latest_job or {}
+    latest_status = clean_text(latest_job.get("status"))
+    if latest_status in {"queued", "retry", "running"} and int(latest_job.get("attempts") or source.get("consecutive_failures") or 0) > 0:
+        return "retrying"
+    return raw_status or "never_run"
+
+
+def source_health_message(status: str) -> str:
+    mapping = {
+        "never_run": "No ingest has completed for this source.",
+        "healthy": "Latest ingest completed successfully.",
+        "retrying": "The latest attempt failed and another attempt is scheduled.",
+        "stale": "The latest successful evidence is older than the freshness target.",
+        "failed": "The latest attempt failed.",
+        "dead_letter": "Retries are exhausted and this source requires intervention.",
+    }
+    return mapping.get(status, "")
+
+
 def source_retry_state(source: dict, latest_job: dict | None = None, latest_snapshot: dict | None = None) -> dict:
     latest_job = latest_job or {}
+    status = source_effective_health_status(source, latest_job=latest_job)
     max_attempts = int(latest_job.get("max_attempts") or (source.get("metadata") or {}).get("max_attempts") or 3)
     attempts = int(latest_job.get("attempts") or source.get("consecutive_failures") or 0)
     last_error = clean_text(source.get("last_error") or latest_job.get("last_error") or "")
@@ -4163,22 +4193,8 @@ def source_retry_state(source: dict, latest_job: dict | None = None, latest_snap
     next_retry_at = clean_text(latest_job.get("next_attempt_at") or "")
     latest_success_at = source_latest_success_timestamp(source, latest_snapshot)
     freshness_age_seconds = source_freshness_age_seconds(source, latest_snapshot)
-    raw_status = clean_text(source.get("last_health_status") or "")
-    status = raw_status or "never_run"
 
-    if source.get("dead_letter_at") or clean_text(latest_job.get("status")) == "dead_letter":
-        status = "dead_letter"
-    elif raw_status == "retrying":
-        status = "retrying"
-    elif (
-        clean_text(latest_job.get("status")) in {"retry", "running"}
-        and attempts > 0
-        and attempts < max_attempts
-        and not source.get("dead_letter_at")
-    ):
-        status = "retrying"
-
-    if status not in {"retrying", "dead_letter"}:
+    if status != "retrying":
         attempts = 0
         last_error = ""
         last_failure_at = ""
@@ -4869,13 +4885,27 @@ def start_data_plane_runtime() -> threading.Event:
 
 def enrich_ingest_source(conn, source: dict) -> dict:
     latest_job = conn.execute("SELECT * FROM data_plane_jobs WHERE source_id=? ORDER BY created_at DESC LIMIT 1", (source["id"],)).fetchone()
+    active_retry_job = conn.execute(
+        """SELECT * FROM data_plane_jobs
+           WHERE source_id=? AND status IN ('queued','retry','running')
+           ORDER BY updated_at DESC, created_at DESC
+           LIMIT 1""",
+        (source["id"],),
+    ).fetchone()
     latest_run = conn.execute("SELECT * FROM ingest_runs WHERE source_id=? ORDER BY created_at DESC LIMIT 1", (source["id"],)).fetchone()
     latest_snapshot = conn.execute("SELECT * FROM raw_snapshots WHERE source_id=? ORDER BY created_at DESC LIMIT 1", (source["id"],)).fetchone()
     latest_health = conn.execute("SELECT * FROM source_health_events WHERE source_id=? ORDER BY created_at DESC LIMIT 1", (source["id"],)).fetchone()
     claim_rows = conn.execute("SELECT * FROM worker_claims WHERE source_id=? ORDER BY created_at DESC LIMIT 5", (source["id"],)).fetchall()
     health_rows = conn.execute("SELECT * FROM source_health_events WHERE source_id=? ORDER BY created_at DESC LIMIT 5", (source["id"],)).fetchall()
     queued = conn.execute("SELECT COUNT(*) FROM data_plane_jobs WHERE source_id=? AND status IN ('queued','retry','running')", (source["id"],)).fetchone()[0]
-    retry_state = source_retry_state(source, row_to_data_plane_job(latest_job) if latest_job else None, row_to_raw_snapshot(latest_snapshot) if latest_snapshot else None)
+    active_retry_job_row = row_to_data_plane_job(active_retry_job) if active_retry_job else None
+    retry_state = source_retry_state(
+        source,
+        active_retry_job_row or (row_to_data_plane_job(latest_job) if latest_job else None),
+        row_to_raw_snapshot(latest_snapshot) if latest_snapshot else None,
+    )
+    current_health_status = retry_state["status"]
+    current_health_message = source_health_message(current_health_status)
     source["latest_job"] = row_to_data_plane_job(latest_job) if latest_job else None
     source["latest_run"] = row_to_ingest_run(latest_run) if latest_run else None
     source["latest_snapshot"] = row_to_raw_snapshot(latest_snapshot) if latest_snapshot else None
@@ -4883,7 +4913,9 @@ def enrich_ingest_source(conn, source: dict) -> dict:
     source["recent_claims"] = [row_to_worker_claim(r) for r in claim_rows]
     source["recent_health_events"] = [row_to_source_health_event(r) for r in health_rows]
     source["pending_job_count"] = int(queued)
-    source["health_status"] = retry_state["status"]
+    source["current_health"] = {"status": current_health_status, "message": current_health_message}
+    source["health_status"] = current_health_status
+    source["health_message"] = current_health_message
     source["retry_state"] = retry_state
     return source
 

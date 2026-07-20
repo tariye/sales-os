@@ -369,7 +369,6 @@ def main() -> int:
         server_a = start_server(repo_dir, env, args.port_a, log_a)
         wait_for(lambda: request(base_a, "GET", "/api/health").get("ok"), 20, "server A restart health")
         retry_source_after_restart = source_by_name(base_a, "Acceptance Retry Source")
-        db_exec(str(db_path), "UPDATE data_plane_jobs SET next_attempt_at='2000-01-01T00:00:00+00:00' WHERE source_id=?", (retry_source["id"],))
         recovered_retry = worker_tick(base_b, "retry-worker-b")
         retry_job_final = db_one(str(db_path), "SELECT * FROM data_plane_jobs WHERE source_id=?", (retry_source["id"],))
         retry_source_final = source_by_name(base_b, "Acceptance Retry Source")
@@ -385,10 +384,50 @@ def main() -> int:
             "final_source": retry_source_final,
             "snapshots": retry_snaps,
             "health_events": retry_health,
-            "ok": retry_source_view["health_status"] == "retrying" and retry_source_after_restart["health_status"] == "retrying" and retry_source_final["health_status"] == "healthy" and len(retry_snaps) == 1,
+            "ok": (
+                retry_source_view["health_status"] == "retrying"
+                and (retry_source_view.get("retry_state") or {}).get("next_retry_at") == retry_job.get("next_attempt_at")
+                and retry_source_view.get("health_message") == "The latest attempt failed and another attempt is scheduled."
+                and retry_source_after_restart["health_status"] == "retrying"
+                and (retry_source_after_restart.get("retry_state") or {}).get("next_retry_at") == retry_job.get("next_attempt_at")
+                and retry_source_final["health_status"] == "healthy"
+                and (retry_source_final.get("retry_state") or {}).get("next_retry_at", "") == ""
+                and retry_source_final.get("health_message") == "Latest ingest completed successfully."
+                and len(retry_snaps) == 1
+            ),
         })
 
-        # 6. Persistence and API consistency.
+        # 6. Dead-letter clears active next retry presentation.
+        fixture_set(fixture_port, "/dead-letter", [{"status": 500, "body": "permanent failure"}])
+        dead_letter = request(base_b, "POST", "/api/ingest/sources", {
+            "name": "Acceptance Dead Letter Source",
+            "source_type": "url",
+            "url": f"http://127.0.0.1:{fixture_port}/dead-letter",
+            "domain": "Business",
+            "entity": "Dead Letter Entity",
+            "poll_interval_minutes": 5,
+            "stale_after_seconds": 60,
+            "max_attempts": 2,
+        })["source"]
+        scheduler_tick(base_b)
+        worker_tick(base_b, "dead-letter-worker-a")
+        db_exec(str(db_path), "UPDATE data_plane_jobs SET next_attempt_at='2000-01-01T00:00:00+00:00' WHERE source_id=?", (dead_letter["id"],))
+        worker_tick(base_b, "dead-letter-worker-b")
+        dead_view = source_by_name(base_b, "Acceptance Dead Letter Source")
+        dead_events = db_rows(str(db_path), "SELECT status, message FROM source_health_events WHERE source_id=? ORDER BY created_at", (dead_letter["id"],))
+        proof["scenarios"].append({
+            "name": "dead_letter_clears_next_retry",
+            "source": dead_view,
+            "health_events": dead_events,
+            "ok": (
+                dead_view.get("health_status") == "dead_letter"
+                and (dead_view.get("retry_state") or {}).get("next_retry_at", "") == ""
+                and dead_view.get("health_message") == "Retries are exhausted and this source requires intervention."
+                and any(e["status"] == "dead_letter" for e in dead_events)
+            ),
+        })
+
+        # 7. Persistence and API consistency.
         db_counts = {
             "jobs": db_one(str(db_path), "SELECT COUNT(*) AS c FROM data_plane_jobs")["c"],
             "runs": db_one(str(db_path), "SELECT COUNT(*) AS c FROM ingest_runs")["c"],

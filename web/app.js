@@ -2,6 +2,11 @@ const API = "/api";
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
 const tagsFrom = s => String(s||"").split(/[#,]/).map(x=>x.trim().toLowerCase()).filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i);
+const ACTIVE_TAB_STORAGE_KEY = "info-analyzer.active-tab.v1";
+const TAB_QUERY_KEY = "tab";
+const SOURCE_QUERY_KEY = "source";
+const DEFAULT_TOP_LEVEL_TAB = "dump";
+const TOP_LEVEL_TABS = new Set(["dump","queue","command","live","asset","stock","memory","actions","patterns","changelog"]);
 let lastDraft = null;
 let lastStockIntel = null;
 let currentAssetProject = null;
@@ -356,18 +361,51 @@ function meaningfulMetricText(value){
 function kvHTML(label, value){
   return value ? `<div class="kv"><b>${esc(label)}</b><span>${esc(value)}</span></div>` : "";
 }
+function normalizeTopLevelTab(tab){
+  return TOP_LEVEL_TABS.has(tab) ? tab : DEFAULT_TOP_LEVEL_TAB;
+}
+function urlParams(){
+  return new URLSearchParams(window.location.search || "");
+}
+function readUrlTopLevelTab(){
+  const value = urlParams().get(TAB_QUERY_KEY);
+  return value ? normalizeTopLevelTab(value) : "";
+}
+function getLiveSourceFocus(){
+  return String(urlParams().get(SOURCE_QUERY_KEY) || "").trim();
+}
+function readSavedTopLevelTab(){
+  try {
+    return readUrlTopLevelTab() || normalizeTopLevelTab(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY));
+  } catch(e) {
+    return readUrlTopLevelTab() || DEFAULT_TOP_LEVEL_TAB;
+  }
+}
+function saveTopLevelTab(tab){
+  try {
+    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, normalizeTopLevelTab(tab));
+  } catch(e) {}
+  try {
+    const params = urlParams();
+    params.set(TAB_QUERY_KEY, normalizeTopLevelTab(tab));
+    const next = `${window.location.pathname}?${params.toString()}${window.location.hash || ""}`;
+    history.replaceState({}, "", next);
+  } catch(e) {}
+}
 function switchTab(tab){
-  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
-  document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active", p.id===tab));
-  if(tab==="command") loadCommand();
-  if(tab==="live") loadLiveDashboard();
-  if(tab==="asset") loadAssetLab();
-  if(tab==="queue") loadQueue();
-  if(tab==="stock") loadStockIntel();
-  if(tab==="memory") loadMemory();
-  if(tab==="actions") loadActions();
-  if(tab==="patterns") loadPatterns();
-  if(tab==="changelog") loadChangelog();
+  const nextTab = normalizeTopLevelTab(tab);
+  saveTopLevelTab(nextTab);
+  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active", b.dataset.tab===nextTab));
+  document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active", p.id===nextTab));
+  if(nextTab==="command") loadCommand();
+  if(nextTab==="live") loadLiveDashboard();
+  if(nextTab==="asset") loadAssetLab();
+  if(nextTab==="queue") loadQueue();
+  if(nextTab==="stock") loadStockIntel();
+  if(nextTab==="memory") loadMemory();
+  if(nextTab==="actions") loadActions();
+  if(nextTab==="patterns") loadPatterns();
+  if(nextTab==="changelog") loadChangelog();
 }
 
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
@@ -1399,15 +1437,16 @@ function ingestSourceHTML(source){
   const job = source.latest_job || {};
   const run = source.latest_run || {};
   const snap = source.latest_snapshot || {};
-  const health = source.latest_health_event || {};
+  const health = source.current_health || {};
   const claimHistory = source.recent_claims || [];
   const healthHistory = source.recent_health_events || [];
   const retry = source.retry_state || {};
-  const healthStatus = retry.status || source.health_status || source.last_health_status || "never_run";
-  const showRetry = healthStatus === "retrying" || healthStatus === "dead_letter" || source.last_health_status === "retrying";
+  const healthStatus = retry.status || source.health_status || source.last_health_status || health.status || "never_run";
+  const healthMessage = health.message || source.health_message || "";
+  const showRetry = healthStatus === "retrying";
   const latestSuccess = retry.latest_success_at || source.last_success_at || "";
   const freshnessAge = retry.freshness_age_seconds;
-  return `<div class="item">
+  return `<div class="item" data-source-id="${esc(source.id)}" data-source-name="${esc(source.name)}">
     <h3>${esc(source.name)}</h3>
     <div class="meta">
       <span class="tag">${esc(source.source_type)}</span>
@@ -1425,10 +1464,10 @@ function ingestSourceHTML(source){
       ${showRetry ? kvHTML("Current Attempt", `${retry.attempts || job.attempts || 0} / ${retry.max_attempts || job.max_attempts || 3}`) : ""}
       ${showRetry ? kvHTML("Last Error", retry.last_error || source.last_error || "") : ""}
       ${showRetry ? kvHTML("Last Failure", retry.last_failure_at || source.last_error_at || "") : ""}
-      ${showRetry ? kvHTML("Next Retry", retry.next_retry_at || job.next_attempt_at || "") : ""}
+      ${showRetry ? kvHTML("Next Retry", retry.next_retry_at || "") : ""}
       ${showRetry ? kvHTML("Latest Success", latestSuccess || "") : ""}
       ${showRetry ? kvHTML("Freshness Age", freshnessAge == null ? "" : fmtAgeSeconds(freshnessAge)) : ""}
-      ${kvHTML("Health", health.status ? `${health.status}: ${health.message || ""}` : "never_run: no ingest completed yet")}
+      ${kvHTML("Health", `${healthStatus}: ${healthMessage}`)}
     </div>
     <details class="item" style="margin-top:12px">
       <summary>Diagnostics</summary>
@@ -1509,6 +1548,17 @@ async function loadLiveDashboard(){
   $("liveRoutedList").innerHTML = routedSignals.length
     ? routedSignals.map(liveSignalHTML).join("")
     : `<div class="item"><h3>No routed signals yet</h3><p class="muted">Act, Watch, Update Rule, or Ignore a signal to move it here.</p></div>`;
+  const sourceFocus = getLiveSourceFocus();
+  if(sourceFocus){
+    const cards = Array.from(document.querySelectorAll("#ingestSourcesList .item"));
+    const target = cards.find(card => {
+      const name = card.dataset.sourceName || "";
+      const id = card.dataset.sourceId || "";
+      const heading = card.querySelector("h3")?.textContent?.trim() || "";
+      return [name, id, heading].includes(sourceFocus);
+    });
+    if(target) target.scrollIntoView({block:"center"});
+  }
 }
 
 async function addIngestSource(){
@@ -1668,5 +1718,8 @@ if($("loadDemoBtn")) $("loadDemoBtn").addEventListener("click", loadDemoData);
 // SHOW WELCOME ON STARTUP
 window.addEventListener("load", () => {
   showWelcome();
-  initializeApp();
+  switchTab(readSavedTopLevelTab());
+  if (typeof initializeApp === "function") {
+    initializeApp();
+  }
 });
