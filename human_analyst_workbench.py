@@ -219,48 +219,118 @@ def human_analyst_schema_init(db: sqlite3.Connection) -> None:
 
 
 def init_test_database(test_db_path: Path) -> sqlite3.Connection:
-    """Initialize a separate test database with full schema."""
+    """Initialize test database with minimal required schema only."""
     test_db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Create test database
     test_db = sqlite3.connect(str(test_db_path))
     test_db.row_factory = sqlite3.Row
-
-    # Initialize basic schema (would normally clone from active)
     cursor = test_db.cursor()
 
-    # Create all tables that exist in active database
-    tables = [
-        "entries", "raw_snapshots", "ingest_sources", "ingest_runs",
-        "ingest_items", "actions", "live_signals", "watchlists",
-        "watchlist_items", "worker_heartbeats", "scheduler_events",
-        "scheduler_leases", "worker_claims", "data_plane_jobs",
-        "pattern_runs", "decision_reviews", "decision_rules",
-        "relationships", "surfaced_cards", "audit_log", "source_health_events"
-    ]
+    # Enable integrity checks
+    cursor.execute("PRAGMA foreign_keys = ON")
+    cursor.execute("PRAGMA journal_mode = WAL")
+    cursor.execute("PRAGMA busy_timeout = 5000")
 
-    for table in tables:
-        cursor.execute(f"""
-            CREATE TABLE IF NOT EXISTS {table} (
-                id TEXT PRIMARY KEY,
-                created_at TEXT NOT NULL
-            )
-        """)
-
-    # Initialize workbench schema
-    human_analyst_schema_init(test_db)
-
-    # Create marker that this is a test database
+    # Minimum required tables only
+    # 1. sources (data sources - M1 approved schema)
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS test_mode_metadata (
-            key TEXT PRIMARY KEY,
-            value TEXT
+        CREATE TABLE IF NOT EXISTS sources (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            name TEXT NOT NULL,
+            source_type TEXT DEFAULT 'manual',
+            url TEXT,
+            metadata TEXT DEFAULT '{}'
         )
     """)
-    cursor.execute("INSERT OR REPLACE INTO test_mode_metadata VALUES (?, ?)",
-                   ("test_db", "true"))
-    cursor.execute("INSERT OR REPLACE INTO test_mode_metadata VALUES (?, ?)",
-                   ("created_at", get_utc_now()))
+
+    # 2. ingest_runs (ingestion sessions)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ingest_runs (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            job_id TEXT,
+            claim_id TEXT,
+            worker_id TEXT,
+            status TEXT DEFAULT 'running',
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            created_items INTEGER DEFAULT 0,
+            created_snapshots INTEGER DEFAULT 0,
+            skipped_items INTEGER DEFAULT 0,
+            error TEXT,
+            metadata TEXT DEFAULT '{}',
+            FOREIGN KEY(source_id) REFERENCES sources(id)
+        )
+    """)
+
+    # 3. raw_snapshots (immutable evidence)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS raw_snapshots (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            url TEXT,
+            title TEXT,
+            raw_text TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            connector_version TEXT NOT NULL,
+            published_at TEXT,
+            metadata TEXT DEFAULT '{}',
+            UNIQUE(source_id, content_hash),
+            FOREIGN KEY(run_id) REFERENCES ingest_runs(id),
+            FOREIGN KEY(source_id) REFERENCES sources(id)
+        )
+    """)
+
+    # 4. test_mode_sessions (session tracking for persistence)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS test_mode_sessions (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            enabled_at TEXT NOT NULL,
+            disabled_at TEXT,
+            test_db_path TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            description TEXT,
+            created_by TEXT
+        )
+    """)
+
+    # 5. human_reviews (workbench review queue)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS human_reviews (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            review_type TEXT NOT NULL,
+            subject_type TEXT NOT NULL,
+            subject_id TEXT NOT NULL,
+            evidence_id TEXT,
+            system_interpretation TEXT,
+            system_confidence REAL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            human_verdict TEXT,
+            human_correction TEXT,
+            human_reason TEXT,
+            human_confidence REAL,
+            verdict_at TEXT,
+            reviewed_by TEXT,
+            FOREIGN KEY (evidence_id) REFERENCES raw_snapshots(id)
+        )
+    """)
+
+    # DEFENSIVE: Drop prohibited tables if they somehow get created
+    # (This handles unidentified initialization paths that may add these)
+    prohibited_tables = ["ingest_sources", "ingest_items", "live_signals"]
+    for table in prohibited_tables:
+        try:
+            cursor.execute(f"DROP TABLE IF EXISTS {table}")
+        except sqlite3.OperationalError:
+            pass  # Table doesn't exist, which is expected
 
     test_db.commit()
     return test_db

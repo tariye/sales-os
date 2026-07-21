@@ -32,6 +32,10 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 from xml.etree import ElementTree as ET
 
+# Thread-local storage for test session context
+_thread_local = threading.local()
+_test_sessions = {}  # {session_id: {"test_db_path": ..., "created_at": ...}}
+
 from cutover_support import (
     ACTIVE_DATA_PLANE_TABLES,
     ACTIVE_DB_PATH,
@@ -1120,6 +1124,7 @@ class ClosingConnection(sqlite3.Connection):
 
 
 def connect() -> sqlite3.Connection:
+    """Connect to active database"""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, factory=ClosingConnection)
     conn.row_factory = sqlite3.Row
@@ -1127,6 +1132,101 @@ def connect() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
     return conn
+
+
+def get_test_session_from_headers(headers) -> dict | None:
+    """Extract and validate test session ID from request headers.
+
+    Validation uses persistent database state, not in-memory cache.
+    This ensures sessions survive server restart.
+    """
+    session_id = headers.get("X-Info-Analyzer-Test-Session", "").strip()
+    env = headers.get("X-Info-Analyzer-Environment", "").strip()
+
+    if not session_id or not env or env != "test":
+        return None
+
+    # First check in-memory cache (for sessions created in this process lifetime)
+    if session_id in _test_sessions:
+        return {"session_id": session_id, **_test_sessions[session_id]}
+
+    # Fall back to database-backed session validation (for persistence across restart)
+    try:
+        with connect() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, test_db_path, created_at, status FROM test_mode_sessions WHERE id = ? AND status = 'active'",
+                (session_id,)
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "session_id": row[0],
+                    "test_db_path": row[1],
+                    "created_at": row[2],
+                    "status": row[3]
+                }
+    except Exception:
+        pass
+
+    return None
+
+
+def validate_workbench_environment(headers) -> tuple[dict | None, str | None]:
+    """
+    Validate environment headers for workbench routes.
+    Returns: (test_session, error_code) or (None, None) for valid active context
+    - If X-Info-Analyzer-Environment missing or invalid: returns error_code
+    - If env="test" but no valid session: returns 403
+    - If env="test" and valid session: returns test_session
+    - If env="active": allowed for read-only routes
+    - Unknown env values: returns 400
+    """
+    env = headers.get("X-Info-Analyzer-Environment", "").strip()
+
+    # Missing environment header
+    if not env:
+        return None, "400"
+
+    # Unknown environment value
+    if env not in ("test", "active"):
+        return None, "400"
+
+    # Active context allowed
+    if env == "active":
+        return None, None
+
+    # Test context requires valid session
+    session_id = headers.get("X-Info-Analyzer-Test-Session", "").strip()
+    if not session_id:
+        return None, "403"
+
+    session = _test_sessions.get(session_id)
+    if not session:
+        return None, "403"
+
+    return {"session_id": session_id, **session}, None
+
+
+def connect_for_environment(test_session: dict | None) -> tuple[sqlite3.Connection, str]:
+    """
+    Connect to appropriate database based on test session.
+    Returns: (connection, environment_name)
+    If test_session provided and valid, returns test DB connection.
+    Otherwise returns active DB connection.
+    """
+    if test_session and "test_db_path" in test_session:
+        test_db_path = Path(test_session["test_db_path"])
+        test_db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(test_db_path), factory=ClosingConnection)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA busy_timeout = 5000")
+        return conn, "test"
+    else:
+        # Fall back to active database
+        return connect(), "active"
 
 
 def sqlite_runtime_status() -> dict:
@@ -8465,7 +8565,48 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_file(WEB_DIR / "style.css", "text/css; charset=utf-8")
             if path == "/api/health":
                 return self.send_json({"ok": True, "app": "Info Analyzer OS", "version": APP_VERSION, "db_path": str(DB_PATH), "sqlite": sqlite_runtime_status(), "data_plane": data_plane_status()})
-            # Human Analyst Workbench endpoints
+            # Human Analyst Workbench GET endpoints - MINIMAL SLICE
+            if path == "/api/workbench/reviews":
+                try:
+                    # Validate environment headers
+                    test_session, error_code = validate_workbench_environment(self.headers)
+                    if error_code:
+                        status_code = int(error_code)
+                        msg = "Missing or invalid X-Info-Analyzer-Environment header" if error_code == "400" else "Invalid or missing test session"
+                        return self.send_json({"error": msg}, status_code)
+
+                    conn, environment = connect_for_environment(test_session)
+                    with conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            SELECT id, created_at, review_type, subject_type, subject_id,
+                                   evidence_id, system_interpretation, system_confidence,
+                                   status, human_verdict, human_correction, human_confidence, human_reason, verdict_at
+                            FROM human_reviews
+                            ORDER BY created_at DESC
+                        """)
+                        reviews = []
+                        for row in cursor.fetchall():
+                            reviews.append({
+                                "review_id": row[0],
+                                "created_at": row[1],
+                                "review_type": row[2],
+                                "subject_type": row[3],
+                                "subject_id": row[4],
+                                "evidence_id": row[5],
+                                "original_value": row[6],
+                                "system_confidence": row[7],
+                                "status": row[8],
+                                "human_verdict": row[9],
+                                "corrected_value": row[10],
+                                "human_confidence": row[11],
+                                "reason": row[12],
+                                "verdict_at": row[13]
+                            })
+                    return self.send_json({"environment": environment, "reviews": reviews, "count": len(reviews)})
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+
             if path == "/api/test-mode/status":
                 try:
                     status = get_test_mode_status(connect())
@@ -8715,15 +8856,207 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.handle_v1_write("POST", path, payload)
             if path == "/api/codify":
                 return self.send_json({"draft": codify_payload(payload)})
-            # Human Analyst Workbench POST endpoints
+            # Human Analyst Workbench POST endpoints - MINIMAL SLICE
+            # Test mode management
             if path == "/api/test-mode/enable":
                 try:
                     test_db_dir = ACTIVE_DB_PATH.parent.parent / "test"
                     test_db_path = test_db_dir / "info_analyzer_test.db"
-                    with connect() as conn:
-                        session_id = enable_test_mode(conn, test_db_path)
+                    now_utc = datetime.now(timezone.utc).isoformat()
+
+                    # Register test session in thread-local storage
+                    session_id = f"TEST-{uuid.uuid4().hex[:16].upper()}"
+                    _test_sessions[session_id] = {
+                        "test_db_path": str(test_db_path),
+                        "created_at": now_utc
+                    }
+
+                    # Initialize test database with schema
                     init_test_database(test_db_path)
-                    return self.send_json({"session_id": session_id, "test_db_path": str(test_db_path)}, 201)
+
+                    # Persist session to active database for restart resilience
+                    with connect() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            INSERT INTO test_mode_sessions
+                            (id, created_at, enabled_at, test_db_path, status)
+                            VALUES (?, ?, ?, ?, ?)
+                        """, (session_id, now_utc, now_utc, str(test_db_path), "active"))
+                        conn.commit()
+
+                    return self.send_json({
+                        "environment": "test",
+                        "session_id": session_id,
+                        "test_db_path": str(test_db_path),
+                        "created_at": now_utc
+                    }, 201)
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+            # Fixture import for test data (test-only route)
+            if path == "/api/workbench/fixtures/import":
+                try:
+                    # Fixture import requires test mode explicitly
+                    env = self.headers.get("X-Info-Analyzer-Environment", "").strip()
+                    if env != "test":
+                        return self.send_json({"error": "Fixture import requires X-Info-Analyzer-Environment: test"}, 403)
+
+                    test_session = get_test_session_from_headers(self.headers)
+                    if not test_session:
+                        return self.send_json({"error": "Invalid or missing test session. Use X-Info-Analyzer-Test-Session header."}, 403)
+
+                    conn, environment = connect_for_environment(test_session)
+                    with conn:
+                        # IDs for fixture
+                        import_id = f"IMP-{uuid.uuid4().hex[:12].upper()}"
+                        evidence_id = f"SNP-{uuid.uuid4().hex[:12].upper()}"
+                        review_id = f"REV-{uuid.uuid4().hex[:12].upper()}"
+                        source_id = "fixture-test-source"
+                        run_id = f"RUN-FIXTURE-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+
+                        # Store fixture as raw evidence (immutable) using approved snapshot schema
+                        raw_text = json.dumps(payload.get("fixture_data", {}), ensure_ascii=False)
+                        content_hash = text_fingerprint(source_id, "", raw_text)
+
+                        cursor = conn.cursor()
+
+                        # Create sources entry for fixture if it doesn't exist
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO sources (id, created_at, updated_at, name, source_type, url)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        """, (
+                            source_id,
+                            datetime.now(timezone.utc).isoformat(),
+                            datetime.now(timezone.utc).isoformat(),
+                            "Test Fixture",
+                            "test",
+                            payload.get("url", "")
+                        ))
+
+                        # Create ingest_runs entry for this fixture batch
+                        now_iso = datetime.now(timezone.utc).isoformat()
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO ingest_runs
+                            (id, created_at, updated_at, source_id, status, started_at, finished_at, created_snapshots)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            run_id,
+                            now_iso,
+                            now_iso,
+                            source_id,
+                            "completed",
+                            now_iso,
+                            now_iso,
+                            1
+                        ))
+
+                        # Store fixture as immutable raw snapshot
+                        cursor.execute("""
+                            INSERT INTO raw_snapshots
+                            (id, created_at, run_id, source_id, url, title, raw_text, content_hash, connector_version, published_at, metadata)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            evidence_id,
+                            datetime.now(timezone.utc).isoformat(),
+                            run_id,
+                            source_id,
+                            payload.get("url", ""),
+                            payload.get("title", "Test Fixture"),
+                            raw_text,
+                            content_hash,
+                            "1.0",
+                            datetime.now(timezone.utc).isoformat(),
+                            json.dumps({"import_id": import_id})
+                        ))
+
+                        # Create normalization review
+                        cursor.execute("""
+                            INSERT INTO human_reviews (id, created_at, review_type, subject_type, subject_id,
+                                                     evidence_id, system_interpretation, system_confidence, status)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            review_id,
+                            datetime.now(timezone.utc).isoformat(),
+                            "normalization",
+                            "fixture",
+                            import_id,
+                            evidence_id,
+                            payload.get("proposed_value", ""),
+                            float(payload.get("confidence", 0.7)),
+                            "pending"
+                        ))
+                        conn.commit()
+
+                    return self.send_json({
+                        "import_id": import_id,
+                        "evidence_id": evidence_id,
+                        "review_id": review_id
+                    }, 201)
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+            # Human verdict recording (test-only route)
+            if path.startswith("/api/workbench/reviews/") and path.endswith("/verdict"):
+                review_id = path.split("/api/workbench/reviews/")[1].rsplit("/verdict")[0]
+                try:
+                    # Verdict requires test mode explicitly
+                    env = self.headers.get("X-Info-Analyzer-Environment", "").strip()
+                    if env != "test":
+                        return self.send_json({"error": "Verdict submission requires X-Info-Analyzer-Environment: test"}, 403)
+
+                    test_session = get_test_session_from_headers(self.headers)
+                    if not test_session:
+                        return self.send_json({"error": "Invalid or missing test session. Use X-Info-Analyzer-Test-Session header."}, 403)
+
+                    verdict = payload.get("verdict")
+                    if not verdict or verdict not in ("confirm", "correct", "reject", "needs_more_evidence"):
+                        return self.send_json({"error": "Invalid verdict. Must be: confirm, correct, reject, or needs_more_evidence"}, 400)
+
+                    corrected_value = payload.get("corrected_value")
+                    if verdict == "correct" and not corrected_value:
+                        return self.send_json({"error": "verdict 'correct' requires corrected_value"}, 400)
+
+                    reason = payload.get("reason", "")
+                    human_confidence = float(payload.get("human_confidence", 0.9))
+
+                    if human_confidence < 0 or human_confidence > 1:
+                        return self.send_json({"error": "human_confidence must be between 0 and 1"}, 400)
+
+                    conn, environment = connect_for_environment(test_session)
+                    with conn:
+                        cursor = conn.cursor()
+                        # Check if review exists
+                        cursor.execute("SELECT id, status FROM human_reviews WHERE id=?", (review_id,))
+                        review = cursor.fetchone()
+                        if not review:
+                            return self.send_json({"error": f"Review not found: {review_id}"}, 404)
+
+                        if review[1] == "completed":
+                            return self.send_json({"error": f"Review already completed: {review_id}"}, 400)
+
+                        # Record verdict
+                        cursor.execute("""
+                            UPDATE human_reviews
+                            SET status=?, human_verdict=?, human_correction=?, human_reason=?,
+                                human_confidence=?, verdict_at=?, reviewed_by=?
+                            WHERE id=?
+                        """, (
+                            "completed",
+                            verdict,
+                            corrected_value,
+                            reason,
+                            human_confidence,
+                            datetime.now(timezone.utc).isoformat(),
+                            payload.get("reviewed_by", "analyst"),
+                            review_id
+                        ))
+                        conn.commit()
+
+                    return self.send_json({
+                        "review_id": review_id,
+                        "verdict": verdict,
+                        "status": "completed"
+                    }, 201)
+                except ValueError as e:
+                    return self.send_json({"error": f"Invalid value: {str(e)}"}, 400)
                 except Exception as e:
                     return self.send_json({"error": str(e)}, 500)
             if path == "/api/human-review/create":
