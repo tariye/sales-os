@@ -45,6 +45,27 @@ from cutover_support import (
 )
 
 try:
+    from human_analyst_workbench import (
+        human_analyst_schema_init,
+        init_test_database,
+        enable_test_mode,
+        get_test_mode_status,
+        create_human_review,
+        record_human_verdict,
+        create_hypothesis,
+        propose_action,
+        approve_action,
+        record_outcome,
+        get_pending_reviews,
+        get_testing_hypotheses,
+        get_pending_approvals,
+        get_outcome_pending_actions,
+    )
+except Exception:
+    # Workbench features not available
+    pass
+
+try:
     import anthropic as _anthropic
 except Exception:
     _anthropic = None  # type: ignore
@@ -1936,6 +1957,11 @@ def init_db() -> None:
         conn.execute("UPDATE data_plane_jobs SET claim_expires_at=COALESCE(NULLIF(claim_expires_at, ''), next_attempt_at) WHERE status='retry' AND COALESCE(next_attempt_at, '')<>''")
         conn.execute("UPDATE data_plane_jobs SET recovery_count=COALESCE(recovery_count, 0)")
         conn.execute("PRAGMA user_version = 1")
+        # Initialize human analyst workbench schema
+        try:
+            human_analyst_schema_init(conn)
+        except Exception:
+            pass  # Workbench not available
         conn.commit()
 
 
@@ -5235,6 +5261,20 @@ def active_overview() -> dict:
             for source in sources
             if source.get("health_status") in {"retrying", "stale", "failed", "dead_letter"}
         ]
+        # Workbench status
+        workbench_stats = {
+            "pending_reviews": 0,
+            "testing_hypotheses": 0,
+            "pending_approvals": 0,
+            "pending_outcomes": 0,
+        }
+        try:
+            workbench_stats["pending_reviews"] = conn.execute("SELECT COUNT(*) FROM human_reviews WHERE status='pending'").fetchone()[0]
+            workbench_stats["testing_hypotheses"] = conn.execute("SELECT COUNT(*) FROM hypothesis_drafts WHERE status IN ('testing', 'supported', 'rejected')").fetchone()[0]
+            workbench_stats["pending_approvals"] = conn.execute("SELECT COUNT(*) FROM approved_actions WHERE approval_state='draft'").fetchone()[0]
+            workbench_stats["pending_outcomes"] = conn.execute("SELECT COUNT(*) FROM approved_actions WHERE approval_state='approved'").fetchone()[0]
+        except Exception:
+            pass  # Workbench tables may not exist yet
     return {
         "runtime_health": sqlite_runtime_status(),
         "application_version": APP_VERSION,
@@ -5264,6 +5304,7 @@ def active_overview() -> dict:
             {"key": "merchant_decisions", "message": "No merchant decisions available"},
             {"key": "outcome_history", "message": "No outcome history available"},
         ],
+        "workbench": workbench_stats,
         "sources": sources,
     }
 
@@ -8424,6 +8465,41 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_file(WEB_DIR / "style.css", "text/css; charset=utf-8")
             if path == "/api/health":
                 return self.send_json({"ok": True, "app": "Info Analyzer OS", "version": APP_VERSION, "db_path": str(DB_PATH), "sqlite": sqlite_runtime_status(), "data_plane": data_plane_status()})
+            # Human Analyst Workbench endpoints
+            if path == "/api/test-mode/status":
+                try:
+                    status = get_test_mode_status(connect())
+                    return self.send_json(status)
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+            if path == "/api/human-review/pending":
+                try:
+                    with connect() as conn:
+                        reviews = get_pending_reviews(conn)
+                    return self.send_json({"reviews": reviews, "count": len(reviews)})
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+            if path == "/api/hypotheses/testing":
+                try:
+                    with connect() as conn:
+                        hypotheses = get_testing_hypotheses(conn)
+                    return self.send_json({"hypotheses": hypotheses, "count": len(hypotheses)})
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+            if path == "/api/actions/pending-approval":
+                try:
+                    with connect() as conn:
+                        actions = get_pending_approvals(conn)
+                    return self.send_json({"actions": actions, "count": len(actions)})
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+            if path == "/api/actions/pending-outcome":
+                try:
+                    with connect() as conn:
+                        actions = get_outcome_pending_actions(conn)
+                    return self.send_json({"actions": actions, "count": len(actions)})
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
             if path == "/api/overview":
                 return self.send_json(active_overview())
             if path == "/api/build-info":
@@ -8639,6 +8715,106 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.handle_v1_write("POST", path, payload)
             if path == "/api/codify":
                 return self.send_json({"draft": codify_payload(payload)})
+            # Human Analyst Workbench POST endpoints
+            if path == "/api/test-mode/enable":
+                try:
+                    test_db_dir = ACTIVE_DB_PATH.parent.parent / "test"
+                    test_db_path = test_db_dir / "info_analyzer_test.db"
+                    with connect() as conn:
+                        session_id = enable_test_mode(conn, test_db_path)
+                    init_test_database(test_db_path)
+                    return self.send_json({"session_id": session_id, "test_db_path": str(test_db_path)}, 201)
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+            if path == "/api/human-review/create":
+                try:
+                    with connect() as conn:
+                        review_id = create_human_review(
+                            conn,
+                            review_type=payload.get("review_type") or "normalization",
+                            subject_type=payload.get("subject_type") or "snapshot",
+                            subject_id=payload.get("subject_id") or "",
+                            system_interpretation=payload.get("system_interpretation") or "",
+                            system_confidence=float(payload.get("system_confidence", 0.5)),
+                            evidence_id=payload.get("evidence_id")
+                        )
+                    return self.send_json({"review_id": review_id}, 201)
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+            if path.startswith("/api/human-review/") and path.endswith("/verdict"):
+                review_id = path.split("/api/human-review/")[1].rsplit("/verdict")[0]
+                try:
+                    with connect() as conn:
+                        success = record_human_verdict(
+                            conn,
+                            review_id,
+                            verdict=payload.get("verdict") or "confirm",
+                            correction=payload.get("correction"),
+                            reason=payload.get("reason"),
+                            confidence=float(payload.get("confidence", 0.9)),
+                            reviewed_by=payload.get("reviewed_by", "analyst")
+                        )
+                    return self.send_json({"recorded": success}, 201 if success else 400)
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+            if path == "/api/hypotheses/create":
+                try:
+                    with connect() as conn:
+                        hyp_id = create_hypothesis(
+                            conn,
+                            statement=payload.get("statement") or "",
+                            test_method=payload.get("test_method") or "",
+                            expected_result=payload.get("expected_result") or "",
+                            deadline=payload.get("deadline") or "",
+                            supporting_evidence=payload.get("supporting_evidence"),
+                            created_by=payload.get("created_by", "analyst")
+                        )
+                    return self.send_json({"hypothesis_id": hyp_id}, 201)
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+            if path == "/api/actions/propose":
+                try:
+                    with connect() as conn:
+                        action_id = propose_action(
+                            conn,
+                            action=payload.get("proposed_action") or "",
+                            rationale=payload.get("rationale") or "",
+                            expected_result=payload.get("expected_result") or "",
+                            success_condition=payload.get("success_condition") or "",
+                            hypothesis_id=payload.get("hypothesis_id"),
+                            drafted_by=payload.get("drafted_by", "analyst")
+                        )
+                    return self.send_json({"action_id": action_id}, 201)
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+            if path.startswith("/api/actions/") and path.endswith("/approve"):
+                action_id = path.split("/api/actions/")[1].rsplit("/approve")[0]
+                try:
+                    with connect() as conn:
+                        success = approve_action(
+                            conn,
+                            action_id,
+                            approved_by=payload.get("approved_by", "analyst"),
+                            reason=payload.get("reason")
+                        )
+                    return self.send_json({"approved": success}, 201 if success else 400)
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+            if path.startswith("/api/actions/") and path.endswith("/outcome"):
+                action_id = path.split("/api/actions/")[1].rsplit("/outcome")[0]
+                try:
+                    with connect() as conn:
+                        outcome_id = record_outcome(
+                            conn,
+                            action_id,
+                            actual_result=payload.get("actual_result") or "",
+                            success_status=payload.get("success_status") or "unknown",
+                            lesson=payload.get("lesson"),
+                            recorded_by=payload.get("recorded_by", "analyst")
+                        )
+                    return self.send_json({"outcome_id": outcome_id}, 201)
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
             if path == "/api/translate/ai":
                 draft = ai_translate(payload)
                 return self.send_json({"draft": draft, "ai_used": draft.get("ai_used", False)})
