@@ -191,14 +191,15 @@ def main() -> int:
         })
 
         # Phase 3: Import fixture into test DB
+        unique_id = uuid.uuid4().hex[:8]
         fixture_payload = {
             "fixture_data": {
-                "entity": "Test Entity",
-                "claim": "Test claim"
+                "entity": f"Test Entity {unique_id}",
+                "claim": f"Test claim {unique_id}"
             },
-            "url": "https://example.com/evidence",
-            "title": "Test Evidence",
-            "proposed_value": "normalized test value",
+            "url": f"https://example.com/evidence/{unique_id}",
+            "title": f"Test Evidence {unique_id}",
+            "proposed_value": f"normalized test value {unique_id}",
             "confidence": 0.75
         }
         import_resp = request(
