@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -39,6 +40,15 @@ def wait_for(predicate, timeout: float, label: str, interval: float = 0.2):
             last = repr(exc)
         time.sleep(interval)
     raise AssertionError(f"timed out waiting for {label}; last={last!r}")
+
+
+def wait_until_iso_at_or_before_now(value: str, timeout: float, label: str):
+    target = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return wait_for(
+        lambda: datetime.now(timezone.utc) >= target,
+        timeout,
+        label,
+    )
 
 
 def db_rows(db_path: str, sql: str, args=()):
@@ -369,6 +379,11 @@ def main() -> int:
         server_a = start_server(repo_dir, env, args.port_a, log_a)
         wait_for(lambda: request(base_a, "GET", "/api/health").get("ok"), 20, "server A restart health")
         retry_source_after_restart = source_by_name(base_a, "Acceptance Retry Source")
+        wait_until_iso_at_or_before_now(
+            (retry_source_after_restart.get("retry_state") or {}).get("next_retry_at") or retry_job.get("next_attempt_at") or "",
+            10,
+            "retry next attempt to become due",
+        )
         recovered_retry = worker_tick(base_b, "retry-worker-b")
         retry_job_final = db_one(str(db_path), "SELECT * FROM data_plane_jobs WHERE source_id=?", (retry_source["id"],))
         retry_source_final = source_by_name(base_b, "Acceptance Retry Source")
