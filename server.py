@@ -128,6 +128,7 @@ DB_PATH_RAW = os.environ.get("INFO_ANALYZER_DB_PATH", "").strip()
 DB_PATH = Path(DB_PATH_RAW).expanduser() if DB_PATH_RAW else ACTIVE_DB_PATH
 if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
+TEST_DB_PATH_RAW = os.environ.get("INFO_ANALYZER_TEST_DB_PATH", "").strip()
 
 APP_VERSION = "v0.88-data-plane-milestone-1-rebuild"
 SCHEMA_VERSION = 1
@@ -1134,49 +1135,103 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
-def get_test_session_from_headers(headers) -> dict | None:
-    """Extract and validate test session ID from request headers.
+def resolve_test_db_path() -> Path:
+    """Resolve the configured Test Mode database path.
 
-    Validation uses persistent database state, not in-memory cache.
-    This ensures sessions survive server restart.
+    Explicit evaluator/runtime configuration wins. The App Support test DB
+    remains the default for ordinary local use.
+    """
+    if TEST_DB_PATH_RAW:
+        path = Path(TEST_DB_PATH_RAW).expanduser()
+    else:
+        path = ACTIVE_DB_PATH.parent.parent / "test" / "info_analyzer_test.db"
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return path
+
+
+def test_db_identifier(path: Path) -> str:
+    return hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:16]
+
+
+def open_existing_test_db(path: Path) -> sqlite3.Connection:
+    """Open an existing test DB without creating a replacement."""
+    if not path.exists():
+        raise FileNotFoundError(path)
+    uri = f"file:{path}?mode=rw"
+    conn = sqlite3.connect(uri, uri=True, factory=ClosingConnection)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
+    return conn
+
+
+def validate_test_session_from_headers(headers) -> tuple[dict | None, tuple[int, str] | None]:
+    """Extract and validate Test Mode session headers against the resolved test DB.
+
+    The resolved test DB is authoritative. The in-memory cache is only a
+    performance detail after DB validation, never a requirement.
     """
     session_id = headers.get("X-Info-Analyzer-Test-Session", "").strip()
     env = headers.get("X-Info-Analyzer-Environment", "").strip()
 
-    if not session_id or not env or env != "test":
-        return None
+    if not env or env != "test":
+        return None, (403, "Test session requires X-Info-Analyzer-Environment: test")
+    if not session_id:
+        return None, (403, "Invalid or missing test session")
 
-    # First check in-memory cache (for sessions created in this process lifetime)
-    if session_id in _test_sessions:
-        return {"session_id": session_id, **_test_sessions[session_id]}
+    resolved_path = resolve_test_db_path()
+    if not resolved_path.exists():
+        return None, (403, f"Configured test database does not exist: {resolved_path}")
 
-    # Fall back to database-backed session validation (for persistence across restart)
     try:
-        with connect() as conn:
+        with open_existing_test_db(resolved_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, test_db_path, created_at, status FROM test_mode_sessions WHERE id = ? AND status = 'active'",
+                """
+                SELECT id, test_db_path, created_at, status, disabled_at
+                FROM test_mode_sessions
+                WHERE id = ?
+                """,
                 (session_id,)
             )
             row = cursor.fetchone()
-            if row:
-                return {
-                    "session_id": row[0],
-                    "test_db_path": row[1],
-                    "created_at": row[2],
-                    "status": row[3]
-                }
-    except Exception:
-        pass
+    except sqlite3.Error as exc:
+        return None, (403, f"Could not validate test session: {exc}")
 
-    return None
+    if not row:
+        return None, (403, "Invalid or missing test session")
+
+    row_path = Path(row["test_db_path"]).expanduser()
+    if not row_path.is_absolute():
+        row_path = BASE_DIR / row_path
+    if str(row_path) != str(resolved_path):
+        return None, (403, "Test session does not belong to the configured test database")
+    if row["status"] != "active" or row["disabled_at"]:
+        return None, (403, "Test session is disabled or inactive")
+
+    session = {
+        "session_id": row["id"],
+        "test_db_path": str(resolved_path),
+        "test_db_id": test_db_identifier(resolved_path),
+        "created_at": row["created_at"],
+        "status": row["status"],
+    }
+    _test_sessions[session_id] = session
+    return session, None
 
 
-def validate_workbench_environment(headers) -> tuple[dict | None, str | None]:
+def get_test_session_from_headers(headers) -> dict | None:
+    session, _error = validate_test_session_from_headers(headers)
+    return session
+
+
+def validate_workbench_environment(headers) -> tuple[dict | None, tuple[int, str] | None]:
     """
     Validate environment headers for workbench routes.
     Returns: (test_session, error_code) or (None, None) for valid active context
-    - If X-Info-Analyzer-Environment missing or invalid: returns error_code
+    - If X-Info-Analyzer-Environment missing or invalid: returns error tuple
     - If env="test" but no valid session: returns 403
     - If env="test" and valid session: returns test_session
     - If env="active": allowed for read-only routes
@@ -1186,26 +1241,17 @@ def validate_workbench_environment(headers) -> tuple[dict | None, str | None]:
 
     # Missing environment header
     if not env:
-        return None, "400"
+        return None, (400, "Missing or invalid X-Info-Analyzer-Environment header")
 
     # Unknown environment value
     if env not in ("test", "active"):
-        return None, "400"
+        return None, (400, "Missing or invalid X-Info-Analyzer-Environment header")
 
     # Active context allowed
     if env == "active":
         return None, None
 
-    # Test context requires valid session
-    session_id = headers.get("X-Info-Analyzer-Test-Session", "").strip()
-    if not session_id:
-        return None, "403"
-
-    session = _test_sessions.get(session_id)
-    if not session:
-        return None, "403"
-
-    return {"session_id": session_id, **session}, None
+    return validate_test_session_from_headers(headers)
 
 
 def connect_for_environment(test_session: dict | None) -> tuple[sqlite3.Connection, str]:
@@ -1217,13 +1263,7 @@ def connect_for_environment(test_session: dict | None) -> tuple[sqlite3.Connecti
     """
     if test_session and "test_db_path" in test_session:
         test_db_path = Path(test_session["test_db_path"])
-        test_db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(test_db_path), factory=ClosingConnection)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA busy_timeout = 5000")
-        return conn, "test"
+        return open_existing_test_db(test_db_path), "test"
     else:
         # Fall back to active database
         return connect(), "active"
@@ -8571,8 +8611,7 @@ class Handler(SimpleHTTPRequestHandler):
                     # Validate environment headers
                     test_session, error_code = validate_workbench_environment(self.headers)
                     if error_code:
-                        status_code = int(error_code)
-                        msg = "Missing or invalid X-Info-Analyzer-Environment header" if error_code == "400" else "Invalid or missing test session"
+                        status_code, msg = error_code
                         return self.send_json({"error": msg}, status_code)
 
                     conn, environment = connect_for_environment(test_session)
@@ -8603,13 +8642,42 @@ class Handler(SimpleHTTPRequestHandler):
                                 "reason": row[12],
                                 "verdict_at": row[13]
                             })
-                    return self.send_json({"environment": environment, "reviews": reviews, "count": len(reviews)})
+                    response = {"environment": environment, "reviews": reviews, "count": len(reviews)}
+                    if test_session:
+                        response["test_db_id"] = test_session.get("test_db_id", "")
+                    return self.send_json(response)
                 except Exception as e:
                     return self.send_json({"error": str(e)}, 500)
 
             if path == "/api/test-mode/status":
                 try:
-                    status = get_test_mode_status(connect())
+                    test_db_path = resolve_test_db_path()
+                    status = {
+                        "active": False,
+                        "session_id": None,
+                        "test_db_path": str(test_db_path),
+                        "test_db_id": test_db_identifier(test_db_path),
+                        "configured": bool(TEST_DB_PATH_RAW),
+                        "mode": "production",
+                    }
+                    if test_db_path.exists():
+                        with open_existing_test_db(test_db_path) as conn:
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                SELECT id, enabled_at, status, test_db_path
+                                FROM test_mode_sessions
+                                WHERE status = 'active' AND disabled_at IS NULL AND test_db_path = ?
+                                ORDER BY enabled_at DESC
+                                LIMIT 1
+                            """, (str(test_db_path),))
+                            row = cursor.fetchone()
+                            if row:
+                                status.update({
+                                    "active": True,
+                                    "session_id": row["id"],
+                                    "enabled_at": row["enabled_at"],
+                                    "mode": "test",
+                                })
                     return self.send_json(status)
                 except Exception as e:
                     return self.send_json({"error": str(e)}, 500)
@@ -8860,22 +8928,14 @@ class Handler(SimpleHTTPRequestHandler):
             # Test mode management
             if path == "/api/test-mode/enable":
                 try:
-                    test_db_dir = ACTIVE_DB_PATH.parent.parent / "test"
-                    test_db_path = test_db_dir / "info_analyzer_test.db"
+                    test_db_path = resolve_test_db_path()
                     now_utc = datetime.now(timezone.utc).isoformat()
 
-                    # Register test session in thread-local storage
+                    # Initialize test database with schema at the resolved path.
+                    test_conn = init_test_database(test_db_path)
+
                     session_id = f"TEST-{uuid.uuid4().hex[:16].upper()}"
-                    _test_sessions[session_id] = {
-                        "test_db_path": str(test_db_path),
-                        "created_at": now_utc
-                    }
-
-                    # Initialize test database with schema
-                    init_test_database(test_db_path)
-
-                    # Persist session to active database for restart resilience
-                    with connect() as conn:
+                    with test_conn as conn:
                         cursor = conn.cursor()
                         cursor.execute("""
                             INSERT INTO test_mode_sessions
@@ -8884,12 +8944,55 @@ class Handler(SimpleHTTPRequestHandler):
                         """, (session_id, now_utc, now_utc, str(test_db_path), "active"))
                         conn.commit()
 
+                    _test_sessions[session_id] = {
+                        "session_id": session_id,
+                        "test_db_path": str(test_db_path),
+                        "test_db_id": test_db_identifier(test_db_path),
+                        "created_at": now_utc,
+                        "status": "active",
+                    }
+
                     return self.send_json({
                         "environment": "test",
                         "session_id": session_id,
                         "test_db_path": str(test_db_path),
+                        "test_db_id": test_db_identifier(test_db_path),
                         "created_at": now_utc
                     }, 201)
+                except Exception as e:
+                    return self.send_json({"error": str(e)}, 500)
+            if path == "/api/test-mode/disable":
+                try:
+                    test_session, error = validate_test_session_from_headers(self.headers)
+                    if error:
+                        status_code, msg = error
+                        return self.send_json({"error": msg}, status_code)
+                    now_utc = datetime.now(timezone.utc).isoformat()
+                    conn, environment = connect_for_environment(test_session)
+                    with conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            UPDATE test_mode_sessions
+                            SET status = ?, disabled_at = ?
+                            WHERE id = ? AND test_db_path = ? AND status = 'active'
+                        """, (
+                            "disabled",
+                            now_utc,
+                            test_session["session_id"],
+                            test_session["test_db_path"],
+                        ))
+                        changed = cursor.rowcount
+                        conn.commit()
+                    _test_sessions.pop(test_session["session_id"], None)
+                    if not changed:
+                        return self.send_json({"error": "Test session not active"}, 404)
+                    return self.send_json({
+                        "environment": environment,
+                        "session_id": test_session["session_id"],
+                        "test_db_id": test_session.get("test_db_id", ""),
+                        "status": "disabled",
+                        "disabled_at": now_utc,
+                    })
                 except Exception as e:
                     return self.send_json({"error": str(e)}, 500)
             # Fixture import for test data (test-only route)
@@ -8900,9 +9003,10 @@ class Handler(SimpleHTTPRequestHandler):
                     if env != "test":
                         return self.send_json({"error": "Fixture import requires X-Info-Analyzer-Environment: test"}, 403)
 
-                    test_session = get_test_session_from_headers(self.headers)
-                    if not test_session:
-                        return self.send_json({"error": "Invalid or missing test session. Use X-Info-Analyzer-Test-Session header."}, 403)
+                    test_session, error = validate_test_session_from_headers(self.headers)
+                    if error:
+                        status_code, msg = error
+                        return self.send_json({"error": msg}, status_code)
 
                     conn, environment = connect_for_environment(test_session)
                     with conn:
@@ -8989,7 +9093,9 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.send_json({
                         "import_id": import_id,
                         "evidence_id": evidence_id,
-                        "review_id": review_id
+                        "review_id": review_id,
+                        "environment": environment,
+                        "test_db_id": test_session.get("test_db_id", "")
                     }, 201)
                 except Exception as e:
                     return self.send_json({"error": str(e)}, 500)
@@ -9002,9 +9108,10 @@ class Handler(SimpleHTTPRequestHandler):
                     if env != "test":
                         return self.send_json({"error": "Verdict submission requires X-Info-Analyzer-Environment: test"}, 403)
 
-                    test_session = get_test_session_from_headers(self.headers)
-                    if not test_session:
-                        return self.send_json({"error": "Invalid or missing test session. Use X-Info-Analyzer-Test-Session header."}, 403)
+                    test_session, error = validate_test_session_from_headers(self.headers)
+                    if error:
+                        status_code, msg = error
+                        return self.send_json({"error": msg}, status_code)
 
                     verdict = payload.get("verdict")
                     if not verdict or verdict not in ("confirm", "correct", "reject", "needs_more_evidence"):
@@ -9053,7 +9160,9 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.send_json({
                         "review_id": review_id,
                         "verdict": verdict,
-                        "status": "completed"
+                        "status": "completed",
+                        "environment": environment,
+                        "test_db_id": test_session.get("test_db_id", "")
                     }, 201)
                 except ValueError as e:
                     return self.send_json({"error": f"Invalid value: {str(e)}"}, 400)
