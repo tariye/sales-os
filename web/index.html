@@ -20,6 +20,7 @@
 
   <nav class="tabs" aria-label="Primary">
     <button class="tab active" data-view="overview">Overview</button>
+    <button class="tab" data-view="human-review">Human Review</button>
     <button class="tab" data-view="sources">Sources</button>
     <button class="tab" data-view="evidence">Evidence</button>
     <button class="tab" data-view="system-health">System Health</button>
@@ -55,6 +56,47 @@
       <div class="card">
         <div class="card-head"><div><p class="eyebrow">Latest Failure</p><h2>Diagnostics</h2></div></div>
         <div id="overviewLatestFailure" class="list"></div>
+      </div>
+    </section>
+
+    <section id="human-review" class="panel">
+      <div id="testModeBanner" class="banner banner-info">
+        <div class="banner-content">
+          <p><strong>Test Mode:</strong> <span id="testModeStatus">Disabled</span></p>
+          <p id="testModeDbPath" class="muted"></p>
+        </div>
+        <div class="banner-actions">
+          <button id="testModeToggle" class="ghost small">Enable Test Mode</button>
+        </div>
+      </div>
+
+      <div id="reviewContainer" class="review-container" style="display:none;">
+        <div class="card">
+          <div class="card-head">
+            <div><p class="eyebrow">Test Reviews</p><h2>Human Review Queue</h2></div>
+            <button id="importFixtureBtn" class="primary small">Import Fixture</button>
+          </div>
+          <div class="grid two">
+            <div>
+              <div class="card">
+                <div class="card-head"><div><p class="eyebrow">Pending</p><h2>Reviews</h2></div></div>
+                <div id="pendingReviewsList" class="list"></div>
+              </div>
+            </div>
+            <div id="reviewDetailContainer" style="display:none;">
+              <div class="card">
+                <div class="card-head"><div><p class="eyebrow">Review</p><h2>Details</h2></div></div>
+                <div id="reviewDetail" class="review-detail"></div>
+              </div>
+            </div>
+            <div id="historyContainer" style="display:none;">
+              <div class="card">
+                <div class="card-head"><div><p class="eyebrow">Saved</p><h2>History</h2></div></div>
+                <div id="historyList" class="list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
