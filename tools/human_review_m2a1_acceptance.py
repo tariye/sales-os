@@ -192,13 +192,14 @@ def main() -> int:
 
         # Phase 3: Import fixture into test DB
         fixture_payload = {
-            "fixture_type": "review_evidence",
-            "payload": {
-                "url": "https://example.com/evidence",
-                "title": "Test Evidence",
-                "raw_text": "This is test evidence for isolation verification",
-                "content_hash": "test-hash-12345",
-            }
+            "fixture_data": {
+                "entity": "Test Entity",
+                "claim": "Test claim"
+            },
+            "url": "https://example.com/evidence",
+            "title": "Test Evidence",
+            "proposed_value": "normalized test value",
+            "confidence": 0.75
         }
         import_resp = request(
             base_url,
