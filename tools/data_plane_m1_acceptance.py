@@ -214,10 +214,11 @@ def main() -> int:
     env = server_env(str(db_path), args.api_key)
     log_a = db_path.parent / "server-a.log"
     log_b = db_path.parent / "server-b.log"
-    server_a = start_server(repo_dir, env, args.port_a, log_a)
-    server_b = start_server(repo_dir, env, args.port_b, log_b)
     base_a = f"http://127.0.0.1:{args.port_a}"
     base_b = f"http://127.0.0.1:{args.port_b}"
+
+    server_a = None
+    server_b = None
 
     proof = {
         "build": {},
@@ -225,8 +226,20 @@ def main() -> int:
     }
 
     try:
+        # Serialize startup to avoid SQLite WAL initialization race on fresh database
+        server_a = start_server(repo_dir, env, args.port_a, log_a)
         health_a = wait_for(lambda: request(base_a, "GET", "/api/health"), 20, "server A health")
+        db_path_a = health_a.get("db_path")
+        if db_path_a != str(db_path):
+            raise AssertionError(f"server A db_path mismatch: {db_path_a} != {str(db_path)}")
+
+        server_b = start_server(repo_dir, env, args.port_b, log_b)
         health_b = wait_for(lambda: request(base_b, "GET", "/api/health"), 20, "server B health")
+        db_path_b = health_b.get("db_path")
+        if db_path_b != str(db_path):
+            raise AssertionError(f"server B db_path mismatch: {db_path_b} != {str(db_path)}")
+        if db_path_b != db_path_a:
+            raise AssertionError(f"server A and B db_path mismatch: {db_path_a} != {db_path_b}")
         proof["build"] = {
             "version": health_a.get("version"),
             "db_path": health_a.get("db_path"),
@@ -463,8 +476,10 @@ def main() -> int:
         return 0 if proof["ok"] else 1
     finally:
         fixture_server.shutdown()
-        stop_server(server_a)
-        stop_server(server_b)
+        if server_a is not None:
+            stop_server(server_a)
+        if server_b is not None:
+            stop_server(server_b)
 
 
 if __name__ == "__main__":
