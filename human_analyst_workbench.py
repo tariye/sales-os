@@ -323,15 +323,6 @@ def init_test_database(test_db_path: Path) -> sqlite3.Connection:
         )
     """)
 
-    # DEFENSIVE: Drop prohibited tables if they somehow get created
-    # (This handles unidentified initialization paths that may add these)
-    prohibited_tables = ["ingest_sources", "ingest_items", "live_signals"]
-    for table in prohibited_tables:
-        try:
-            cursor.execute(f"DROP TABLE IF EXISTS {table}")
-        except sqlite3.OperationalError:
-            pass  # Table doesn't exist, which is expected
-
     test_db.commit()
     return test_db
 
