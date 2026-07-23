@@ -450,16 +450,21 @@ def main() -> int:
             timeout=5)
         validation_results.append(("invalid_verdict", "error" in resp10))
 
-        # Test 11: Valid verdicts still work
+        # Test 11: Valid verdicts still work (use unique timestamp to ensure no duplicates)
+        import time as time_mod
+        unique_ts = str(int(time_mod.time() * 1000000))
         import_valid = request(base_url, "POST", "/api/workbench/fixtures/import",
-            {"fixture_data": {"e": "VALID"}, "url": "https://example.com/valid", "title": "VALID", "proposed_value": "VALID", "confidence": 0.75},
+            {"fixture_data": {"e": f"VALID_{unique_ts}"}, "url": f"https://example.com/valid_{unique_ts}", "title": f"VALID_{unique_ts}", "proposed_value": f"VALID_{unique_ts}", "confidence": 0.75},
             {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id})
         rid_valid = import_valid.get("review_id")
-        resp_valid_c = request(base_url, "POST", f"/api/workbench/reviews/{rid_valid}/verdict",
-            {"verdict": "confirm", "human_confidence": 0.9},
-            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id},
-            timeout=5)
-        validation_results.append(("valid_confirm", "status" in resp_valid_c and resp_valid_c.get("status") == "completed"))
+        if rid_valid:
+            resp_valid_c = request(base_url, "POST", f"/api/workbench/reviews/{rid_valid}/verdict",
+                {"verdict": "confirm", "human_confidence": 0.9},
+                {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id},
+                timeout=5)
+            validation_results.append(("valid_confirm", "status" in resp_valid_c and resp_valid_c.get("status") == "completed"))
+        else:
+            validation_results.append(("valid_confirm", False))
 
         proof["phases"].append({
             "name": "verdict_integrity_validation",
