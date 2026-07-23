@@ -19,7 +19,16 @@ __pycache__/
 .env.*
 .venv/
 venv/
+.venv-e2e/
 
 *.log
 data/
 backups/
+
+# Browser/e2e generated artifacts
+test-results/
+playwright-report/
+e2e-results/
+*.trace.zip
+*.webm
+*.png
