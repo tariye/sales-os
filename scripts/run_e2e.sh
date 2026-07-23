@@ -50,15 +50,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-(
-  cd "$ROOT"
-  INFO_ANALYZER_DB_PATH="$ACTIVE_DB" \
-  INFO_ANALYZER_TEST_DB_PATH="$TEST_DB" \
-  INFO_ANALYZER_API_KEY="$API_KEY" \
-  INFO_ANALYZER_DISABLE_DATA_PLANE_THREADS=1 \
-    "$PY" server.py --host 127.0.0.1 --port "$PORT"
-) >"$SERVER_LOG" 2>&1 &
+pushd "$ROOT" >/dev/null
+INFO_ANALYZER_DB_PATH="$ACTIVE_DB" \
+INFO_ANALYZER_TEST_DB_PATH="$TEST_DB" \
+INFO_ANALYZER_API_KEY="$API_KEY" \
+INFO_ANALYZER_DISABLE_DATA_PLANE_THREADS=1 \
+  "$PY" server.py --host 127.0.0.1 --port "$PORT" >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
+popd >/dev/null
 
 "$PY" - "$BASE_URL" "$EXPECTED_SHA" "$ACTIVE_DB" "$TEST_DB" <<'PY'
 import json

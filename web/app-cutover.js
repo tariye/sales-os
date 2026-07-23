@@ -12,6 +12,7 @@ const VIEW_QUERY_KEY = "view";
 const DEFAULT_VIEW = "overview";
 const VIEWS = new Set([
   "overview",
+  "human-review",
   "sources",
   "evidence",
   "system-health",
@@ -55,6 +56,15 @@ function toast(msg) {
   el.classList.remove("hidden");
   clearTimeout(window.__toastTimer);
   window.__toastTimer = setTimeout(() => el.classList.add("hidden"), 2400);
+}
+
+function nextPaint() {
+  return new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+}
+
+async function visibleFeedbackDelay() {
+  await nextPaint();
+  await new Promise(resolve => setTimeout(resolve, 120));
 }
 
 function fmtDate(value) {
@@ -124,6 +134,7 @@ function setActiveView(view) {
   document.querySelectorAll(".tab").forEach(btn => btn.classList.toggle("active", btn.dataset.view === next));
   document.querySelectorAll(".panel").forEach(panel => panel.classList.toggle("active", panel.id === next));
   if (next === "overview") loadOverview();
+  if (next === "human-review") loadTestModeStatus();
   if (next === "sources") loadSources();
   if (next === "evidence") loadEvidence();
   if (next === "system-health") loadSystemHealth();
@@ -564,6 +575,356 @@ async function analyzeStock() {
   toast("Stock analysis loaded");
 }
 
+let currentTestSession = null;
+let currentReviewId = null;
+let isLoadingTestMode = false;
+let isImportingFixture = false;
+let isSubmittingVerdict = false;
+
+function testHeaders() {
+  return {
+    "X-Info-Analyzer-Environment": "test",
+    "X-Info-Analyzer-Test-Session": currentTestSession || "",
+  };
+}
+
+function renderSessionError(message) {
+  $("reviewContainer").style.display = "block";
+  $("pendingReviewsList").innerHTML = `<div class="item error"><h3>Session Error</h3><p class="muted">${esc(message)}</p></div>`;
+  $("reviewDetailContainer").style.display = "none";
+  $("historyContainer").style.display = "none";
+}
+
+function updateTestModeUI(status) {
+  const banner = $("testModeBanner");
+  const statusEl = $("testModeStatus");
+  const dbPathEl = $("testModeDbPath");
+  const toggle = $("testModeToggle");
+  const container = $("reviewContainer");
+
+  if (!banner || !statusEl || !dbPathEl || !toggle || !container) return;
+
+  if (status.error) {
+    currentTestSession = status.session_id || currentTestSession || null;
+    statusEl.textContent = "Error";
+    banner.className = "banner banner-error";
+    dbPathEl.textContent = `Error: ${status.error}`;
+    toggle.textContent = "Enable Test Mode";
+    renderSessionError(status.error);
+    return;
+  }
+
+  if (status.active) {
+    currentTestSession = status.session_id;
+    window.__infoAnalyzerTestSession = currentTestSession;
+    statusEl.textContent = "Enabled";
+    banner.className = "banner banner-success";
+    const dbName = (status.test_db_path || "").split("/").pop();
+    dbPathEl.textContent = `Session: ${status.session_id} | DB: .../${dbName}`;
+    toggle.textContent = "Disable Test Mode";
+    container.style.display = "block";
+    loadPendingReviews();
+    return;
+  }
+
+  currentTestSession = null;
+  statusEl.textContent = "Disabled";
+  banner.className = "banner banner-info";
+  dbPathEl.textContent = status.message || "Test Mode is off";
+  toggle.textContent = "Enable Test Mode";
+  container.style.display = status.keep_container ? "block" : "none";
+  if (status.keep_container) renderSessionError(status.message || "Test Mode is disabled. Enable a session before taking review actions.");
+}
+
+async function loadTestModeStatus() {
+  if (!$("testModeBanner")) return;
+  isLoadingTestMode = true;
+  $("testModeBanner").className = "banner banner-loading";
+  $("testModeStatus").textContent = "Loading...";
+  try {
+    const data = await api("/test-mode/status");
+    updateTestModeUI(data);
+  } catch (err) {
+    updateTestModeUI({ active: false, error: err.message });
+  } finally {
+    isLoadingTestMode = false;
+    if ($("testModeToggle")) $("testModeToggle").disabled = false;
+  }
+}
+
+async function toggleTestMode() {
+  if (isLoadingTestMode) return;
+  const toggle = $("testModeToggle");
+  toggle.disabled = true;
+  if (currentTestSession) {
+    try {
+      await api("/test-mode/disable", {
+        method: "POST",
+        headers: testHeaders(),
+        body: "{}",
+      });
+      const disabledSession = currentTestSession;
+      currentTestSession = null;
+      window.__infoAnalyzerTestSession = disabledSession;
+      updateTestModeUI({
+        active: false,
+        keep_container: true,
+        message: "Test Mode session disabled. Further review actions require a new session.",
+      });
+      toast("Test Mode disabled");
+    } catch (err) {
+      updateTestModeUI({ active: false, error: err.message, session_id: currentTestSession });
+      toast(`ERROR: Failed to disable Test Mode — ${err.message}`);
+    } finally {
+      toggle.disabled = false;
+    }
+    return;
+  }
+
+  try {
+    $("testModeBanner").className = "banner banner-loading";
+    $("testModeStatus").textContent = "Loading...";
+    await visibleFeedbackDelay();
+    const data = await api("/test-mode/enable", {
+      method: "POST",
+      body: "{}",
+    });
+    updateTestModeUI({ active: true, ...data });
+    toast("Test Mode enabled");
+  } catch (err) {
+    updateTestModeUI({ active: false, error: err.message });
+    toast(`ERROR: Failed to enable Test Mode — ${err.message}`);
+  } finally {
+    toggle.disabled = false;
+  }
+}
+
+async function loadPendingReviews() {
+  if (!currentTestSession) {
+    renderSessionError("Invalid or disabled Test Mode session");
+    return;
+  }
+  $("pendingReviewsList").innerHTML = `<div class="item"><p class="muted">Loading reviews...</p></div>`;
+  try {
+    const data = await api("/workbench/reviews", { headers: testHeaders() });
+    const pending = (data.reviews || []).filter(review => review.status === "pending");
+    if (!pending.length) {
+      $("pendingReviewsList").innerHTML = `<div class="item empty-state"><h3>No Pending Reviews</h3><p class="muted">Import a fixture to create a review.</p></div>`;
+    } else {
+      $("pendingReviewsList").innerHTML = pending.map(review => `
+        <button class="item review-item" data-review-id="${esc(review.review_id)}">
+          <h3>${esc(review.review_id)}</h3>
+          <div class="meta"><span class="tag">pending</span><span class="tag">${esc(review.subject_type || "")}</span></div>
+          <p class="muted">${esc(review.original_value || "(no machine proposal)")}</p>
+        </button>
+      `).join("");
+      document.querySelectorAll("[data-review-id]").forEach(button => {
+        button.addEventListener("click", () => selectReview(button.dataset.reviewId));
+      });
+    }
+    await loadReviewHistory();
+  } catch (err) {
+    renderSessionError(err.message);
+    toast(`ERROR: Failed to load reviews — ${err.message}`);
+  }
+}
+
+async function importFixture() {
+  if (!currentTestSession) {
+    renderSessionError("Invalid or disabled Test Mode session");
+    toast("ERROR: Test Mode not enabled");
+    return;
+  }
+  if (isImportingFixture) {
+    toast("Import already in progress");
+    return;
+  }
+  const button = $("importFixtureBtn");
+  const originalText = button.textContent;
+  isImportingFixture = true;
+  button.disabled = true;
+  button.textContent = "Importing...";
+  await visibleFeedbackDelay();
+  try {
+    const unique = Date.now();
+    await api("/workbench/fixtures/import", {
+      method: "POST",
+      headers: testHeaders(),
+      body: JSON.stringify({
+        fixture_data: { entity: `Human Review Fixture ${unique}`, claim: `Machine proposal ${unique}` },
+        url: `https://example.invalid/human-review/${unique}`,
+        title: `Human Review Fixture ${unique}`,
+        proposed_value: `normalized test value ${unique}`,
+        confidence: 0.75,
+      }),
+    });
+    toast("Fixture imported — new review added to queue");
+    await loadPendingReviews();
+  } catch (err) {
+    toast(`ERROR: Import failed — ${err.message}`);
+  } finally {
+    isImportingFixture = false;
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
+async function selectReview(reviewId) {
+  currentReviewId = reviewId;
+  document.querySelectorAll("[data-review-id]").forEach(item => item.classList.toggle("selected", item.dataset.reviewId === reviewId));
+  try {
+    const data = await api("/workbench/reviews", { headers: testHeaders() });
+    const review = (data.reviews || []).find(item => item.review_id === reviewId);
+    if (!review) throw new Error("Review not found");
+    displayReviewDetail(review);
+  } catch (err) {
+    toast(`ERROR: Failed to load review — ${err.message}`);
+  }
+}
+
+function displayReviewDetail(review) {
+  $("reviewDetailContainer").style.display = "block";
+  $("reviewDetail").innerHTML = `
+    <div class="review-evidence section">
+      <h3>Original Evidence</h3>
+      ${kvHTML("Subject", review.subject_id || "")}
+      ${kvHTML("Type", review.subject_type || "")}
+      ${kvHTML("Evidence ID", review.evidence_id || "")}
+    </div>
+    <div class="review-proposal section">
+      <h3>System Proposal</h3>
+      <p class="muted">${esc(review.original_value || "(system proposal unavailable)")}</p>
+      ${kvHTML("System Confidence", Number(review.system_confidence || 0).toFixed(2))}
+    </div>
+    <div class="review-judgment section">
+      <h3>Your Judgment</h3>
+      <form id="verdictForm" novalidate>
+        <div class="form-group">
+          <label>Verdict</label>
+          <div id="verdictError" class="field-error"></div>
+          <div class="button-group">
+            <button type="button" class="verdict-btn" data-verdict="confirm">Confirm</button>
+            <button type="button" class="verdict-btn" data-verdict="correct">Correct</button>
+            <button type="button" class="verdict-btn" data-verdict="reject">Reject</button>
+            <button type="button" class="verdict-btn" data-verdict="needs_more_evidence">Needs More Evidence</button>
+          </div>
+          <input type="hidden" id="verdictInput" />
+        </div>
+        <div class="form-group">
+          <label>Correction <span id="correctionRequired" class="required" style="display:none">*</span></label>
+          <div id="correctionError" class="field-error"></div>
+          <input id="correctionInput" placeholder="Enter corrected interpretation" />
+        </div>
+        <div class="form-group">
+          <label>Human Confidence</label>
+          <div id="confidenceError" class="field-error"></div>
+          <input id="confidenceInput" type="number" min="0" max="1" step="0.01" placeholder="0.75" />
+        </div>
+        <div class="form-group">
+          <label>Reason <span id="reasonRequired" class="required" style="display:none">*</span></label>
+          <div id="reasonError" class="field-error"></div>
+          <textarea id="reasonInput" placeholder="Required for Reject and Needs More Evidence"></textarea>
+        </div>
+        <div class="buttons"><button id="submitBtn" class="primary" type="submit">Save Verdict</button></div>
+      </form>
+    </div>
+  `;
+  document.querySelectorAll(".verdict-btn").forEach(button => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".verdict-btn").forEach(item => item.classList.remove("selected"));
+      button.classList.add("selected");
+      $("verdictInput").value = button.dataset.verdict;
+      $("correctionRequired").style.display = button.dataset.verdict === "correct" ? "inline" : "none";
+      $("reasonRequired").style.display = ["reject", "needs_more_evidence"].includes(button.dataset.verdict) ? "inline" : "none";
+    });
+  });
+  $("verdictForm").addEventListener("submit", submitVerdict);
+}
+
+async function submitVerdict(event) {
+  event.preventDefault();
+  if (isSubmittingVerdict) {
+    toast("Submission already in progress");
+    return;
+  }
+  const verdict = ($("verdictInput").value || "").trim();
+  const correction = ($("correctionInput").value || "").trim();
+  const confidenceRaw = ($("confidenceInput").value || "").trim();
+  const reason = ($("reasonInput").value || "").trim();
+  const confidence = confidenceRaw ? Number(confidenceRaw) : null;
+  const errors = {
+    verdictError: "",
+    correctionError: "",
+    confidenceError: "",
+    reasonError: "",
+  };
+  if (!verdict) errors.verdictError = "Please select a verdict";
+  if (verdict === "correct" && !correction) errors.correctionError = "Correction is required for Correct verdict";
+  if (["reject", "needs_more_evidence"].includes(verdict) && !reason) errors.reasonError = "Reason is required for this verdict";
+  if (confidence !== null && (!Number.isFinite(confidence) || confidence < 0 || confidence > 1)) {
+    errors.confidenceError = "Confidence must be a number between 0 and 1";
+  }
+  Object.entries(errors).forEach(([id, value]) => { $(id).textContent = value; });
+  if (Object.values(errors).some(Boolean)) {
+    toast("Please fix validation errors before submitting");
+    return;
+  }
+  const button = $("submitBtn");
+  const originalText = button.textContent;
+  isSubmittingVerdict = true;
+  button.disabled = true;
+  button.textContent = "Saving...";
+  await visibleFeedbackDelay();
+  try {
+    const data = await api(`/workbench/reviews/${encodeURIComponent(currentReviewId)}/verdict`, {
+      method: "POST",
+      headers: testHeaders(),
+      body: JSON.stringify({
+        verdict,
+        corrected_value: correction || null,
+        human_confidence: confidence ?? undefined,
+        reason: reason || null,
+      }),
+    });
+    if (data.status !== "completed") throw new Error("Server did not confirm verdict completion");
+    toast("Verdict saved successfully");
+    currentReviewId = null;
+    $("reviewDetailContainer").style.display = "none";
+    await loadPendingReviews();
+  } catch (err) {
+    toast(`ERROR: Failed to save verdict — ${err.message}`);
+    button.textContent = "Failed — Retry";
+    return;
+  } finally {
+    isSubmittingVerdict = false;
+    button.disabled = false;
+    if (button.textContent !== "Failed — Retry") button.textContent = originalText;
+  }
+}
+
+async function loadReviewHistory() {
+  if (!currentTestSession) return;
+  $("historyContainer").style.display = "block";
+  $("historyList").innerHTML = `<div class="item"><p class="muted">Loading history...</p></div>`;
+  try {
+    const data = await api("/workbench/reviews", { headers: testHeaders() });
+    const completed = (data.reviews || []).filter(review => review.status === "completed");
+    $("historyList").innerHTML = completed.length
+      ? completed.map(review => `
+        <div class="item">
+          <h3>${esc(review.review_id)}</h3>
+          <div class="meta"><span class="tag">completed</span><span class="tag">${esc(review.human_verdict || "")}</span></div>
+          ${kvHTML("Confidence", Number(review.human_confidence || 0).toFixed(2))}
+          ${kvHTML("Correction", review.corrected_value || "")}
+          ${kvHTML("Reason", review.reason || "")}
+        </div>
+      `).join("")
+      : `<div class="item empty-state"><h3>No Completed Reviews</h3><p class="muted">Your saved reviews will appear here.</p></div>`;
+  } catch (err) {
+    $("historyList").innerHTML = `<div class="item error"><h3>ERROR</h3><p class="muted">Failed to load history: ${esc(err.message)}</p></div>`;
+  }
+}
+
 function renderBuildInfoHeader(data) {
   if ($("appVersion")) $("appVersion").textContent = data.application_version || "";
   document.title = `Info Analyzer OS ${data.application_version || ""}`.trim();
@@ -591,6 +952,8 @@ function bindRefreshButtons() {
   $("refreshSystemHealth")?.addEventListener("click", loadSystemHealth);
   $("refreshStockIntel")?.addEventListener("click", loadStockIntel);
   $("analyzeStockBtn")?.addEventListener("click", analyzeStock);
+  $("testModeToggle")?.addEventListener("click", toggleTestMode);
+  $("importFixtureBtn")?.addEventListener("click", importFixture);
   $("refreshJobsRuns")?.addEventListener("click", loadJobsRuns);
   $("refreshBuildInfo")?.addEventListener("click", loadBuildInformation);
   $("refreshLegacyArchive")?.addEventListener("click", loadLegacyArchive);

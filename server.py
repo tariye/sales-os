@@ -8598,7 +8598,7 @@ class Handler(SimpleHTTPRequestHandler):
             if path in {"/", "/index.html"}:
                 return self.send_cutover_index(params)
             if path == "/app.js":
-                return self.send_file(WEB_DIR / "app.js", "application/javascript; charset=utf-8")
+                return self.send_file(WEB_DIR / "app-cutover.js", "application/javascript; charset=utf-8")
             if path == "/app-cutover.js":
                 return self.send_file(WEB_DIR / "app-cutover.js", "application/javascript; charset=utf-8")
             if path == "/style.css":

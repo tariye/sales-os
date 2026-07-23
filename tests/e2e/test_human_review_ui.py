@@ -195,6 +195,7 @@ def main() -> int:
         context = browser.new_context(ignore_https_errors=False)
         context.tracing.start(screenshots=True, snapshots=True, sources=True)
         page = context.new_page()
+        current_server_pid = SERVER_PID
         page.on("console", lambda msg: console_events.append({"type": msg.type, "text": msg.text, "location": msg.location}))
         page.on("pageerror", lambda exc: page_errors.append(str(exc)))
         page.on("response", record_request_response)
@@ -214,7 +215,8 @@ def main() -> int:
 
             page.get_by_role("button", name="Human Review").click()
             capture(page, "test-mode-disabled")
-            expect(page.locator("#human-review")).to_have_class(lambda cls: "active" in cls)
+            if not page.locator("#human-review").evaluate("el => el.classList.contains('active')"):
+                fail("Human Review tab click did not activate the Human Review panel", page)
             require_text(page, "Test Mode:", "Human Review panel did not render Test Mode banner")
             require_text(page, "Disabled", "Test Mode disabled state was not visible")
 
@@ -230,7 +232,7 @@ def main() -> int:
             import_btn = page.locator("#importFixtureBtn")
             import_btn.click()
             require_text(page, "Importing", "Import Fixture produced no visible loading feedback")
-            require_text(page, "pending", "No pending review appeared after fixture import")
+            expect(page.locator("#pendingReviewsList")).to_contain_text("pending", timeout=8000)
             capture(page, "fixture-imported")
 
             page.locator("#pendingReviewsList .item").first.click()
@@ -243,16 +245,16 @@ def main() -> int:
             require_text(page, "Your Judgment", "Human judgment section was not visible")
             capture(page, "review-detail")
 
-            page.get_by_role("button", name="Correct").click()
+            page.locator('[data-verdict="correct"]').click()
             page.locator("#submitBtn").click()
             require_text(page, "Correction is required", "Correct without correction did not show validation")
-            page.get_by_role("button", name="Reject").click()
+            page.locator('[data-verdict="reject"]').click()
             page.locator("#submitBtn").click()
             require_text(page, "Reason is required", "Reject without reason did not show validation")
-            page.get_by_role("button", name="Needs More Evidence").click()
+            page.locator('[data-verdict="needs_more_evidence"]').click()
             page.locator("#submitBtn").click()
             require_text(page, "Reason is required", "Needs More Evidence without reason did not show validation")
-            page.get_by_role("button", name="Confirm").click()
+            page.locator('[data-verdict="confirm"]').click()
             page.locator("#confidenceInput").fill("1.2")
             page.locator("#submitBtn").click()
             require_text(page, "Confidence must be", "Invalid confidence did not show validation")
@@ -261,7 +263,7 @@ def main() -> int:
             submit = page.locator("#submitBtn")
             submit.click()
             require_text(page, "Saving", "Save Verdict produced no visible saving feedback")
-            submit.click()
+            expect(submit).to_be_disabled(timeout=5000)
             require_text(page, "Verdict saved successfully", "Duplicate/save success feedback was not visible")
             expect(page.locator("#pendingReviewsList")).not_to_contain_text("pending", timeout=8000)
             capture(page, "saving-state")
@@ -273,8 +275,26 @@ def main() -> int:
             require_text(page, "completed", "Saved history did not persist after browser refresh")
             capture(page, "history-after-refresh")
 
-            stop_pid(SERVER_PID)
+            page.locator("#importFixtureBtn").click()
+            expect(page.locator("#pendingReviewsList")).to_contain_text("pending", timeout=8000)
+            page.locator("#pendingReviewsList .review-item").first.click()
+            page.locator('[data-verdict="correct"]').click()
+            page.locator("#correctionInput").fill("retained correction after failed save")
+            page.locator("#confidenceInput").fill("0.82")
+            stop_pid(current_server_pid)
+            page.locator("#submitBtn").click()
+            require_text(page, "ERROR: Failed to save verdict", "Server-unavailable save did not render an explicit failure")
+            expect(page.locator("#correctionInput")).to_have_value("retained correction after failed save")
+            capture(page, "failed-save-form-retention")
+            restarted_after_failure = start_server()
+            current_server_pid = restarted_after_failure.pid
+            wait_health()
+            page.locator("#submitBtn").click()
+            require_text(page, "Verdict saved successfully", "Retry after server restart did not save retained form")
+
+            stop_pid(current_server_pid)
             restarted = start_server()
+            current_server_pid = restarted.pid
             summary["restart_pid"] = restarted.pid
             wait_health()
             page.goto(BASE_URL + "/", wait_until="networkidle")
@@ -283,6 +303,8 @@ def main() -> int:
 
             page.locator("#testModeToggle").click()
             require_text(page, "Disabled", "Disable Test Mode did not change visible state")
+            page.locator("#importFixtureBtn").click()
+            require_text(page, "Session Error", "Disabled-session action did not render an explicit session error")
             capture(page, "explicit-disabled-session-error")
             # Directly exercise a stale UI session after the disable transition.
             stale_error = page.evaluate("""async () => {
@@ -307,6 +329,7 @@ def main() -> int:
                 raise AssertionError(f"current app.js was not loaded after fresh context/reload: {app_loads}")
             context2.close()
 
+            stop_pid(current_server_pid)
             summary["console_events"] = console_events
             summary["page_errors"] = page_errors
             summary["network_events"] = network_events
