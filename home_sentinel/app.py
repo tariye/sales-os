@@ -50,6 +50,7 @@ CAMERA_PRESETS = {
         "label": "Arducam Day",
         "controls": {
             "auto_exposure": 3,
+            "exposure_time_absolute": 80,
             "brightness": -16,
             "contrast": 28,
             "saturation": 56,
@@ -166,6 +167,11 @@ CAMERA_AUTOTUNE_STATE = {
 CLIPS_DIR = BASE_DIR / "videos" / "clips"
 CLIPS_DIR.mkdir(parents=True, exist_ok=True)
 FFMPEG_BIN = shutil.which("ffmpeg") or "ffmpeg"
+
+CAMERA_CONTROL_ALIASES = {
+    "auto_exposure": ["auto_exposure", "exposure_auto"],
+    "exposure_time_absolute": ["exposure_time_absolute", "exposure_absolute"],
+}
 
 @app.before_request
 def record_request_start():
@@ -714,9 +720,12 @@ def normalize_camera_key(camera_key=None):
 def capture_to_path(path, attempts=3, retry_delay=1.0, camera_key=None):
     global LAST_CAPTURE_SECONDS
     camera_key = normalize_camera_key(camera_key)
-    if camera_key == "arducam" and not CAMERA_AUTOTUNE_SETTINGS.get("enabled", False):
+    if camera_key == "arducam":
         try:
-            apply_camera_preset(camera_key, "arducam_dark")
+            if CAMERA_AUTOTUNE_SETTINGS.get("enabled", False):
+                apply_camera_preset(camera_key, "arducam_day")
+            else:
+                apply_camera_preset(camera_key, "arducam_dark")
         except Exception:
             pass
     device = resolve_camera_device(camera_key)
@@ -829,29 +838,49 @@ def update_camera_autotune_settings(payload):
 def apply_camera_controls(camera_key, controls):
     camera_key = normalize_camera_key(camera_key)
     device = resolve_camera_device(camera_key)
-    command = ['v4l2-ctl', '-d', device]
+    if not controls:
+        return False, 'no camera controls supplied'
+    applied = []
+    failures = []
     for control, value in controls.items():
         if value is None or value == '':
             continue
-        command.extend(['--set-ctrl', f'{control}={value}'])
-    if len(command) == 2:
-        return False, 'no camera controls supplied'
-    ok, output = run_command(command, timeout=10)
-    return ok, output or 'camera controls applied'
+        candidate_names = CAMERA_CONTROL_ALIASES.get(control, [control])
+        control_ok = False
+        last_output = ''
+        for actual_name in candidate_names:
+            ok, output = run_command(['v4l2-ctl', '-d', device, '--set-ctrl', f'{actual_name}={value}'], timeout=10)
+            last_output = output or last_output
+            if ok:
+                applied.append(f'{actual_name}={value}')
+                control_ok = True
+                break
+        if not control_ok:
+            failures.append(f'{control}: {last_output or "unable to apply"}')
+    if failures and not applied:
+        return False, '; '.join(failures)
+    if failures:
+        return True, 'Applied with partial fallback: ' + '; '.join(applied + failures)
+    return True, 'camera controls applied'
 
 
 def get_camera_control_snapshot(camera_key):
     camera_key = normalize_camera_key(camera_key)
     device = resolve_camera_device(camera_key)
     controls = ['brightness', 'contrast', 'saturation', 'gain', 'backlight_compensation', 'auto_exposure', 'exposure_time_absolute']
-    ok, output = run_command(['v4l2-ctl', '-d', device, '--get-ctrl=' + ','.join(controls)], timeout=10)
     values = {}
-    if ok and output:
-        for line in output.splitlines():
-            if ': ' not in line:
-                continue
-            name, value = line.split(': ', 1)
-            values[name.strip()] = value.strip().split(' ')[0]
+    for control in controls:
+        for actual_name in CAMERA_CONTROL_ALIASES.get(control, [control]):
+            ok, output = run_command(['v4l2-ctl', '-d', device, '--get-ctrl=' + actual_name], timeout=10)
+            if ok and output:
+                for line in output.splitlines():
+                    if ': ' not in line:
+                        continue
+                    name, value = line.split(': ', 1)
+                    values[control] = value.strip().split(' ')[0]
+                    break
+                if control in values:
+                    break
     return values
 
 
@@ -2416,6 +2445,7 @@ def camera_autotune():
     settings = update_camera_autotune_settings(request.form if request.form else (request.get_json(silent=True) or {}))
     if camera_key == "arducam" and settings.get("enabled"):
         try:
+            apply_camera_preset(camera_key, "arducam_day")
             apply_camera_controls(camera_key, {
                 "auto_exposure": 1,
                 "exposure_time_absolute": settings.get("initial_exposure", 80),
@@ -2433,7 +2463,10 @@ def live_view():
     camera_label = CAMERA_PROFILES[camera_key]["label"]
     if camera_key == "arducam":
         try:
-            apply_camera_preset(camera_key, "arducam_dark")
+            if CAMERA_AUTOTUNE_SETTINGS.get("enabled", False):
+                apply_camera_preset(camera_key, "arducam_day")
+            else:
+                apply_camera_preset(camera_key, "arducam_dark")
         except Exception:
             pass
     camera_device = resolve_camera_device(camera_key)
