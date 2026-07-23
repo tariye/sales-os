@@ -205,8 +205,8 @@ def main() -> int:
             capture(page, "initial-page")
             expect(page.locator("body")).not_to_be_empty()
 
-            app_asset = next((e for e in network_events if e["url"].endswith("/app.js?v=2.0.0")), None)
-            css_asset = next((e for e in network_events if e["url"].endswith("/style.css?v=2.0.0")), None)
+            app_asset = next((e for e in network_events if e["url"].endswith("/app.js?v=2.0.1")), None)
+            css_asset = next((e for e in network_events if e["url"].endswith("/style.css?v=2.0.1")), None)
             if not app_asset or app_asset["status"] != 200:
                 fail(f"app.js did not load successfully: {app_asset}", page)
             if not css_asset or css_asset["status"] != 200:
@@ -324,7 +324,7 @@ def main() -> int:
             page2.on("response", lambda response: second_network.append({"url": response.url, "status": response.status}))
             page2.goto(BASE_URL + "/", wait_until="networkidle")
             page2.reload(wait_until="networkidle")
-            app_loads = [e for e in second_network if e["url"].endswith("/app.js?v=2.0.0")]
+            app_loads = [e for e in second_network if e["url"].endswith("/app.js?v=2.0.1")]
             if not app_loads or any(e["status"] != 200 for e in app_loads):
                 raise AssertionError(f"current app.js was not loaded after fresh context/reload: {app_loads}")
             context2.close()
