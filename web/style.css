@@ -446,6 +446,14 @@ details[open] .contract-toggle::before{transform:rotate(90deg)}
   background:rgba(47,103,84,.1);
   border-color:rgba(47,103,84,.2);
 }
+.banner-loading{
+  background:rgba(179,106,31,.08);
+  border-color:rgba(179,106,31,.2);
+}
+.banner-error{
+  background:rgba(159,62,47,.1);
+  border-color:rgba(159,62,47,.2);
+}
 .banner-content p{
   margin:4px 0;
   font-size:.95rem;
@@ -455,7 +463,49 @@ details[open] .contract-toggle::before{transform:rotate(90deg)}
   gap:8px;
 }
 .text-success{color:var(--good)}
+.text-error{color:var(--bad)}
 .text-muted{color:var(--muted)}
+
+.item.error{
+  border-left:4px solid var(--bad);
+  background:rgba(159,62,47,.05);
+}
+.item.empty-state{
+  text-align:center;
+  opacity:.7;
+}
+
+.field-error{
+  color:var(--bad);
+  font-size:.85rem;
+  margin-top:4px;
+  min-height:20px;
+}
+.required{
+  color:var(--bad);
+  font-weight:600;
+}
+
+.help-text{
+  font-size:.85rem;
+  color:var(--muted);
+  margin-top:4px;
+  margin-bottom:0;
+}
+
+.proposal-text{
+  font-size:1rem;
+  line-height:1.6;
+  padding:10px;
+  background:var(--card);
+  border-radius:4px;
+  margin:8px 0;
+}
+
+.tag-unresolved{
+  background:var(--warn-soft) !important;
+  color:var(--warn) !important;
+}
 
 .review-container{
   display:flex;
