@@ -43,8 +43,14 @@ def request(base_url: str, method: str, path: str, payload: dict | None = None, 
         headers=req_headers,
         method=method,
     )
-    with urllib.request.urlopen(req, timeout=timeout) as res:
-        return json.loads(res.read().decode("utf-8") or "{}")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            return json.loads(res.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as e:
+        try:
+            return json.loads(e.read().decode("utf-8") or "{}")
+        except Exception:
+            return {"error": str(e), "status": e.code}
 
 
 def wait_for(predicate, timeout: float, label: str, interval: float = 0.2):
@@ -329,6 +335,136 @@ def main() -> int:
             "name": "isolation_complete",
             "ok": all(v == 0 for v in test_data.values()),
             "test_data_isolation": test_data,
+        })
+
+        # Phase 11: Verdict Integrity Validation Tests
+        validation_results = []
+
+        # Test 1: Correct with missing correction
+        import1 = request(
+            base_url, "POST", "/api/workbench/fixtures/import",
+            {"fixture_data": {"e": "T1"}, "url": "https://example.com/t1", "title": "T1", "proposed_value": "T1", "confidence": 0.75},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id}
+        )
+        rid1 = import1.get("review_id")
+        resp1 = request(base_url, "POST", f"/api/workbench/reviews/{rid1}/verdict",
+            {"verdict": "correct", "human_confidence": 0.9},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id},
+            timeout=5)
+        validation_results.append(("correct_missing_correction", "error" in resp1))
+
+        # Test 2: Correct with whitespace-only correction
+        import2 = request(base_url, "POST", "/api/workbench/fixtures/import",
+            {"fixture_data": {"e": "T2"}, "url": "https://example.com/t2", "title": "T2", "proposed_value": "T2", "confidence": 0.75},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id})
+        rid2 = import2.get("review_id")
+        resp2 = request(base_url, "POST", f"/api/workbench/reviews/{rid2}/verdict",
+            {"verdict": "correct", "corrected_value": "   ", "human_confidence": 0.9},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id},
+            timeout=5)
+        validation_results.append(("correct_whitespace_correction", "error" in resp2))
+
+        # Test 3: Reject with missing reason
+        import3 = request(base_url, "POST", "/api/workbench/fixtures/import",
+            {"fixture_data": {"e": "T3"}, "url": "https://example.com/t3", "title": "T3", "proposed_value": "T3", "confidence": 0.75},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id})
+        rid3 = import3.get("review_id")
+        resp3 = request(base_url, "POST", f"/api/workbench/reviews/{rid3}/verdict",
+            {"verdict": "reject", "human_confidence": 0.9},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id},
+            timeout=5)
+        validation_results.append(("reject_missing_reason", "error" in resp3))
+
+        # Test 4: Reject with whitespace-only reason
+        import4 = request(base_url, "POST", "/api/workbench/fixtures/import",
+            {"fixture_data": {"e": "T4"}, "url": "https://example.com/t4", "title": "T4", "proposed_value": "T4", "confidence": 0.75},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id})
+        rid4 = import4.get("review_id")
+        resp4 = request(base_url, "POST", f"/api/workbench/reviews/{rid4}/verdict",
+            {"verdict": "reject", "reason": "  \t  ", "human_confidence": 0.9},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id},
+            timeout=5)
+        validation_results.append(("reject_whitespace_reason", "error" in resp4))
+
+        # Test 5: Needs More Evidence with missing reason
+        import5 = request(base_url, "POST", "/api/workbench/fixtures/import",
+            {"fixture_data": {"e": "T5"}, "url": "https://example.com/t5", "title": "T5", "proposed_value": "T5", "confidence": 0.75},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id})
+        rid5 = import5.get("review_id")
+        resp5 = request(base_url, "POST", f"/api/workbench/reviews/{rid5}/verdict",
+            {"verdict": "needs_more_evidence", "human_confidence": 0.9},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id},
+            timeout=5)
+        validation_results.append(("nme_missing_reason", "error" in resp5))
+
+        # Test 6: Needs More Evidence with whitespace-only reason
+        import6 = request(base_url, "POST", "/api/workbench/fixtures/import",
+            {"fixture_data": {"e": "T6"}, "url": "https://example.com/t6", "title": "T6", "proposed_value": "T6", "confidence": 0.75},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id})
+        rid6 = import6.get("review_id")
+        resp6 = request(base_url, "POST", f"/api/workbench/reviews/{rid6}/verdict",
+            {"verdict": "needs_more_evidence", "reason": "", "human_confidence": 0.9},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id},
+            timeout=5)
+        validation_results.append(("nme_whitespace_reason", "error" in resp6))
+
+        # Test 7-10: Confidence validation
+        import7 = request(base_url, "POST", "/api/workbench/fixtures/import",
+            {"fixture_data": {"e": "T7"}, "url": "https://example.com/t7", "title": "T7", "proposed_value": "T7", "confidence": 0.75},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id})
+        rid7 = import7.get("review_id")
+        resp7 = request(base_url, "POST", f"/api/workbench/reviews/{rid7}/verdict",
+            {"verdict": "confirm", "human_confidence": -0.1},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id},
+            timeout=5)
+        validation_results.append(("confidence_below_zero", "error" in resp7))
+
+        import8 = request(base_url, "POST", "/api/workbench/fixtures/import",
+            {"fixture_data": {"e": "T8"}, "url": "https://example.com/t8", "title": "T8", "proposed_value": "T8", "confidence": 0.75},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id})
+        rid8 = import8.get("review_id")
+        resp8 = request(base_url, "POST", f"/api/workbench/reviews/{rid8}/verdict",
+            {"verdict": "confirm", "human_confidence": 1.5},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id},
+            timeout=5)
+        validation_results.append(("confidence_above_one", "error" in resp8))
+
+        import9 = request(base_url, "POST", "/api/workbench/fixtures/import",
+            {"fixture_data": {"e": "T9"}, "url": "https://example.com/t9", "title": "T9", "proposed_value": "T9", "confidence": 0.75},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id})
+        rid9 = import9.get("review_id")
+        resp9 = request(base_url, "POST", f"/api/workbench/reviews/{rid9}/verdict",
+            {"verdict": "confirm", "human_confidence": "invalid"},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id},
+            timeout=5)
+        validation_results.append(("confidence_invalid_type", "error" in resp9))
+
+        # Test 10: Invalid verdict
+        import10 = request(base_url, "POST", "/api/workbench/fixtures/import",
+            {"fixture_data": {"e": "T10"}, "url": "https://example.com/t10", "title": "T10", "proposed_value": "T10", "confidence": 0.75},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id})
+        rid10 = import10.get("review_id")
+        resp10 = request(base_url, "POST", f"/api/workbench/reviews/{rid10}/verdict",
+            {"verdict": "invalid_verdict", "human_confidence": 0.9},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id},
+            timeout=5)
+        validation_results.append(("invalid_verdict", "error" in resp10))
+
+        # Test 11: Valid verdicts still work
+        import_valid = request(base_url, "POST", "/api/workbench/fixtures/import",
+            {"fixture_data": {"e": "VALID"}, "url": "https://example.com/valid", "title": "VALID", "proposed_value": "VALID", "confidence": 0.75},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id})
+        rid_valid = import_valid.get("review_id")
+        resp_valid_c = request(base_url, "POST", f"/api/workbench/reviews/{rid_valid}/verdict",
+            {"verdict": "confirm", "human_confidence": 0.9},
+            {"X-Info-Analyzer-Environment": "test", "X-Info-Analyzer-Test-Session": session_id},
+            timeout=5)
+        validation_results.append(("valid_confirm", "status" in resp_valid_c and resp_valid_c.get("status") == "completed"))
+
+        proof["phases"].append({
+            "name": "verdict_integrity_validation",
+            "ok": all(passed for _, passed in validation_results),
+            "validation_tests": {name: passed for name, passed in validation_results},
         })
 
         proof["ok"] = all(p["ok"] for p in proof["phases"])

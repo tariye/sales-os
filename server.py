@@ -9113,16 +9113,30 @@ class Handler(SimpleHTTPRequestHandler):
                         status_code, msg = error
                         return self.send_json({"error": msg}, status_code)
 
+                    # Verdict validation (required, must be one of the accepted values)
                     verdict = payload.get("verdict")
                     if not verdict or verdict not in ("confirm", "correct", "reject", "needs_more_evidence"):
                         return self.send_json({"error": "Invalid verdict. Must be: confirm, correct, reject, or needs_more_evidence"}, 400)
 
+                    # Correction validation (required for 'correct', must be non-empty)
                     corrected_value = payload.get("corrected_value")
-                    if verdict == "correct" and not corrected_value:
-                        return self.send_json({"error": "verdict 'correct' requires corrected_value"}, 400)
+                    if verdict == "correct":
+                        if not corrected_value or (isinstance(corrected_value, str) and not corrected_value.strip()):
+                            return self.send_json({"error": "verdict 'correct' requires non-empty corrected_value"}, 400)
 
-                    reason = payload.get("reason", "")
-                    human_confidence = float(payload.get("human_confidence", 0.9))
+                    # Reason validation (required for 'reject' and 'needs_more_evidence', must be non-empty)
+                    reason = payload.get("reason")
+                    if verdict in ("reject", "needs_more_evidence"):
+                        if not reason or (isinstance(reason, str) and not reason.strip()):
+                            return self.send_json({"error": f"verdict '{verdict}' requires non-empty reason"}, 400)
+                    else:
+                        reason = reason or ""  # Optional for confirm/correct
+
+                    # Human confidence validation (must be numeric, in [0, 1])
+                    try:
+                        human_confidence = float(payload.get("human_confidence", 0.9))
+                    except (TypeError, ValueError):
+                        return self.send_json({"error": "human_confidence must be a number between 0 and 1"}, 400)
 
                     if human_confidence < 0 or human_confidence > 1:
                         return self.send_json({"error": "human_confidence must be between 0 and 1"}, 400)
