@@ -110,6 +110,17 @@ def git_commit_sha() -> str:
         return ""
 
 
+def git_branch_name() -> str:
+    head = BASE_DIR / ".git" / "HEAD"
+    try:
+        raw = head.read_text(encoding="utf-8").strip()
+        if raw.startswith("ref:"):
+            return raw.split("refs/heads/", 1)[1].strip()
+        return "detached"
+    except Exception:
+        return ""
+
+
 def db_path_category() -> str:
     if not DB_PATH_RAW:
         return "unconfigured"
@@ -130,7 +141,7 @@ if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
 TEST_DB_PATH_RAW = os.environ.get("INFO_ANALYZER_TEST_DB_PATH", "").strip()
 
-APP_VERSION = "v0.88-data-plane-milestone-1-rebuild"
+APP_VERSION = "v0.93-local-runtime-reliability"
 SCHEMA_VERSION = 1
 DATA_PLANE_LEASE_SECONDS = 30
 SCHEDULER_LEASE_SECONDS = 8
@@ -5343,6 +5354,39 @@ def data_plane_status() -> dict:
     }
 
 
+def runtime_status() -> dict:
+    test_db_path = resolve_test_db_path()
+    sqlite_status = sqlite_runtime_status()
+    data_plane = data_plane_status()
+    return {
+        "ok": True,
+        "server": "connected",
+        "application_version": APP_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "git_commit": git_commit_sha(),
+        "git_branch": git_branch_name(),
+        "repository_root": str(BASE_DIR),
+        "environment": os.environ.get("INFO_ANALYZER_ENV", "local"),
+        "active_db_path": str(DB_PATH),
+        "active_db_path_category": db_path_category(),
+        "active_db_configured": bool(DB_PATH_RAW),
+        "test_db_path": str(test_db_path),
+        "test_db_id": test_db_identifier(test_db_path),
+        "test_db_configured": bool(TEST_DB_PATH_RAW),
+        "test_db_exists": test_db_path.exists(),
+        "last_api_status": "ok",
+        "generated_at": now_iso(),
+        "sqlite": sqlite_status,
+        "data_plane": {
+            "scheduler": data_plane.get("scheduler"),
+            "workers": data_plane.get("workers", []),
+            "jobs": data_plane.get("jobs", {}),
+            "runs": data_plane.get("runs", {}),
+            "source_health": data_plane.get("source_health", {}),
+        },
+    }
+
+
 def feature_registry_payload() -> dict:
     stamped = []
     for feature in FEATURE_REGISTRY:
@@ -8605,6 +8649,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_file(WEB_DIR / "style.css", "text/css; charset=utf-8")
             if path == "/api/health":
                 return self.send_json({"ok": True, "app": "Info Analyzer OS", "version": APP_VERSION, "db_path": str(DB_PATH), "sqlite": sqlite_runtime_status(), "data_plane": data_plane_status()})
+            if path == "/api/runtime/status":
+                return self.send_json(runtime_status())
             # Human Analyst Workbench GET endpoints - MINIMAL SLICE
             if path == "/api/workbench/reviews":
                 try:

@@ -70,13 +70,17 @@ deadline = time.time() + 25
 last = None
 while time.time() < deadline:
     try:
-        with urllib.request.urlopen(base_url + "/api/health", timeout=2) as response:
+        with urllib.request.urlopen(base_url + "/api/runtime/status", timeout=2) as response:
             body = response.read().decode()
             last = (response.status, body)
             if response.status == 200:
                 data = json.loads(body)
-                if data.get("db_path") != active_db:
-                    raise SystemExit(f"health DB path mismatch: {data.get('db_path')} != {active_db}")
+                if data.get("git_commit") != expected_sha:
+                    raise SystemExit(f"runtime SHA mismatch: {data.get('git_commit')} != {expected_sha}")
+                if data.get("active_db_path") != active_db:
+                    raise SystemExit(f"runtime active DB path mismatch: {data.get('active_db_path')} != {active_db}")
+                if data.get("test_db_path") != test_db:
+                    raise SystemExit(f"runtime test DB path mismatch: {data.get('test_db_path')} != {test_db}")
                 break
     except Exception as exc:
         last = repr(exc)

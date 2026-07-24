@@ -24,6 +24,7 @@ const VIEWS = new Set([
 ]);
 
 let buildInfo = null;
+let runtimeStatusData = null;
 let overviewData = null;
 let sourcesData = null;
 let evidenceData = null;
@@ -71,11 +72,14 @@ function fmtDate(value) {
   if (!value) return "";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZoneName: "short",
-  }).format(d);
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(d);
+  } catch (err) {
+    return d.toLocaleString();
+  }
 }
 
 function fmtAge(value) {
@@ -96,6 +100,67 @@ function statHTML(value, label) {
 
 function kvHTML(label, value) {
   return value || value === 0 ? `<div class="kv"><b>${esc(label)}</b><span>${esc(value)}</span></div>` : "";
+}
+
+function setRuntimeBanner(kind, title, detail) {
+  const banner = $("runtimeStatusBanner");
+  if (!banner) return;
+  banner.className = `banner banner-${kind}`;
+  if ($("runtimeConnection")) $("runtimeConnection").textContent = title;
+  if ($("runtimeLastApiStatus")) $("runtimeLastApiStatus").textContent = detail;
+}
+
+function renderRuntimeStatus(data) {
+  runtimeStatusData = data;
+  setRuntimeBanner("success", "Connected", `Last API status: ${data.last_api_status || "ok"} at ${fmtDate(data.generated_at)}`);
+  const scheduler = data.data_plane?.scheduler || {};
+  const worker = (data.data_plane?.workers || [])[0] || {};
+  if ($("runtimeStatusStats")) {
+    $("runtimeStatusStats").innerHTML = [
+      statHTML(data.git_branch || "n/a", "Branch"),
+      statHTML((data.git_commit || "unavailable").slice(0, 12), "Build SHA"),
+      statHTML(data.environment || "local", "Environment"),
+      statHTML(data.sqlite?.quick_check || "n/a", "SQLite"),
+      statHTML(data.active_db_path_category || "n/a", "Active DB"),
+      statHTML(data.test_db_configured ? "configured" : "default", "Test DB"),
+      statHTML(scheduler.owner_id || "unassigned", "Scheduler"),
+      statHTML(worker.heartbeat_at ? fmtDate(worker.heartbeat_at) : "no heartbeat", "Worker"),
+    ].join("");
+  }
+  if ($("runtimeStatusDetails")) {
+    $("runtimeStatusDetails").innerHTML = `
+      <div class="item">
+        <h3>Runtime Identity</h3>
+        ${kvHTML("Repository", data.repository_root || "")}
+        ${kvHTML("Active DB Path", data.active_db_path || "")}
+        ${kvHTML("Test DB Path", data.test_db_path || "")}
+        ${kvHTML("Test DB ID", data.test_db_id || "")}
+        ${kvHTML("Version", data.application_version || "")}
+        ${kvHTML("Schema", data.schema_version ?? "")}
+      </div>
+    `;
+  }
+}
+
+function renderRuntimeDisconnected(error) {
+  runtimeStatusData = null;
+  setRuntimeBanner("error", "Disconnected", `Last API status: failed. ${error?.message || "The server did not respond."}`);
+  if ($("runtimeStatusStats")) {
+    $("runtimeStatusStats").innerHTML = [
+      statHTML("disconnected", "Server"),
+      statHTML("unknown", "Build SHA"),
+      statHTML("unknown", "Active DB"),
+      statHTML("unknown", "Test DB"),
+    ].join("");
+  }
+  if ($("runtimeStatusDetails")) {
+    $("runtimeStatusDetails").innerHTML = `
+      <div class="item error">
+        <h3>Server unavailable</h3>
+        <p class="muted">Start the local runtime with scripts/start_local.sh, then reopen this URL.</p>
+      </div>
+    `;
+  }
 }
 
 function normalizeView(view) {
@@ -133,7 +198,10 @@ function setActiveView(view) {
   persistView(next);
   document.querySelectorAll(".tab").forEach(btn => btn.classList.toggle("active", btn.dataset.view === next));
   document.querySelectorAll(".panel").forEach(panel => panel.classList.toggle("active", panel.id === next));
-  if (next === "overview") loadOverview();
+  if (next === "overview") {
+    loadRuntimeStatus();
+    loadOverview();
+  }
   if (next === "human-review") loadTestModeStatus();
   if (next === "sources") loadSources();
   if (next === "evidence") loadEvidence();
@@ -161,6 +229,17 @@ async function refreshBuildInfo() {
   if ($("appVersion")) $("appVersion").textContent = appVersion;
   document.title = `Info Analyzer OS ${appVersion || ""}`.trim();
   return { appVersion, commit, schema };
+}
+
+async function loadRuntimeStatus() {
+  try {
+    const data = await api("/runtime/status");
+    renderRuntimeStatus(data);
+    return data;
+  } catch (err) {
+    renderRuntimeDisconnected(err);
+    return null;
+  }
 }
 
 function buildSummaryCards(data) {
@@ -946,6 +1025,7 @@ function bindViewButtons() {
 }
 
 function bindRefreshButtons() {
+  $("refreshRuntimeStatus")?.addEventListener("click", loadRuntimeStatus);
   $("refreshOverview")?.addEventListener("click", loadOverview);
   $("refreshSources")?.addEventListener("click", loadSources);
   $("refreshEvidence")?.addEventListener("click", loadEvidence);
@@ -967,8 +1047,16 @@ document.addEventListener("click", event => {
 });
 
 async function loadOverview() {
-  overviewData = buildInfo?.overview || await api("/overview");
-  renderOverview(overviewData);
+  try {
+    overviewData = buildInfo?.overview || await api("/overview");
+    renderOverview(overviewData);
+  } catch (err) {
+    renderRuntimeDisconnected(err);
+    $("overviewStats").innerHTML = "";
+    $("overviewIntervention").innerHTML = `<div class="item error"><h3>Overview unavailable</h3><p class="muted">${esc(err.message)}</p></div>`;
+    $("overviewUnavailable").innerHTML = "";
+    $("overviewLatestFailure").innerHTML = "";
+  }
 }
 
 async function loadInitialBuildInfo() {
@@ -981,7 +1069,12 @@ async function boot() {
   renderBootstrapState();
   bindViewButtons();
   bindRefreshButtons();
-  await loadInitialBuildInfo();
+  await loadRuntimeStatus();
+  try {
+    await loadInitialBuildInfo();
+  } catch (err) {
+    renderRuntimeDisconnected(err);
+  }
   const initialView = readViewFromUrl() || readSavedView();
   setActiveView(initialView);
 }

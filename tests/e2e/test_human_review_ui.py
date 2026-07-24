@@ -205,13 +205,21 @@ def main() -> int:
             capture(page, "initial-page")
             expect(page.locator("body")).not_to_be_empty()
 
-            app_asset = next((e for e in network_events if e["url"].endswith("/app.js?v=2.0.1")), None)
-            css_asset = next((e for e in network_events if e["url"].endswith("/style.css?v=2.0.1")), None)
+            app_asset = next((e for e in network_events if e["url"].endswith("/app.js?v=2.0.2")), None)
+            css_asset = next((e for e in network_events if e["url"].endswith("/style.css?v=2.0.2")), None)
             if not app_asset or app_asset["status"] != 200:
                 fail(f"app.js did not load successfully: {app_asset}", page)
             if not css_asset or css_asset["status"] != 200:
                 fail(f"style.css did not load successfully: {css_asset}", page)
             assert_no_console_failures(page)
+            runtime = page.locator("#runtimeStatusCard")
+            expect(runtime).to_be_visible(timeout=8000)
+            expect(page.locator("#runtimeConnection")).to_have_text("Connected", timeout=8000)
+            expect(page.locator("#runtimeStatusStats")).to_contain_text(EXPECTED_SHA[:12], timeout=8000)
+            expect(page.locator("#runtimeStatusStats")).to_contain_text("Branch", timeout=8000)
+            expect(page.locator("#runtimeStatusDetails")).to_contain_text(str(ACTIVE_DB), timeout=8000)
+            expect(page.locator("#runtimeStatusDetails")).to_contain_text(str(TEST_DB), timeout=8000)
+            capture(page, "runtime-status")
 
             page.get_by_role("button", name="Human Review").click()
             capture(page, "test-mode-disabled")
@@ -324,7 +332,7 @@ def main() -> int:
             page2.on("response", lambda response: second_network.append({"url": response.url, "status": response.status}))
             page2.goto(BASE_URL + "/", wait_until="networkidle")
             page2.reload(wait_until="networkidle")
-            app_loads = [e for e in second_network if e["url"].endswith("/app.js?v=2.0.1")]
+            app_loads = [e for e in second_network if e["url"].endswith("/app.js?v=2.0.2")]
             if not app_loads or any(e["status"] != 200 for e in app_loads):
                 raise AssertionError(f"current app.js was not loaded after fresh context/reload: {app_loads}")
             context2.close()

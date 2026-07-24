@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Info Analyzer OS</title>
-  <link rel="stylesheet" href="/style.css?v=2.0.1" />
+  <link rel="stylesheet" href="/style.css?v=2.0.2" />
 </head>
 <body>
   <header class="hero-band app-shell">
@@ -33,6 +33,23 @@
 
   <main class="app-shell">
     <section id="overview" class="panel active">
+      <div id="runtimeStatusCard" class="card runtime-card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Runtime Truth</p>
+            <h2>Local Connection</h2>
+          </div>
+          <button id="refreshRuntimeStatus" class="ghost small">Check Runtime</button>
+        </div>
+        <div id="runtimeStatusBanner" class="banner banner-info">
+          <div class="banner-content">
+            <p><strong>Server:</strong> <span id="runtimeConnection">Checking</span></p>
+            <p id="runtimeLastApiStatus" class="muted">Waiting for the first API response.</p>
+          </div>
+        </div>
+        <div id="runtimeStatusStats" class="stats"></div>
+        <div id="runtimeStatusDetails" class="list"></div>
+      </div>
       <div class="card overview">
         <div class="card-head">
           <div>
@@ -293,6 +310,6 @@
       if (failure) failure.innerHTML = data.overview_latest_failure_html || "";
     })();
   </script>
-  <script src="/app.js?v=2.0.1"></script>
+  <script src="/app.js?v=2.0.2"></script>
 </body>
 </html>
