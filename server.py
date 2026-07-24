@@ -141,8 +141,8 @@ if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
 TEST_DB_PATH_RAW = os.environ.get("INFO_ANALYZER_TEST_DB_PATH", "").strip()
 
-APP_VERSION = "v0.93-local-runtime-reliability"
-SCHEMA_VERSION = 1
+APP_VERSION = "v0.94-universal-capture-inbox"
+SCHEMA_VERSION = 2
 DATA_PLANE_LEASE_SECONDS = 30
 SCHEDULER_LEASE_SECONDS = 8
 RECOVERY_RETRY_DELAY_SECONDS = 2
@@ -1785,6 +1785,65 @@ def init_db() -> None:
             FOREIGN KEY(source_id) REFERENCES ingest_sources(id)
         );
 
+        CREATE TABLE IF NOT EXISTS raw_observations (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            captured_at TEXT NOT NULL,
+            source_client TEXT DEFAULT 'web',
+            source_type TEXT DEFAULT 'Observation',
+            domain TEXT DEFAULT 'Other',
+            entity TEXT,
+            urgency TEXT DEFAULT 'normal',
+            tags TEXT DEFAULT '[]',
+            raw_input TEXT NOT NULL,
+            processing_status TEXT DEFAULT 'queued',
+            latest_job_id TEXT,
+            latest_signal_id TEXT,
+            metadata TEXT DEFAULT '{}'
+        );
+
+        CREATE TABLE IF NOT EXISTS processing_jobs (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            observation_id TEXT NOT NULL,
+            job_type TEXT DEFAULT 'deterministic_signal_processing',
+            status TEXT DEFAULT 'queued',
+            attempts INTEGER DEFAULT 0,
+            max_attempts INTEGER DEFAULT 1,
+            started_at TEXT,
+            finished_at TEXT,
+            error TEXT,
+            metadata TEXT DEFAULT '{}',
+            FOREIGN KEY(observation_id) REFERENCES raw_observations(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS processed_signals (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            observation_id TEXT NOT NULL,
+            job_id TEXT NOT NULL,
+            domain TEXT DEFAULT 'Other',
+            entity TEXT,
+            source_type TEXT DEFAULT 'Observation',
+            signal_type TEXT DEFAULT 'watch',
+            route TEXT DEFAULT 'watch',
+            signal TEXT,
+            interpretation TEXT,
+            returned_action TEXT,
+            first_step TEXT,
+            tracking_metric TEXT,
+            resurfacing_trigger TEXT,
+            confidence TEXT DEFAULT 'Medium',
+            status TEXT DEFAULT 'active',
+            tags TEXT DEFAULT '[]',
+            metadata TEXT DEFAULT '{}',
+            FOREIGN KEY(observation_id) REFERENCES raw_observations(id),
+            FOREIGN KEY(job_id) REFERENCES processing_jobs(id)
+        );
+
         CREATE TABLE IF NOT EXISTS data_plane_jobs (
             id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL,
@@ -1952,6 +2011,13 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_live_signals_status ON live_signals(status, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_live_signals_domain ON live_signals(domain, status);
         CREATE INDEX IF NOT EXISTS idx_live_signals_source ON live_signals(source_id, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_raw_observations_created ON raw_observations(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_raw_observations_status ON raw_observations(processing_status, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_raw_observations_entity ON raw_observations(entity, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_processing_jobs_observation ON processing_jobs(observation_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_processing_jobs_status ON processing_jobs(status, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_processed_signals_observation ON processed_signals(observation_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_processed_signals_route ON processed_signals(route, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_data_plane_jobs_status ON data_plane_jobs(status, scheduled_for, next_attempt_at);
         CREATE INDEX IF NOT EXISTS idx_data_plane_jobs_source ON data_plane_jobs(source_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_worker_claims_job ON worker_claims(job_id, created_at DESC);
@@ -8396,6 +8462,258 @@ def stock_intel(symbol: str, company: str = "", save: bool = False) -> dict:
     return result
 
 
+def row_to_raw_observation(row) -> dict:
+    item = dict(row)
+    item["tags"] = json_loads(item.get("tags"), [])
+    item["metadata"] = json_loads(item.get("metadata"), {})
+    return item
+
+
+def row_to_processing_job(row) -> dict:
+    item = dict(row)
+    item["metadata"] = json_loads(item.get("metadata"), {})
+    return item
+
+
+def row_to_processed_signal(row) -> dict:
+    item = dict(row)
+    item["tags"] = json_loads(item.get("tags"), [])
+    item["metadata"] = json_loads(item.get("metadata"), {})
+    return item
+
+
+def inbox_route_for_signal(role: str, actionability: str) -> str:
+    if role in {"watch", "preference", "reference"}:
+        return "watch"
+    if role in {"pattern"}:
+        return "pattern"
+    if role in {"contradiction"}:
+        return "decision_update"
+    if role in {"archive"} or actionability == "no_action":
+        return "archive"
+    return "action"
+
+
+def deterministic_processed_signal(observation: dict, job_id: str) -> dict:
+    raw = observation["raw_input"]
+    tags = observation.get("tags") or []
+    payload = {
+        "raw_input": raw,
+        "domain": observation.get("domain") or "",
+        "entity": observation.get("entity") or "",
+        "source_type": observation.get("source_type") or "",
+        "tags": tags,
+        "metadata": {"raw_observation_id": observation["id"], "processor": "deterministic-v1"},
+    }
+    draft = codify_payload(payload)
+    role = draft["signal_role"]
+    if re.search(r"\b(watch|monitor|track|check later|review this week)\b", normalize_text(raw)):
+        role = "watch"
+        draft["signal_role"] = "watch"
+        draft["actionability"] = "watch"
+        draft["card_type"] = "Watch Card"
+    route = inbox_route_for_signal(role, draft.get("actionability") or "")
+    entity = draft.get("entity") or observation.get("entity") or "Captured signal"
+    domain = draft.get("domain") or observation.get("domain") or "Other"
+
+    if domain == "Investing" and route == "watch":
+        draft["returned_action"] = f"Build a one-page intelligence card for {entity} and monitor the evidence that would change the buy/watch/avoid decision."
+        draft["first_step"] = f"Pull latest financials and news for {entity}, then compare demand, margins, cash conversion, and AI infrastructure exposure."
+        draft["tracking_metric"] = draft.get("tracking_metric") or "Revenue, margin, cash conversion, guidance, AI demand signal, and thesis confidence change."
+    if not draft.get("first_step"):
+        draft["first_step"] = first_step_for(domain, role, draft.get("returned_action") or "", draft.get("tracking_metric") or "")
+
+    now = now_iso()
+    return {
+        "id": make_id("PSIG"),
+        "created_at": now,
+        "updated_at": now,
+        "observation_id": observation["id"],
+        "job_id": job_id,
+        "domain": domain,
+        "entity": entity,
+        "source_type": draft.get("source_type") or observation.get("source_type") or "Observation",
+        "signal_type": role,
+        "route": route,
+        "signal": draft.get("signal") or simple_summary(raw),
+        "interpretation": draft.get("interpretation") or f"This captured note should be routed as a {route} signal.",
+        "returned_action": draft.get("returned_action") or "Review this signal and decide whether to act, watch, or archive.",
+        "first_step": draft.get("first_step") or "Review the captured signal and assign the first executable step.",
+        "tracking_metric": draft.get("tracking_metric") or default_tracking_metric(domain, role),
+        "resurfacing_trigger": draft.get("pull_trigger") or draft.get("trigger_condition") or default_pull_trigger(domain, entity, tags, role, draft.get("actionability") or "watch"),
+        "confidence": draft.get("confidence") or "Medium",
+        "status": "active",
+        "tags": draft.get("tags") or tags,
+        "metadata": {
+            "actionability": draft.get("actionability"),
+            "card_type": draft.get("card_type"),
+            "trackable_as": draft.get("trackable_as"),
+            "raw_observation_id": observation["id"],
+            "processor": "deterministic-v1",
+            "raw_preserved": True,
+        },
+    }
+
+
+def load_inbox_observation(conn, observation_id: str) -> dict:
+    row = conn.execute("SELECT * FROM raw_observations WHERE id=?", (observation_id,)).fetchone()
+    if not row:
+        raise KeyError(f"raw observation not found: {observation_id}")
+    observation = row_to_raw_observation(row)
+    job_row = conn.execute("SELECT * FROM processing_jobs WHERE observation_id=? ORDER BY created_at DESC LIMIT 1", (observation_id,)).fetchone()
+    signal_row = conn.execute("SELECT * FROM processed_signals WHERE observation_id=? ORDER BY created_at DESC LIMIT 1", (observation_id,)).fetchone()
+    observation["latest_job"] = row_to_processing_job(job_row) if job_row else None
+    observation["latest_signal"] = row_to_processed_signal(signal_row) if signal_row else None
+    return observation
+
+
+def create_inbox_observation(payload: dict, request_meta: dict | None = None) -> dict:
+    raw_value = payload.get("raw_input", payload.get("raw_note", payload.get("note", "")))
+    raw_input = raw_value if isinstance(raw_value, str) else json.dumps(raw_value, ensure_ascii=False)
+    if not raw_input.strip():
+        raise ValueError("raw_input is required")
+    provided_tags = normalize_tags(payload.get("tags"))
+    domain = clean_text(payload.get("domain")) or detect_domain(raw_input, provided_tags)
+    if domain not in DOMAINS:
+        domain = "Other"
+    entity = clean_text(payload.get("entity")) or infer_entity(raw_input, domain)
+    source_type = detect_source_type(raw_input, clean_text(payload.get("source_type")) or clean_text(payload.get("source")))
+    tags = extract_tags(raw_input, domain, provided_tags)
+    now = now_iso()
+    observation_id = make_id("OBS")
+    job_id = make_id("PJOB")
+    source_client = clean_text(payload.get("source_client")) or (request_meta or {}).get("source_client") or "web"
+    metadata = {
+        "source_chat": clean_text(payload.get("source_chat")) or (request_meta or {}).get("source_chat") or "",
+        "request_id": clean_text(payload.get("request_id")) or (request_meta or {}).get("request_id") or "",
+        "capture_contract": "M0.94 universal capture inbox",
+    }
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO raw_observations
+            (id, created_at, updated_at, captured_at, source_client, source_type, domain, entity,
+             urgency, tags, raw_input, processing_status, latest_job_id, latest_signal_id, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                observation_id, now, now, clean_text(payload.get("captured_at")) or now,
+                source_client, source_type, domain, entity,
+                clean_text(payload.get("urgency")) or "normal",
+                json.dumps(tags, ensure_ascii=False),
+                raw_input,
+                "queued",
+                job_id,
+                "",
+                json.dumps(metadata, ensure_ascii=False),
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO processing_jobs
+            (id, created_at, updated_at, observation_id, job_type, status, attempts, max_attempts, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                job_id, now, now, observation_id, "deterministic_signal_processing", "queued", 0, 1,
+                json.dumps({"processor": "deterministic-v1"}, ensure_ascii=False),
+            ),
+        )
+        audit(conn, "create", "raw_observation", observation_id, {"processing_job_id": job_id, "domain": domain, "entity": entity})
+        conn.commit()
+        return {
+            "observation": load_inbox_observation(conn, observation_id),
+            "processing_job": row_to_processing_job(conn.execute("SELECT * FROM processing_jobs WHERE id=?", (job_id,)).fetchone()),
+        }
+
+
+def process_inbox_observation(observation_id: str) -> dict:
+    now = now_iso()
+    with connect() as conn:
+        observation = load_inbox_observation(conn, observation_id)
+        job_row = conn.execute(
+            "SELECT * FROM processing_jobs WHERE observation_id=? AND status IN ('queued','failed') ORDER BY created_at DESC LIMIT 1",
+            (observation_id,),
+        ).fetchone()
+        if not job_row:
+            job_id = make_id("PJOB")
+            conn.execute(
+                """
+                INSERT INTO processing_jobs
+                (id, created_at, updated_at, observation_id, job_type, status, attempts, max_attempts, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (job_id, now, now, observation_id, "deterministic_signal_processing", "queued", 0, 1, json.dumps({"processor": "deterministic-v1"})),
+            )
+            job_row = conn.execute("SELECT * FROM processing_jobs WHERE id=?", (job_id,)).fetchone()
+        job = row_to_processing_job(job_row)
+        try:
+            conn.execute(
+                "UPDATE processing_jobs SET updated_at=?, status='running', attempts=attempts+1, started_at=?, error='' WHERE id=?",
+                (now, now, job["id"]),
+            )
+            signal = deterministic_processed_signal(observation, job["id"])
+            conn.execute(
+                """
+                INSERT INTO processed_signals
+                (id, created_at, updated_at, observation_id, job_id, domain, entity, source_type,
+                 signal_type, route, signal, interpretation, returned_action, first_step, tracking_metric,
+                 resurfacing_trigger, confidence, status, tags, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    signal["id"], signal["created_at"], signal["updated_at"], signal["observation_id"], signal["job_id"],
+                    signal["domain"], signal["entity"], signal["source_type"], signal["signal_type"], signal["route"],
+                    signal["signal"], signal["interpretation"], signal["returned_action"], signal["first_step"],
+                    signal["tracking_metric"], signal["resurfacing_trigger"], signal["confidence"], signal["status"],
+                    json.dumps(signal["tags"], ensure_ascii=False), json.dumps(signal["metadata"], ensure_ascii=False),
+                ),
+            )
+            conn.execute(
+                "UPDATE processing_jobs SET updated_at=?, status='succeeded', finished_at=?, error='' WHERE id=?",
+                (now_iso(), now_iso(), job["id"]),
+            )
+            conn.execute(
+                "UPDATE raw_observations SET updated_at=?, processing_status='processed', latest_job_id=?, latest_signal_id=? WHERE id=?",
+                (now_iso(), job["id"], signal["id"], observation_id),
+            )
+            audit(conn, "process", "raw_observation", observation_id, {"processing_job_id": job["id"], "processed_signal_id": signal["id"], "route": signal["route"]})
+            conn.commit()
+            return {
+                "observation": load_inbox_observation(conn, observation_id),
+                "processing_job": row_to_processing_job(conn.execute("SELECT * FROM processing_jobs WHERE id=?", (job["id"],)).fetchone()),
+                "processed_signal": row_to_processed_signal(conn.execute("SELECT * FROM processed_signals WHERE id=?", (signal["id"],)).fetchone()),
+            }
+        except Exception as exc:
+            message = str(exc)
+            conn.execute(
+                "UPDATE processing_jobs SET updated_at=?, status='failed', finished_at=?, error=? WHERE id=?",
+                (now_iso(), now_iso(), message, job["id"]),
+            )
+            conn.execute(
+                "UPDATE raw_observations SET updated_at=?, processing_status='error', latest_job_id=? WHERE id=?",
+                (now_iso(), job["id"], observation_id),
+            )
+            audit(conn, "error", "raw_observation", observation_id, {"processing_job_id": job["id"], "error": message})
+            conn.commit()
+            raise
+
+
+def recent_inbox_observations(limit: int = 20) -> dict:
+    limit = max(1, min(int(limit or 20), 100))
+    with connect() as conn:
+        rows = conn.execute("SELECT * FROM raw_observations ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+        observations = [load_inbox_observation(conn, row["id"]) for row in rows]
+        counts = {
+            "raw_observations": conn.execute("SELECT COUNT(*) FROM raw_observations").fetchone()[0],
+            "processing_jobs": conn.execute("SELECT COUNT(*) FROM processing_jobs").fetchone()[0],
+            "processed_signals": conn.execute("SELECT COUNT(*) FROM processed_signals").fetchone()[0],
+            "queued": conn.execute("SELECT COUNT(*) FROM raw_observations WHERE processing_status='queued'").fetchone()[0],
+            "processed": conn.execute("SELECT COUNT(*) FROM raw_observations WHERE processing_status='processed'").fetchone()[0],
+        }
+    return {"observations": observations, "count": len(observations), "counts": counts}
+
+
 def import_all(payload: dict) -> dict:
     saved = {"entries": 0, "relationships": 0}
     with connect() as conn:
@@ -8546,6 +8864,9 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             if path == "/api/v1/health":
                 data = {"ok": True, "version": APP_VERSION, "api": "v1", "sqlite": sqlite_runtime_status()}
+            elif path == "/api/v1/inbox/recent":
+                limit = int(clean_text((params.get("limit") or ["20"])[0]) or 20)
+                data = recent_inbox_observations(limit=limit)
             elif path == "/api/v1/entries/search":
                 data = api_v1_search_entries(params)
             elif path == "/api/v1/action_queue":
@@ -8596,6 +8917,15 @@ class Handler(SimpleHTTPRequestHandler):
                 data = api_v1_save_entry(payload, request_meta)
                 entity_id = clean_text(data.get("entry_id") or "")
                 status = 201
+            elif method == "POST" and path == "/api/v1/inbox":
+                data = create_inbox_observation(payload, request_meta)
+                entity_id = clean_text(data.get("observation", {}).get("id") or "")
+                status = 201
+            elif method == "POST" and path.startswith("/api/v1/inbox/") and path.endswith("/process"):
+                observation_id = unquote(path.split("/api/v1/inbox/", 1)[1].rsplit("/process", 1)[0])
+                data = process_inbox_observation(observation_id)
+                entity_id = observation_id
+                status = 201
             elif method == "POST" and path == "/api/v1/context":
                 data = api_v1_related_context(payload)
                 status = 201
@@ -8641,6 +8971,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.handle_v1_read(path, params)
             if path in {"/", "/index.html"}:
                 return self.send_cutover_index(params)
+            if path == "/dump":
+                return self.send_cutover_index({"view": ["capture"]})
             if path == "/app.js":
                 return self.send_file(WEB_DIR / "app-cutover.js", "application/javascript; charset=utf-8")
             if path == "/app-cutover.js":
@@ -8651,6 +8983,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json({"ok": True, "app": "Info Analyzer OS", "version": APP_VERSION, "db_path": str(DB_PATH), "sqlite": sqlite_runtime_status(), "data_plane": data_plane_status()})
             if path == "/api/runtime/status":
                 return self.send_json(runtime_status())
+            if path == "/api/inbox/recent":
+                limit = int(clean_text((params.get("limit") or ["20"])[0]) or 20)
+                return self.send_json(recent_inbox_observations(limit=limit))
             # Human Analyst Workbench GET endpoints - MINIMAL SLICE
             if path == "/api/workbench/reviews":
                 try:
@@ -8968,6 +9303,12 @@ class Handler(SimpleHTTPRequestHandler):
             payload = self.read_json()
             if path.startswith("/api/v1/"):
                 return self.handle_v1_write("POST", path, payload)
+            if path == "/api/inbox":
+                result = create_inbox_observation(payload)
+                return self.send_json({"success": True, **result}, 201)
+            if path.startswith("/api/inbox/") and path.endswith("/process"):
+                observation_id = unquote(path.split("/api/inbox/", 1)[1].rsplit("/process", 1)[0])
+                return self.send_json({"success": True, **process_inbox_observation(observation_id)}, 201)
             if path == "/api/codify":
                 return self.send_json({"draft": codify_payload(payload)})
             # Human Analyst Workbench POST endpoints - MINIMAL SLICE

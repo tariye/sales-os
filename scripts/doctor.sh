@@ -49,8 +49,8 @@ import urllib.request
 base = sys.argv[1]
 checks = [
     ("GET", "/", base + "/"),
-    ("GET", "/app.js?v=2.0.2", base + "/app.js?v=2.0.2"),
-    ("GET", "/style.css?v=2.0.2", base + "/style.css?v=2.0.2"),
+    ("GET", "/app.js?v=2.0.3", base + "/app.js?v=2.0.3"),
+    ("GET", "/style.css?v=2.0.3", base + "/style.css?v=2.0.3"),
     ("GET", "/api/runtime/status", base + "/api/runtime/status"),
 ]
 

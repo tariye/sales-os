@@ -12,6 +12,7 @@ const VIEW_QUERY_KEY = "view";
 const DEFAULT_VIEW = "overview";
 const VIEWS = new Set([
   "overview",
+  "capture",
   "human-review",
   "sources",
   "evidence",
@@ -25,6 +26,8 @@ const VIEWS = new Set([
 
 let buildInfo = null;
 let runtimeStatusData = null;
+let latestCapturedObservation = null;
+let latestProcessedSignal = null;
 let overviewData = null;
 let sourcesData = null;
 let evidenceData = null;
@@ -33,7 +36,8 @@ let jobsRunsData = null;
 let legacyData = null;
 let stockIntelData = null;
 const bootstrapData = window.__CUTOVER_BOOTSTRAP__ || null;
-const bootstrapInitialView = normalizeView(new URLSearchParams(window.location.search).get(VIEW_QUERY_KEY) || new URLSearchParams(window.location.search).get("tab") || "");
+const pathInitialView = window.location.pathname === "/dump" ? "capture" : "";
+const bootstrapInitialView = normalizeView(pathInitialView || new URLSearchParams(window.location.search).get(VIEW_QUERY_KEY) || new URLSearchParams(window.location.search).get("tab") || "");
 
 function api(path, opts = {}) {
   return fetch(API + path, {
@@ -113,6 +117,7 @@ function setRuntimeBanner(kind, title, detail) {
 function renderRuntimeStatus(data) {
   runtimeStatusData = data;
   setRuntimeBanner("success", "Connected", `Last API status: ${data.last_api_status || "ok"} at ${fmtDate(data.generated_at)}`);
+  updateCaptureConnectionFromRuntime();
   const scheduler = data.data_plane?.scheduler || {};
   const worker = (data.data_plane?.workers || [])[0] || {};
   if ($("runtimeStatusStats")) {
@@ -145,6 +150,7 @@ function renderRuntimeStatus(data) {
 function renderRuntimeDisconnected(error) {
   runtimeStatusData = null;
   setRuntimeBanner("error", "Disconnected", `Last API status: failed. ${error?.message || "The server did not respond."}`);
+  updateCaptureConnectionFromRuntime();
   if ($("runtimeStatusStats")) {
     $("runtimeStatusStats").innerHTML = [
       statHTML("disconnected", "Server"),
@@ -169,7 +175,7 @@ function normalizeView(view) {
 
 function readViewFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  return normalizeView(params.get(VIEW_QUERY_KEY) || params.get("tab") || "");
+  return normalizeView(pathInitialView || params.get(VIEW_QUERY_KEY) || params.get("tab") || "");
 }
 
 function readSavedView() {
@@ -201,6 +207,10 @@ function setActiveView(view) {
   if (next === "overview") {
     loadRuntimeStatus();
     loadOverview();
+  }
+  if (next === "capture") {
+    loadRuntimeStatus();
+    loadRecentCaptures();
   }
   if (next === "human-review") loadTestModeStatus();
   if (next === "sources") loadSources();
@@ -299,6 +309,157 @@ function renderOverview(data) {
         <p class="muted">${esc(failure.message || "")}</p>
       </div>`
     : `<div class="item"><h3>No recent failure</h3><p class="muted">No failed or dead-letter health event is available yet.</p></div>`;
+}
+
+function setCaptureConnection(kind, title, detail) {
+  const banner = $("captureConnectionBanner");
+  if (!banner) return;
+  banner.className = `banner banner-${kind}`;
+  if ($("captureConnection")) $("captureConnection").textContent = title;
+  if ($("captureConnectionDetail")) $("captureConnectionDetail").textContent = detail;
+}
+
+function updateCaptureConnectionFromRuntime() {
+  if (runtimeStatusData) {
+    setCaptureConnection("success", "Connected", `Runtime ${runtimeStatusData.application_version || ""} on ${runtimeStatusData.git_branch || "unknown branch"}.`);
+  } else {
+    setCaptureConnection("error", "Disconnected", "The capture inbox cannot write until the local server responds.");
+  }
+}
+
+function processedSignalHTML(signal) {
+  if (!signal) return "";
+  return `<div class="item action-card processed-signal-card" data-signal-route="${esc(signal.route || "")}">
+    <h3>${esc(signal.signal || "Processed Signal")}</h3>
+    <div class="meta">
+      <span class="tag">${esc(signal.route || "")}</span>
+      <span class="tag">${esc(signal.signal_type || "")}</span>
+      <span class="tag">${esc(signal.confidence || "Medium")}</span>
+    </div>
+    <p class="muted">${esc(signal.interpretation || "")}</p>
+    ${kvHTML("Entity", signal.entity || "")}
+    ${kvHTML("Returned Action", signal.returned_action || "")}
+    ${kvHTML("First Step", signal.first_step || "")}
+    ${kvHTML("Tracking Metric", signal.tracking_metric || "")}
+    ${kvHTML("Resurface When", signal.resurfacing_trigger || "")}
+    ${kvHTML("Signal ID", signal.id || "")}
+  </div>`;
+}
+
+function observationCardHTML(observation, showActions = true) {
+  const signal = observation.latest_signal;
+  const raw = observation.raw_input || "";
+  return `<div class="item capture-observation-card">
+    <h3>${esc(observation.entity || observation.id)}</h3>
+    <div class="meta">
+      <span class="tag">${esc(observation.processing_status || "queued")}</span>
+      <span class="tag">${esc(observation.domain || "Other")}</span>
+      <span class="tag">${esc(observation.source_type || "Observation")}</span>
+      ${signal ? `<span class="tag">${esc(signal.route || "")}</span>` : ""}
+    </div>
+    <p class="muted">${esc(raw.slice(0, 220))}</p>
+    ${kvHTML("Observation ID", observation.id || "")}
+    ${kvHTML("Captured", fmtDate(observation.captured_at || observation.created_at || ""))}
+    ${signal ? processedSignalHTML(signal) : ""}
+    ${showActions ? `<div class="buttons compact"><button class="secondary small" data-process-observation="${esc(observation.id)}">Process Now</button></div>` : ""}
+  </div>`;
+}
+
+function renderCaptureSuccess(observation) {
+  latestCapturedObservation = observation;
+  latestProcessedSignal = observation.latest_signal || null;
+  if ($("captureStatus")) {
+    $("captureStatus").innerHTML = `<div class="item">
+      <h3>Captured</h3>
+      <div class="meta">
+        <span class="tag">${esc(observation.processing_status || "queued")}</span>
+        <span class="tag">${esc(observation.id || "")}</span>
+      </div>
+      ${kvHTML("Observation ID", observation.id || "")}
+      ${kvHTML("Processing Status", observation.processing_status || "")}
+      <p class="muted">${esc((observation.raw_input || "").slice(0, 260))}</p>
+      <div class="buttons compact">
+        <button id="processLatestCaptureBtn" class="secondary small">Process Now</button>
+      </div>
+    </div>`;
+    $("processLatestCaptureBtn")?.addEventListener("click", () => processObservation(observation.id));
+  }
+  if ($("processedSignalOutput")) {
+    $("processedSignalOutput").innerHTML = observation.latest_signal ? processedSignalHTML(observation.latest_signal) : "";
+  }
+}
+
+function renderCaptureError(message) {
+  if ($("captureStatus")) {
+    $("captureStatus").innerHTML = `<div class="item error"><h3>Capture Error</h3><p class="muted">${esc(message)}</p></div>`;
+  }
+}
+
+function capturePayload() {
+  return {
+    raw_input: $("captureRawInput")?.value ?? "",
+    domain: $("captureDomain")?.value ?? "",
+    entity: $("captureEntity")?.value ?? "",
+    source_type: $("captureSourceType")?.value ?? "Observation",
+    urgency: $("captureUrgency")?.value ?? "normal",
+    tags: $("captureTags")?.value ?? "",
+    source_client: "web-capture",
+  };
+}
+
+async function captureSignal() {
+  const btn = $("captureSignalBtn");
+  const payload = capturePayload();
+  if (!payload.raw_input.trim()) {
+    renderCaptureError("Raw note is required.");
+    return;
+  }
+  try {
+    btn.disabled = true;
+    if ($("captureStatus")) $("captureStatus").innerHTML = `<div class="item"><h3>Capturing</h3><p class="muted">Writing raw observation and queued processing job...</p></div>`;
+    await visibleFeedbackDelay();
+    const result = await api("/inbox", { method: "POST", body: JSON.stringify(payload) });
+    renderCaptureSuccess(result.observation);
+    toast("Captured signal");
+    await loadRecentCaptures();
+  } catch (err) {
+    setCaptureConnection("error", "Disconnected", `Capture failed: ${err.message}`);
+    renderCaptureError(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function processObservation(observationId) {
+  if (!observationId) return;
+  const output = $("processedSignalOutput");
+  try {
+    if (output) output.innerHTML = `<div class="item"><h3>Processing</h3><p class="muted">Running deterministic signal translation...</p></div>`;
+    await visibleFeedbackDelay();
+    const result = await api(`/inbox/${encodeURIComponent(observationId)}/process`, { method: "POST", body: JSON.stringify({}) });
+    latestCapturedObservation = result.observation;
+    latestProcessedSignal = result.processed_signal;
+    if (output) output.innerHTML = processedSignalHTML(result.processed_signal);
+    renderCaptureSuccess(result.observation);
+    toast("Processed signal");
+    await loadRecentCaptures();
+  } catch (err) {
+    if (output) output.innerHTML = `<div class="item error"><h3>Processing Error</h3><p class="muted">${esc(err.message)}</p></div>`;
+  }
+}
+
+async function loadRecentCaptures() {
+  updateCaptureConnectionFromRuntime();
+  try {
+    const data = await api("/inbox/recent?limit=20");
+    const observations = data.observations || [];
+    $("recentCaptures").innerHTML = observations.length
+      ? observations.map(obs => observationCardHTML(obs)).join("")
+      : `<div class="item"><h3>No captures yet</h3><p class="muted">Use Capture Signal to create the first raw observation.</p></div>`;
+  } catch (err) {
+    setCaptureConnection("error", "Disconnected", `Recent captures failed: ${err.message}`);
+    $("recentCaptures").innerHTML = `<div class="item error"><h3>Recent Captures Unavailable</h3><p class="muted">${esc(err.message)}</p></div>`;
+  }
 }
 
 function sourceCardHTML(source) {
@@ -1027,6 +1188,8 @@ function bindViewButtons() {
 function bindRefreshButtons() {
   $("refreshRuntimeStatus")?.addEventListener("click", loadRuntimeStatus);
   $("refreshOverview")?.addEventListener("click", loadOverview);
+  $("refreshInbox")?.addEventListener("click", loadRecentCaptures);
+  $("captureSignalBtn")?.addEventListener("click", captureSignal);
   $("refreshSources")?.addEventListener("click", loadSources);
   $("refreshEvidence")?.addEventListener("click", loadEvidence);
   $("refreshSystemHealth")?.addEventListener("click", loadSystemHealth);
@@ -1043,6 +1206,10 @@ document.addEventListener("click", event => {
   const button = event.target.closest("[data-select-evidence]");
   if (button) {
     selectEvidence(Number(button.dataset.selectEvidence));
+  }
+  const processButton = event.target.closest("[data-process-observation]");
+  if (processButton) {
+    processObservation(processButton.dataset.processObservation);
   }
 });
 

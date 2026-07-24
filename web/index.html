@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Info Analyzer OS</title>
-  <link rel="stylesheet" href="/style.css?v=2.0.2" />
+  <link rel="stylesheet" href="/style.css?v=2.0.3" />
 </head>
 <body>
   <header class="hero-band app-shell">
@@ -20,6 +20,7 @@
 
   <nav class="tabs" aria-label="Primary">
     <button class="tab active" data-view="overview">Overview</button>
+    <button class="tab" data-view="capture">Capture</button>
     <button class="tab" data-view="human-review">Human Review</button>
     <button class="tab" data-view="sources">Sources</button>
     <button class="tab" data-view="evidence">Evidence</button>
@@ -73,6 +74,85 @@
       <div class="card">
         <div class="card-head"><div><p class="eyebrow">Latest Failure</p><h2>Diagnostics</h2></div></div>
         <div id="overviewLatestFailure" class="list"></div>
+      </div>
+    </section>
+
+    <section id="capture" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Universal Inbox</p>
+            <h2>Capture Signal</h2>
+            <p class="subtitle">Save raw evidence first. Processing can happen now or later.</p>
+          </div>
+          <button id="refreshInbox" class="ghost small">Refresh</button>
+        </div>
+        <div id="captureConnectionBanner" class="banner banner-info">
+          <div class="banner-content">
+            <p><strong>Server:</strong> <span id="captureConnection">Checking</span></p>
+            <p id="captureConnectionDetail" class="muted">Waiting for runtime status.</p>
+          </div>
+        </div>
+        <label>Raw Note
+          <textarea id="captureRawInput" rows="6" placeholder="Drop the observation, plan, article snippet, signal, or note here."></textarea>
+        </label>
+        <div class="grid three">
+          <label>Domain
+            <select id="captureDomain">
+              <option value="">Auto</option>
+              <option>Investing</option>
+              <option>Lab</option>
+              <option>Business</option>
+              <option>Career</option>
+              <option>AI Project</option>
+              <option>Info Analyzer OS</option>
+              <option>Personal Finance</option>
+              <option>Personal Preference</option>
+              <option>Other</option>
+            </select>
+          </label>
+          <label>Entity
+            <input id="captureEntity" placeholder="SK Hynix, Operator Training, Sales OS" />
+          </label>
+          <label>Source Type
+            <select id="captureSourceType">
+              <option>Observation</option>
+              <option>Plan</option>
+              <option>Document</option>
+              <option>Article Snippet</option>
+              <option>Conversation</option>
+              <option>Measurement</option>
+              <option>Question</option>
+              <option>Idea</option>
+              <option>Result</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid two">
+          <label>Urgency
+            <select id="captureUrgency">
+              <option>normal</option>
+              <option>low</option>
+              <option>high</option>
+              <option>critical</option>
+            </select>
+          </label>
+          <label>Tags
+            <input id="captureTags" placeholder="ai-memory, semiconductors, watchlist" />
+          </label>
+        </div>
+        <div class="buttons">
+          <button id="captureSignalBtn" class="primary">Capture Signal</button>
+        </div>
+        <div id="captureStatus" class="list" style="margin-top:14px"></div>
+        <div id="processedSignalOutput" class="list" style="margin-top:14px"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div><p class="eyebrow">Recent</p><h2>Recent Captures</h2></div>
+        </div>
+        <div id="recentCaptures" class="list"></div>
       </div>
     </section>
 
@@ -310,6 +390,6 @@
       if (failure) failure.innerHTML = data.overview_latest_failure_html || "";
     })();
   </script>
-  <script src="/app.js?v=2.0.2"></script>
+  <script src="/app.js?v=2.0.3"></script>
 </body>
 </html>

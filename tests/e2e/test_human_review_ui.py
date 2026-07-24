@@ -93,6 +93,14 @@ def query_db(path: Path, sql: str, args: tuple = ()) -> list[dict]:
         return [dict(row) for row in conn.execute(sql, args)]
 
 
+def count_table(path: Path, table: str) -> int:
+    try:
+        rows = query_db(path, f"SELECT COUNT(*) AS count FROM {table}")
+        return int(rows[0]["count"])
+    except Exception:
+        return 0
+
+
 def start_server() -> subprocess.Popen:
     env = os.environ.copy()
     env["INFO_ANALYZER_DB_PATH"] = str(ACTIVE_DB)
@@ -181,12 +189,19 @@ def main() -> int:
         "test_db": str(TEST_DB),
         "server_log": str(SERVER_LOG),
         "screenshots": [],
+        "db_counts_before": {},
+        "db_counts_after_capture": {},
     }
 
     health = wait_health()
     summary["initial_health"] = health
     if health.get("db_path") != str(ACTIVE_DB):
         raise AssertionError(f"wrong active DB served: {health.get('db_path')} != {ACTIVE_DB}")
+    summary["db_counts_before"] = {
+        "raw_observations": count_table(ACTIVE_DB, "raw_observations"),
+        "processing_jobs": count_table(ACTIVE_DB, "processing_jobs"),
+        "processed_signals": count_table(ACTIVE_DB, "processed_signals"),
+    }
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -205,8 +220,8 @@ def main() -> int:
             capture(page, "initial-page")
             expect(page.locator("body")).not_to_be_empty()
 
-            app_asset = next((e for e in network_events if e["url"].endswith("/app.js?v=2.0.2")), None)
-            css_asset = next((e for e in network_events if e["url"].endswith("/style.css?v=2.0.2")), None)
+            app_asset = next((e for e in network_events if e["url"].endswith("/app.js?v=2.0.3")), None)
+            css_asset = next((e for e in network_events if e["url"].endswith("/style.css?v=2.0.3")), None)
             if not app_asset or app_asset["status"] != 200:
                 fail(f"app.js did not load successfully: {app_asset}", page)
             if not css_asset or css_asset["status"] != 200:
@@ -220,6 +235,52 @@ def main() -> int:
             expect(page.locator("#runtimeStatusDetails")).to_contain_text(str(ACTIVE_DB), timeout=8000)
             expect(page.locator("#runtimeStatusDetails")).to_contain_text(str(TEST_DB), timeout=8000)
             capture(page, "runtime-status")
+
+            page.get_by_role("button", name="Capture", exact=True).click()
+            expect(page.locator("#capture")).to_be_visible(timeout=5000)
+            require_text(page, "Capture Signal", "Capture page did not render")
+            expect(page.locator("#captureConnection")).to_have_text("Connected", timeout=8000)
+            capture(page, "capture-empty")
+            page.locator("#captureRawInput").fill("Explore SK Hynix this week and watch for AI memory demand signals.")
+            page.locator("#captureDomain").select_option(label="Investing")
+            page.locator("#captureEntity").fill("SK Hynix")
+            page.locator("#captureSourceType").select_option(label="Plan")
+            page.locator("#captureUrgency").select_option(label="normal")
+            page.locator("#captureTags").fill("ai-memory, semiconductors, watchlist")
+            page.locator("#captureSignalBtn").click()
+            require_text(page, "Capturing", "Capture Signal produced no visible loading feedback")
+            expect(page.locator("#captureStatus")).to_contain_text("Captured", timeout=8000)
+            expect(page.locator("#captureStatus")).to_contain_text("Observation ID", timeout=8000)
+            expect(page.locator("#captureStatus")).to_contain_text("queued", timeout=8000)
+            expect(page.locator("#captureStatus")).to_contain_text("Explore SK Hynix this week", timeout=8000)
+            expect(page.locator("#recentCaptures")).to_contain_text("Explore SK Hynix this week", timeout=8000)
+            capture(page, "capture-created")
+            page.locator("#processLatestCaptureBtn").click()
+            require_text(page, "Processing", "Process Now produced no visible processing feedback")
+            require_text(page, "Processed Signal", "Process Now did not show a processed signal card")
+            expect(page.locator("#processedSignalOutput .processed-signal-card")).to_have_attribute("data-signal-route", "watch", timeout=8000)
+            expect(page.locator("#processedSignalOutput")).to_contain_text("SK Hynix", timeout=8000)
+            capture(page, "capture-processed")
+            page.reload(wait_until="networkidle")
+            page.get_by_role("button", name="Capture", exact=True).click()
+            expect(page.locator("#recentCaptures")).to_contain_text("Explore SK Hynix this week", timeout=8000)
+            expect(page.locator("#recentCaptures")).to_contain_text("watch", timeout=8000)
+            capture(page, "capture-after-refresh")
+            summary["db_counts_after_capture"] = {
+                "raw_observations": count_table(ACTIVE_DB, "raw_observations"),
+                "processing_jobs": count_table(ACTIVE_DB, "processing_jobs"),
+                "processed_signals": count_table(ACTIVE_DB, "processed_signals"),
+            }
+
+            stop_pid(current_server_pid)
+            restarted_for_capture = start_server()
+            current_server_pid = restarted_for_capture.pid
+            wait_health()
+            page.goto(BASE_URL + "/dump", wait_until="networkidle")
+            expect(page.locator("#capture")).to_be_visible(timeout=5000)
+            expect(page.locator("#recentCaptures")).to_contain_text("Explore SK Hynix this week", timeout=8000)
+            expect(page.locator("#recentCaptures")).to_contain_text("watch", timeout=8000)
+            capture(page, "capture-after-restart")
 
             page.get_by_role("button", name="Human Review").click()
             capture(page, "test-mode-disabled")
@@ -275,12 +336,12 @@ def main() -> int:
             require_text(page, "Verdict saved successfully", "Duplicate/save success feedback was not visible")
             expect(page.locator("#pendingReviewsList")).not_to_contain_text("pending", timeout=8000)
             capture(page, "saving-state")
-            require_text(page, "completed", "Saved review did not appear in history")
+            expect(page.locator("#historyList")).to_contain_text("completed", timeout=8000)
             capture(page, "saved-history")
 
             page.reload(wait_until="networkidle")
             page.get_by_role("button", name="Human Review").click()
-            require_text(page, "completed", "Saved history did not persist after browser refresh")
+            expect(page.locator("#historyList")).to_contain_text("completed", timeout=8000)
             capture(page, "history-after-refresh")
 
             page.locator("#importFixtureBtn").click()
@@ -307,7 +368,7 @@ def main() -> int:
             wait_health()
             page.goto(BASE_URL + "/", wait_until="networkidle")
             page.get_by_role("button", name="Human Review").click()
-            require_text(page, "completed", "Saved review did not remain visible after server restart")
+            expect(page.locator("#historyList")).to_contain_text("completed", timeout=8000)
 
             page.locator("#testModeToggle").click()
             require_text(page, "Disabled", "Disable Test Mode did not change visible state")
@@ -332,7 +393,7 @@ def main() -> int:
             page2.on("response", lambda response: second_network.append({"url": response.url, "status": response.status}))
             page2.goto(BASE_URL + "/", wait_until="networkidle")
             page2.reload(wait_until="networkidle")
-            app_loads = [e for e in second_network if e["url"].endswith("/app.js?v=2.0.2")]
+            app_loads = [e for e in second_network if e["url"].endswith("/app.js?v=2.0.3")]
             if not app_loads or any(e["status"] != 200 for e in app_loads):
                 raise AssertionError(f"current app.js was not loaded after fresh context/reload: {app_loads}")
             context2.close()
