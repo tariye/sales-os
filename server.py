@@ -3321,14 +3321,14 @@ def impact_metric_for(domain: str, role: str) -> str:
 
 def first_step_for(domain: str, role: str, returned_action: str, tracking_metric: str) -> str:
     action_blob = normalize_text(f"{returned_action} {tracking_metric}")
+    if domain == "Investing":
+        return "Create or update a one-page investment thesis with evidence, monitor metric, decision trigger, and next review date."
     if re.search(r"\bsales?\b|pipeline|lead|outreach|crm|conversion|follow[- ]?up|deal", action_blob):
         return "Create one sales pipeline row with Lead, Stage, Next Follow-Up, Reply Rate, Booked Call, Result, and Review Date."
     if re.search(r"checklist|sop|standard operating procedure|onboarding", action_blob):
         return "Create a checklist with Item, Owner, Required Evidence, Pass/Fail, Result, and Review Date."
     if re.search(r"10-k|10-q|filing|annual report|financial statement", action_blob):
         return "Create a one-page intelligence card with official story, 3 numbers, 3 signals, bull case, bear case, and monitor-next metric."
-    if domain == "Investing":
-        return "Create one ledger row with thesis, allocation rule, tracking metric, review date, and result field."
     if domain == "Lab":
         return "Convert the signal into one checklist item or SOP test and run it on the next relevant session."
     if domain == "AI Project":
@@ -4365,7 +4365,7 @@ def clean_action_title(entry: dict) -> str:
 
 def weak_execution_text(value: str) -> bool:
     t = normalize_text(value)
-    return (not t) or bool(re.search(r"save retrieve related memories|execute/track action|click track signal|review this memory|log the next action/result", t))
+    return (not t) or bool(re.search(r"save retrieve related memories|execute/track action|execute the next concrete step|click track signal|review this memory|log the next action/result", t))
 
 
 def entry_quality_issues(entry: dict) -> list[str]:
@@ -8688,9 +8688,11 @@ def deterministic_processed_signal(observation: dict, job_id: str) -> dict:
     entity = draft.get("entity") or observation.get("entity") or "Captured signal"
     domain = draft.get("domain") or observation.get("domain") or "Other"
 
-    if domain == "Investing" and route == "watch":
-        draft["returned_action"] = f"Build a one-page intelligence card for {entity} and monitor the evidence that would change the buy/watch/avoid decision."
-        draft["first_step"] = f"Pull latest financials and news for {entity}, then compare demand, margins, cash conversion, and AI infrastructure exposure."
+    if domain == "Investing":
+        if weak_execution_text(draft.get("returned_action") or "") or "sales pipeline" in normalize_text(draft.get("returned_action") or ""):
+            draft["returned_action"] = f"Build or update the investment thesis for {entity} and decide whether this is buy research, watchlist evidence, avoid evidence, or a contradiction."
+        if weak_execution_text(draft.get("first_step") or "") or "sales pipeline" in normalize_text(draft.get("first_step") or ""):
+            draft["first_step"] = f"Create a one-page investment card for {entity}: evidence, demand signal, margin/cash signal, risk, decision trigger, and next review date."
         draft["tracking_metric"] = draft.get("tracking_metric") or "Revenue, margin, cash conversion, guidance, AI demand signal, and thesis confidence change."
     if not draft.get("first_step"):
         draft["first_step"] = first_step_for(domain, role, draft.get("returned_action") or "", draft.get("tracking_metric") or "")
