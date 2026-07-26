@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import json
 import os
+import ssl
 from html import escape as html_escape
 import re
 import sqlite3
@@ -68,6 +69,11 @@ try:
 except Exception:
     # Workbench features not available
     pass
+
+try:
+    import certifi as _certifi
+except Exception:
+    _certifi = None  # type: ignore
 
 try:
     import anthropic as _anthropic
@@ -141,7 +147,7 @@ if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
 TEST_DB_PATH_RAW = os.environ.get("INFO_ANALYZER_TEST_DB_PATH", "").strip()
 
-APP_VERSION = "v0.95-automatic-capture-pipe"
+APP_VERSION = "v0.95.1-rss-ca-bundle"
 SCHEMA_VERSION = 2
 DATA_PLANE_LEASE_SECONDS = 30
 SCHEDULER_LEASE_SECONDS = 8
@@ -359,6 +365,15 @@ FEATURE_REGISTRY = [
     },
 ]
 APP_VERSIONS = [
+    {
+        "version": "v0.95.1",
+        "name": "RSS CA Bundle Fix",
+        "features": [
+            "HTTPS RSS/URL ingestion uses certifi or INFO_ANALYZER_CA_FILE for certificate verification",
+            "Certificate failures now return an explicit remediation message instead of a low-level SSL traceback",
+            "Google News RSS sources can be pulled from local Python installs with incomplete platform CA configuration",
+        ],
+    },
     {
         "version": "v0.95",
         "name": "Automatic Capture Pipe",
@@ -5911,6 +5926,15 @@ def source_manual_text(source: dict) -> str:
     )
 
 
+def https_ssl_context() -> ssl.SSLContext | None:
+    cafile = clean_text(os.environ.get("INFO_ANALYZER_CA_FILE") or "")
+    if cafile:
+        return ssl.create_default_context(cafile=cafile)
+    if _certifi is not None:
+        return ssl.create_default_context(cafile=_certifi.where())
+    return None
+
+
 def fetch_url_text(url: str) -> str:
     if not clean_text(url):
         return ""
@@ -5921,8 +5945,17 @@ def fetch_url_text(url: str) -> str:
             "Accept": "application/rss+xml, application/atom+xml, text/html, text/plain;q=0.8, */*;q=0.5",
         },
     )
-    with urllib.request.urlopen(req, timeout=12) as resp:
-        raw = resp.read(2_000_000)
+    try:
+        with urllib.request.urlopen(req, timeout=12, context=https_ssl_context()) as resp:
+            raw = resp.read(2_000_000)
+    except urllib.error.URLError as exc:
+        reason = getattr(exc, "reason", exc)
+        if isinstance(reason, ssl.SSLCertVerificationError):
+            raise RuntimeError(
+                "HTTPS certificate verification failed. Install the certifi package or set INFO_ANALYZER_CA_FILE "
+                "to a valid CA bundle path, then restart Info Analyzer."
+            ) from exc
+        raise
     return raw.decode("utf-8", errors="replace")
 
 

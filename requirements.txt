@@ -1,2 +1,3 @@
-# Info Analyzer OS currently uses the Python standard library for the production API.
-# Keep this file so hosted Python builders can run `pip install -r requirements.txt`.
+# Info Analyzer OS uses the Python standard library for the production API.
+# certifi supplies a stable CA bundle for HTTPS RSS/URL ingestion on local Python installs.
+certifi>=2026.6.20
