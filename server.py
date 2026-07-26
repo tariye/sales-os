@@ -147,7 +147,7 @@ if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
 TEST_DB_PATH_RAW = os.environ.get("INFO_ANALYZER_TEST_DB_PATH", "").strip()
 
-APP_VERSION = "v0.95.1-rss-ca-bundle"
+APP_VERSION = "v0.95.2-rss-health-cleanup"
 SCHEMA_VERSION = 2
 DATA_PLANE_LEASE_SECONDS = 30
 SCHEDULER_LEASE_SECONDS = 8
@@ -365,6 +365,14 @@ FEATURE_REGISTRY = [
     },
 ]
 APP_VERSIONS = [
+    {
+        "version": "v0.95.2",
+        "name": "RSS Health Cleanup",
+        "features": [
+            "Successful source runs now supersede older queued/retry jobs for the same source",
+            "Healthy sources no longer keep stale pending-job counts from prior certificate failures",
+        ],
+    },
     {
         "version": "v0.95.1",
         "name": "RSS CA Bundle Fix",
@@ -5326,6 +5334,12 @@ def execute_claimed_job(claimed: dict) -> dict:
                        claimed_at=?, claim_expires_at='', next_attempt_at='', last_error=''
                    WHERE id=?""",
                 (finished, finished, run["id"], claim["worker_id"], claim["id"], claim["worker_id"], claim["claimed_at"], job["id"]),
+            )
+            conn.execute(
+                """UPDATE data_plane_jobs
+                   SET updated_at=?, status='superseded', finished_at=?, next_attempt_at='', last_error='Superseded by successful run'
+                   WHERE source_id=? AND id<>? AND status IN ('queued','retry')""",
+                (finished, finished, source["id"], job["id"]),
             )
             conn.execute(
                 """UPDATE ingest_sources SET updated_at=?, last_run_at=?, last_success_at=?, next_run_at=?, last_health_status='healthy',
