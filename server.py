@@ -141,7 +141,7 @@ if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
 TEST_DB_PATH_RAW = os.environ.get("INFO_ANALYZER_TEST_DB_PATH", "").strip()
 
-APP_VERSION = "v0.94-universal-capture-inbox"
+APP_VERSION = "v0.95-automatic-capture-pipe"
 SCHEMA_VERSION = 2
 DATA_PLANE_LEASE_SECONDS = 30
 SCHEDULER_LEASE_SECONDS = 8
@@ -359,6 +359,17 @@ FEATURE_REGISTRY = [
     },
 ]
 APP_VERSIONS = [
+    {
+        "version": "v0.95",
+        "name": "Automatic Capture Pipe",
+        "features": [
+            "Source pulls now create raw inbox observations in addition to immutable raw snapshots",
+            "Each automatic capture creates a queued processing job so pulled evidence can be translated from the Capture inbox",
+            "Sources page can create a manual/URL/RSS source and run a pull through visible operator controls",
+            "Source cards expose job, run, snapshot, claim, and raw-observation identifiers for UI-to-database proof",
+            "Browser E2E covers source creation, run-pull, raw snapshot, inbox capture, Process Now, refresh, and restart persistence",
+        ],
+    },
     {
         "version": "v0.87",
         "name": "External Runtime + Chat Bridge",
@@ -5048,6 +5059,98 @@ def complete_claim(conn, claim_id: str, status: str) -> None:
     conn.execute("UPDATE worker_claims SET updated_at=?, status=?, released_at=? WHERE id=?", (now, status, now, claim_id))
 
 
+def create_inbox_observation_from_ingest_item(conn, source: dict, item: dict, snapshot: dict) -> dict:
+    raw_input = snapshot.get("raw_text") if isinstance(snapshot.get("raw_text"), str) else clean_text(item.get("raw_text"))
+    if not raw_input.strip():
+        raise ValueError("raw snapshot text is required for automatic capture")
+    now = now_iso()
+    observation_id = make_id("OBS")
+    job_id = make_id("PJOB")
+    source_type = clean_text(source.get("source_type") or item.get("source_type") or "source")
+    ui_source_type = "Article Snippet" if source_type in {"rss", "url"} else "Observation"
+    domain = clean_text(item.get("domain") or source.get("domain")) or "Other"
+    entity = clean_text(item.get("entity") or source.get("entity")) or ""
+    tags = normalize_tags([
+        "automatic-capture",
+        "source-pull",
+        source_type,
+        domain,
+        entity,
+    ])
+    metadata = {
+        "source_client": "data-plane",
+        "capture_contract": "v0.95 automatic capture pipe",
+        "source_id": source.get("id") or "",
+        "source_name": source.get("name") or "",
+        "source_type": source_type,
+        "source_url": item.get("url") or source.get("url") or "",
+        "ingest_item_id": item.get("id") or "",
+        "snapshot_id": snapshot.get("id") or item.get("snapshot_id") or "",
+        "run_id": item.get("run_id") or snapshot.get("run_id") or "",
+        "job_id": (item.get("metadata") or {}).get("job_id") or "",
+        "claim_id": (item.get("metadata") or {}).get("claim_id") or "",
+        "worker_id": (item.get("metadata") or {}).get("worker_id") or "",
+        "content_hash": snapshot.get("content_hash") or (item.get("metadata") or {}).get("content_hash") or "",
+        "raw_preserved": True,
+    }
+    conn.execute(
+        """
+        INSERT INTO raw_observations
+        (id, created_at, updated_at, captured_at, source_client, source_type, domain, entity,
+         urgency, tags, raw_input, processing_status, latest_job_id, latest_signal_id, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            observation_id,
+            now,
+            now,
+            snapshot.get("created_at") or now,
+            "data-plane",
+            ui_source_type,
+            domain,
+            entity,
+            "normal",
+            json.dumps(tags, ensure_ascii=False),
+            raw_input,
+            "queued",
+            job_id,
+            "",
+            json.dumps(metadata, ensure_ascii=False),
+        ),
+    )
+    conn.execute(
+        """
+        INSERT INTO processing_jobs
+        (id, created_at, updated_at, observation_id, job_type, status, attempts, max_attempts, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            job_id,
+            now,
+            now,
+            observation_id,
+            "deterministic_signal_processing",
+            "queued",
+            0,
+            1,
+            json.dumps({
+                "processor": "deterministic-v1",
+                "source_id": source.get("id") or "",
+                "snapshot_id": metadata["snapshot_id"],
+                "ingest_item_id": metadata["ingest_item_id"],
+            }, ensure_ascii=False),
+        ),
+    )
+    audit(conn, "create", "raw_observation", observation_id, {
+        "processing_job_id": job_id,
+        "source_id": source.get("id") or "",
+        "snapshot_id": metadata["snapshot_id"],
+        "ingest_item_id": metadata["ingest_item_id"],
+        "automatic_capture": True,
+    })
+    return {"observation_id": observation_id, "processing_job_id": job_id, "metadata": metadata}
+
+
 def maybe_test_crash(source: dict, stage: str) -> None:
     metadata = source.get("metadata") or {}
     crash_once = clean_text(metadata.get("test_crash_once"))
@@ -5115,6 +5218,7 @@ def execute_claimed_job(claimed: dict) -> dict:
     created_items = []
     created_signals = []
     created_snapshots = []
+    created_observations = []
     skipped = 0
     try:
         items = fetch_source_items(source)
@@ -5187,6 +5291,8 @@ def execute_claimed_job(claimed: dict) -> dict:
                         :published_at, :fingerprint, :entity, :domain, :status, :metadata, :snapshot_id, :run_id)""",
                     {**item_row, "metadata": json.dumps(item_row["metadata"], ensure_ascii=False)},
                 )
+                inbox_observation = create_inbox_observation_from_ingest_item(conn, source, item_row, snapshot)
+                created_observations.append(inbox_observation)
                 live = insert_live_signal_from_item(conn, source, item_row)
                 created_items.append(item_row)
                 created_signals.append(live)
@@ -5224,6 +5330,7 @@ def execute_claimed_job(claimed: dict) -> dict:
                 failure_count=0,
                 metadata={
                     "snapshot_ids": [s["id"] for s in created_snapshots],
+                    "observation_ids": [o["observation_id"] for o in created_observations],
                     "worker_id": claim["worker_id"],
                     "claim_id": claim["id"],
                     "recovery_count": int(job.get("recovery_count") or 0),
@@ -5237,9 +5344,11 @@ def execute_claimed_job(claimed: dict) -> dict:
             "snapshots": created_snapshots,
             "created_items": len(created_items),
             "created_signals": len(created_signals),
+            "created_observations": len(created_observations),
             "skipped": skipped,
             "errors": [],
             "signals": created_signals[:20],
+            "observations": created_observations[:20],
             "health_event": health,
         }
     except Exception as exc:
@@ -5305,9 +5414,11 @@ def execute_claimed_job(claimed: dict) -> dict:
             "snapshots": [],
             "created_items": 0,
             "created_signals": 0,
+            "created_observations": 0,
             "skipped": skipped,
             "errors": [{"source_id": job["source_id"], "source_name": source_name, "error": err}],
             "signals": [],
+            "observations": [],
             "health_event": health,
         }
 
@@ -6150,15 +6261,19 @@ def run_ingest(payload: dict) -> dict:
         results.append(execute_claimed_job(claimed))
     created_items = sum(int(r.get("created_items") or 0) for r in results)
     created_signals = sum(int(r.get("created_signals") or 0) for r in results)
+    created_observations = sum(int(r.get("created_observations") or 0) for r in results)
     skipped = sum(int(r.get("skipped") or 0) for r in results)
     errors = [error for r in results for error in (r.get("errors") or [])]
     signals = [signal for r in results for signal in (r.get("signals") or [])]
+    observations = [observation for r in results for observation in (r.get("observations") or [])]
     return {
         "created_items": created_items,
         "created_signals": created_signals,
+        "created_observations": created_observations,
         "skipped": skipped,
         "errors": errors,
         "signals": signals[:20],
+        "observations": observations[:20],
         "jobs": [r.get("job") for r in results if r.get("job")],
         "runs": [r.get("run") for r in results if r.get("run")],
         "snapshots": [snap for r in results for snap in (r.get("snapshots") or [])],
@@ -8497,6 +8612,7 @@ def inbox_route_for_signal(role: str, actionability: str) -> str:
 def deterministic_processed_signal(observation: dict, job_id: str) -> dict:
     raw = observation["raw_input"]
     tags = observation.get("tags") or []
+    observation_metadata = observation.get("metadata") or {}
     payload = {
         "raw_input": raw,
         "domain": observation.get("domain") or "",
@@ -8549,6 +8665,13 @@ def deterministic_processed_signal(observation: dict, job_id: str) -> dict:
             "card_type": draft.get("card_type"),
             "trackable_as": draft.get("trackable_as"),
             "raw_observation_id": observation["id"],
+            "source_id": observation_metadata.get("source_id") or "",
+            "source_name": observation_metadata.get("source_name") or "",
+            "source_url": observation_metadata.get("source_url") or "",
+            "ingest_item_id": observation_metadata.get("ingest_item_id") or "",
+            "snapshot_id": observation_metadata.get("snapshot_id") or "",
+            "run_id": observation_metadata.get("run_id") or "",
+            "content_hash": observation_metadata.get("content_hash") or "",
             "processor": "deterministic-v1",
             "raw_preserved": True,
         },

@@ -220,8 +220,8 @@ def main() -> int:
             capture(page, "initial-page")
             expect(page.locator("body")).not_to_be_empty()
 
-            app_asset = next((e for e in network_events if e["url"].endswith("/app.js?v=2.0.3")), None)
-            css_asset = next((e for e in network_events if e["url"].endswith("/style.css?v=2.0.3")), None)
+            app_asset = next((e for e in network_events if e["url"].endswith("/app.js?v=2.0.4")), None)
+            css_asset = next((e for e in network_events if e["url"].endswith("/style.css?v=2.0.4")), None)
             if not app_asset or app_asset["status"] != 200:
                 fail(f"app.js did not load successfully: {app_asset}", page)
             if not css_asset or css_asset["status"] != 200:
@@ -236,10 +236,45 @@ def main() -> int:
             expect(page.locator("#runtimeStatusDetails")).to_contain_text(str(TEST_DB), timeout=8000)
             capture(page, "runtime-status")
 
+            page.get_by_role("button", name="Sources", exact=True).click()
+            expect(page.locator("#sources")).to_be_visible(timeout=5000)
+            require_text(page, "Create Source", "Sources page did not render source creation controls")
+            page.locator("#sourceNameInput").fill("SK Hynix Automatic Capture")
+            page.locator("#sourceTypeInput").select_option("manual")
+            page.locator("#sourceCadenceInput").select_option("1")
+            page.locator("#sourceDomainInput").select_option(label="Investing")
+            page.locator("#sourceEntityInput").fill("SK Hynix")
+            page.locator("#sourceManualTextInput").fill("SK Hynix source update: watch HBM demand, AI memory pricing, capex discipline, and Nvidia customer comments this week.")
+            page.locator("#createSourceBtn").click()
+            require_text(page, "Creating Source", "Create Source produced no visible loading feedback")
+            require_text(page, "Source Created", "Create Source did not show success")
+            expect(page.locator("#sourcesList")).to_contain_text("SK Hynix Automatic Capture", timeout=8000)
+            capture(page, "source-created")
+            page.locator("#runLatestSourceBtn").click()
+            require_text(page, "Running Pull", "Run Pull produced no visible loading feedback")
+            require_text(page, "Pull Completed", "Run Pull did not complete visibly")
+            expect(page.locator("#sourceCreateStatus")).to_contain_text("Observation ID", timeout=8000)
+            expect(page.locator("#sourceCreateStatus")).to_contain_text("Snapshot ID", timeout=8000)
+            expect(page.locator("#sourcesList")).to_contain_text("healthy", timeout=8000)
+            capture(page, "source-pull-completed")
+
+            page.get_by_role("button", name="Evidence", exact=True).click()
+            expect(page.locator("#evidence")).to_be_visible(timeout=5000)
+            expect(page.locator("#evidenceList")).to_contain_text("SK Hynix", timeout=8000)
+            expect(page.locator("#evidenceSummary")).to_contain_text("Snapshots", timeout=8000)
+            capture(page, "source-evidence")
+
             page.get_by_role("button", name="Capture", exact=True).click()
             expect(page.locator("#capture")).to_be_visible(timeout=5000)
             require_text(page, "Capture Signal", "Capture page did not render")
             expect(page.locator("#captureConnection")).to_have_text("Connected", timeout=8000)
+            expect(page.locator("#recentCaptures")).to_contain_text("SK Hynix source update", timeout=8000)
+            page.locator("#recentCaptures [data-process-observation]").first.click()
+            require_text(page, "Processing", "Automatic capture Process Now produced no visible processing feedback")
+            require_text(page, "Processed Signal", "Automatic capture did not show processed signal card")
+            expect(page.locator("#recentCaptures")).to_contain_text("watch", timeout=8000)
+            capture(page, "automatic-capture-processed")
+
             capture(page, "capture-empty")
             page.locator("#captureRawInput").fill("Explore SK Hynix this week and watch for AI memory demand signals.")
             page.locator("#captureDomain").select_option(label="Investing")
@@ -393,7 +428,7 @@ def main() -> int:
             page2.on("response", lambda response: second_network.append({"url": response.url, "status": response.status}))
             page2.goto(BASE_URL + "/", wait_until="networkidle")
             page2.reload(wait_until="networkidle")
-            app_loads = [e for e in second_network if e["url"].endswith("/app.js?v=2.0.3")]
+            app_loads = [e for e in second_network if e["url"].endswith("/app.js?v=2.0.4")]
             if not app_loads or any(e["status"] != 200 for e in app_loads):
                 raise AssertionError(f"current app.js was not loaded after fresh context/reload: {app_loads}")
             context2.close()

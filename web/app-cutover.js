@@ -30,6 +30,7 @@ let latestCapturedObservation = null;
 let latestProcessedSignal = null;
 let overviewData = null;
 let sourcesData = null;
+let latestCreatedSourceId = "";
 let evidenceData = null;
 let healthData = null;
 let jobsRunsData = null;
@@ -497,6 +498,10 @@ function sourceCardHTML(source) {
     ${kvHTML("Last Failure", retry.last_failure_at || source.last_error_at || "")}
     ${kvHTML("Last Error", retry.last_error || source.last_error || "")}
     ${kvHTML("Freshness", fmtAge(retry.freshness_age_seconds))}
+    <div class="buttons compact">
+      <button class="secondary small" data-run-source="${esc(sourceId)}">Run Pull</button>
+      <button class="ghost small" data-open-source-evidence="${esc(sourceId)}">Open Evidence</button>
+    </div>
     <details class="item" style="margin-top:12px">
       <summary>Diagnostics</summary>
       <div class="kv-grid" style="margin-top:10px">
@@ -504,12 +509,101 @@ function sourceCardHTML(source) {
         ${kvHTML("Job ID", source.last_job_id || "")}
         ${kvHTML("Run ID", source.last_run_id || "")}
         ${kvHTML("Snapshot ID", source.last_snapshot_id || "")}
+        ${kvHTML("Pending Jobs", source.pending_job_count ?? 0)}
         ${kvHTML("Claim ID", source.current_claim_id || source.latest_job?.claim_id || "")}
         ${kvHTML("Health Event IDs", (source.recent_health_events || []).map(event => event.id).join(" | "))}
       </div>
       <div class="list" style="margin-top:12px">${history || `<div class="item"><h3>No health history</h3><p class="muted">No health events recorded yet.</p></div>`}</div>
     </details>
   </div>`;
+}
+
+function sourcePayload() {
+  return {
+    name: $("sourceNameInput")?.value || "",
+    source_type: $("sourceTypeInput")?.value || "manual",
+    poll_interval_minutes: Number($("sourceCadenceInput")?.value || 1),
+    domain: $("sourceDomainInput")?.value || "Other",
+    entity: $("sourceEntityInput")?.value || "",
+    url: $("sourceUrlInput")?.value || "",
+    manual_text: $("sourceManualTextInput")?.value || "",
+    active: true,
+  };
+}
+
+function renderSourceCreateStatus(kind, title, detail, extra = "") {
+  const el = $("sourceCreateStatus");
+  if (!el) return;
+  const cls = kind === "error" ? "item error" : "item";
+  el.innerHTML = `<div class="${cls}">
+    <h3>${esc(title)}</h3>
+    <p class="muted">${esc(detail || "")}</p>
+    ${extra}
+  </div>`;
+}
+
+async function createSourceFromUI() {
+  const btn = $("createSourceBtn");
+  const payload = sourcePayload();
+  if (!payload.name.trim()) {
+    renderSourceCreateStatus("error", "Source Error", "Source name is required.");
+    return;
+  }
+  if (payload.source_type === "manual" && !payload.manual_text.trim()) {
+    renderSourceCreateStatus("error", "Source Error", "Manual source text is required for Manual Text sources.");
+    return;
+  }
+  if (["rss", "url"].includes(payload.source_type) && !payload.url.trim()) {
+    renderSourceCreateStatus("error", "Source Error", "URL is required for RSS and URL sources.");
+    return;
+  }
+  try {
+    btn.disabled = true;
+    renderSourceCreateStatus("info", "Creating Source", "Registering source and initializing never-run health state...");
+    await visibleFeedbackDelay();
+    const result = await api("/ingest/sources", { method: "POST", body: JSON.stringify(payload) });
+    const source = result.source || {};
+    latestCreatedSourceId = source.id || "";
+    $("runLatestSourceBtn").disabled = !latestCreatedSourceId;
+    renderSourceCreateStatus("success", "Source Created", "Run Pull to collect evidence into the inbox.", kvHTML("Source ID", latestCreatedSourceId));
+    toast("Source created");
+    await loadSources();
+  } catch (err) {
+    renderSourceCreateStatus("error", "Create Source Failed", err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function runSourcePull(sourceId) {
+  const id = sourceId || latestCreatedSourceId;
+  if (!id) {
+    renderSourceCreateStatus("error", "Run Pull Failed", "Create or select a source first.");
+    return;
+  }
+  const runLatest = $("runLatestSourceBtn");
+  try {
+    if (runLatest) runLatest.disabled = true;
+    renderSourceCreateStatus("info", "Running Pull", "Worker is pulling the source, saving a raw snapshot, and creating an inbox observation...");
+    await visibleFeedbackDelay();
+    const result = await api("/ingest/run", { method: "POST", body: JSON.stringify({ source_id: id }) });
+    const firstJob = (result.jobs || [])[0] || {};
+    const firstRun = (result.runs || [])[0] || {};
+    const firstSnapshot = (result.snapshots || [])[0] || {};
+    const firstObservation = (result.observations || [])[0] || {};
+    renderSourceCreateStatus("success", "Pull Completed", `${result.created_observations || 0} inbox observation(s), ${result.snapshots?.length || 0} snapshot(s), ${result.skipped || 0} duplicate(s).`, `
+      ${kvHTML("Job ID", firstJob.id || "")}
+      ${kvHTML("Run ID", firstRun.id || "")}
+      ${kvHTML("Snapshot ID", firstSnapshot.id || "")}
+      ${kvHTML("Observation ID", firstObservation.observation_id || "")}
+    `);
+    toast("Pull completed");
+    await Promise.all([loadSources(), loadEvidence(), loadRecentCaptures()]);
+  } catch (err) {
+    renderSourceCreateStatus("error", "Run Pull Failed", err.message);
+  } finally {
+    if (runLatest) runLatest.disabled = !latestCreatedSourceId;
+  }
 }
 
 async function loadSources() {
@@ -1190,6 +1284,8 @@ function bindRefreshButtons() {
   $("refreshOverview")?.addEventListener("click", loadOverview);
   $("refreshInbox")?.addEventListener("click", loadRecentCaptures);
   $("captureSignalBtn")?.addEventListener("click", captureSignal);
+  $("createSourceBtn")?.addEventListener("click", createSourceFromUI);
+  $("runLatestSourceBtn")?.addEventListener("click", () => runSourcePull(latestCreatedSourceId));
   $("refreshSources")?.addEventListener("click", loadSources);
   $("refreshEvidence")?.addEventListener("click", loadEvidence);
   $("refreshSystemHealth")?.addEventListener("click", loadSystemHealth);
@@ -1210,6 +1306,15 @@ document.addEventListener("click", event => {
   const processButton = event.target.closest("[data-process-observation]");
   if (processButton) {
     processObservation(processButton.dataset.processObservation);
+  }
+  const runSourceButton = event.target.closest("[data-run-source]");
+  if (runSourceButton) {
+    latestCreatedSourceId = runSourceButton.dataset.runSource || "";
+    runSourcePull(latestCreatedSourceId);
+  }
+  const evidenceButton = event.target.closest("[data-open-source-evidence]");
+  if (evidenceButton) {
+    setActiveView("evidence");
   }
 });
 

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Info Analyzer OS</title>
-  <link rel="stylesheet" href="/style.css?v=2.0.3" />
+  <link rel="stylesheet" href="/style.css?v=2.0.4" />
 </head>
 <body>
   <header class="hero-band app-shell">
@@ -200,6 +200,62 @@
     <section id="sources" class="panel">
       <div class="card">
         <div class="card-head">
+          <div>
+            <p class="eyebrow">Automatic Capture</p>
+            <h2>Create Source</h2>
+            <p class="subtitle">Register one source, then run a pull. New evidence becomes an immutable snapshot and a queued inbox observation.</p>
+          </div>
+        </div>
+        <div id="sourceCreateStatus" class="list"></div>
+        <div class="grid three">
+          <label>Name
+            <input id="sourceNameInput" placeholder="SK Hynix Watch Feed" />
+          </label>
+          <label>Type
+            <select id="sourceTypeInput">
+              <option value="manual">Manual Text</option>
+              <option value="rss">RSS</option>
+              <option value="url">URL</option>
+            </select>
+          </label>
+          <label>Cadence
+            <select id="sourceCadenceInput">
+              <option value="1">1 min</option>
+              <option value="15">15 min</option>
+              <option value="60">1 hour</option>
+              <option value="1440">Daily</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid two">
+          <label>Domain
+            <select id="sourceDomainInput">
+              <option>Investing</option>
+              <option>Business</option>
+              <option>Lab</option>
+              <option>Career</option>
+              <option>AI Project</option>
+              <option>Info Analyzer OS</option>
+              <option>Other</option>
+            </select>
+          </label>
+          <label>Entity
+            <input id="sourceEntityInput" placeholder="SK Hynix" />
+          </label>
+        </div>
+        <label>URL
+          <input id="sourceUrlInput" placeholder="https://example.com/feed.xml" />
+        </label>
+        <label>Manual Source Text
+          <textarea id="sourceManualTextInput" rows="5" placeholder="SK Hynix note: watch HBM demand, AI memory pricing, capex, and Nvidia/customer comments."></textarea>
+        </label>
+        <div class="buttons">
+          <button id="createSourceBtn" class="primary">Create Source</button>
+          <button id="runLatestSourceBtn" class="secondary" disabled>Run Pull</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
           <div><p class="eyebrow">Active Sources</p><h2>Sources</h2></div>
           <button id="refreshSources" class="ghost small">Refresh</button>
         </div>
@@ -390,6 +446,6 @@
       if (failure) failure.innerHTML = data.overview_latest_failure_html || "";
     })();
   </script>
-  <script src="/app.js?v=2.0.3"></script>
+  <script src="/app.js?v=2.0.4"></script>
 </body>
 </html>
