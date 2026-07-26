@@ -273,6 +273,8 @@ def main() -> int:
             require_text(page, "Processing", "Automatic capture Process Now produced no visible processing feedback")
             require_text(page, "Processed Signal", "Automatic capture did not show processed signal card")
             expect(page.locator("#recentCaptures")).to_contain_text("watch", timeout=8000)
+            expect(page.locator("#contextLibraryList")).to_contain_text("SK Hynix", timeout=8000)
+            expect(page.locator("#contextLibraryList")).to_contain_text("Entry ID", timeout=8000)
             capture(page, "automatic-capture-processed")
 
             capture(page, "capture-empty")
@@ -295,16 +297,21 @@ def main() -> int:
             require_text(page, "Processed Signal", "Process Now did not show a processed signal card")
             expect(page.locator("#processedSignalOutput .processed-signal-card")).to_have_attribute("data-signal-route", "watch", timeout=8000)
             expect(page.locator("#processedSignalOutput")).to_contain_text("SK Hynix", timeout=8000)
+            expect(page.locator("#processedSignalOutput")).to_contain_text("Library Entry", timeout=8000)
+            expect(page.locator("#contextLibraryList")).to_contain_text("Explore SK Hynix this week", timeout=8000)
             capture(page, "capture-processed")
             page.reload(wait_until="networkidle")
             page.get_by_role("button", name="Capture", exact=True).click()
             expect(page.locator("#recentCaptures")).to_contain_text("Explore SK Hynix this week", timeout=8000)
             expect(page.locator("#recentCaptures")).to_contain_text("watch", timeout=8000)
+            expect(page.locator("#contextLibraryList")).to_contain_text("SK Hynix", timeout=8000)
+            expect(page.locator("#contextLibraryStats")).to_contain_text("Investing Entries", timeout=8000)
             capture(page, "capture-after-refresh")
             summary["db_counts_after_capture"] = {
                 "raw_observations": count_table(ACTIVE_DB, "raw_observations"),
                 "processing_jobs": count_table(ACTIVE_DB, "processing_jobs"),
                 "processed_signals": count_table(ACTIVE_DB, "processed_signals"),
+                "entries": count_table(ACTIVE_DB, "entries"),
             }
 
             stop_pid(current_server_pid)
@@ -315,6 +322,7 @@ def main() -> int:
             expect(page.locator("#capture")).to_be_visible(timeout=5000)
             expect(page.locator("#recentCaptures")).to_contain_text("Explore SK Hynix this week", timeout=8000)
             expect(page.locator("#recentCaptures")).to_contain_text("watch", timeout=8000)
+            expect(page.locator("#contextLibraryList")).to_contain_text("SK Hynix", timeout=8000)
             capture(page, "capture-after-restart")
 
             page.get_by_role("button", name="Human Review").click()

@@ -147,7 +147,7 @@ if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
 TEST_DB_PATH_RAW = os.environ.get("INFO_ANALYZER_TEST_DB_PATH", "").strip()
 
-APP_VERSION = "v0.95.2-rss-health-cleanup"
+APP_VERSION = "v0.96-context-library"
 SCHEMA_VERSION = 2
 DATA_PLANE_LEASE_SECONDS = 30
 SCHEDULER_LEASE_SECONDS = 8
@@ -365,6 +365,15 @@ FEATURE_REGISTRY = [
     },
 ]
 APP_VERSIONS = [
+    {
+        "version": "v0.96",
+        "name": "Context Library Promotion",
+        "features": [
+            "Processed inbox observations are promoted into the contextual memory library",
+            "Investing captures now become retrievable library entries with source evidence provenance",
+            "Context library endpoint returns domain-filtered entries and route counts",
+        ],
+    },
     {
         "version": "v0.95.2",
         "name": "RSS Health Cleanup",
@@ -8725,6 +8734,104 @@ def deterministic_processed_signal(observation: dict, job_id: str) -> dict:
     }
 
 
+def route_to_entry_role(route: str, signal_type: str) -> str:
+    route = clean_text(route).lower()
+    signal_type = clean_text(signal_type).lower()
+    if route == "decision_update":
+        return "contradiction" if signal_type == "contradiction" else "watch"
+    if route in SIGNAL_ROLES:
+        return route
+    if signal_type in SIGNAL_ROLES:
+        return signal_type
+    return "watch"
+
+
+def promote_processed_signal_to_library(conn, observation: dict, signal: dict) -> dict:
+    """Turn a processed inbox signal into the contextual memory library."""
+    existing = conn.execute(
+        """
+        SELECT e.* FROM entries e
+        WHERE json_extract(e.metadata, '$.raw_observation_id') = ?
+           OR json_extract(e.metadata, '$.processed_signal_id') = ?
+        ORDER BY e.created_at DESC LIMIT 1
+        """,
+        (observation["id"], signal["id"]),
+    ).fetchone()
+    if existing:
+        return row_to_entry(existing)
+
+    signal_metadata = signal.get("metadata") or {}
+    observation_metadata = observation.get("metadata") or {}
+    role = route_to_entry_role(signal.get("route") or "", signal.get("signal_type") or "")
+    actionability = clean_text(signal_metadata.get("actionability")).lower()
+    if actionability not in ACTIONABILITY_LEVELS:
+        actionability = "watch" if signal.get("route") in {"watch", "archive"} else "next"
+    entry_payload = {
+        "title": make_short_title(signal.get("signal") or observation.get("raw_input") or "", signal.get("domain") or "", signal.get("entity") or ""),
+        "date": today_iso(),
+        "domain": signal.get("domain") or observation.get("domain") or "Other",
+        "entity": signal.get("entity") or observation.get("entity") or "",
+        "source_type": signal.get("source_type") or observation.get("source_type") or "Observation",
+        "raw_input": observation.get("raw_input") or "",
+        "signal": signal.get("signal") or "",
+        "interpretation": signal.get("interpretation") or "",
+        "signal_role": role,
+        "actionability": actionability,
+        "pull_trigger": signal.get("resurfacing_trigger") or "",
+        "trigger_condition": signal.get("resurfacing_trigger") or "",
+        "returned_action": signal.get("returned_action") or "",
+        "first_step": signal.get("first_step") or "",
+        "tracking_metric": signal.get("tracking_metric") or "",
+        "result_to_track": signal.get("tracking_metric") or "",
+        "trackable_as": signal_metadata.get("trackable_as") or default_trackable_as(signal.get("domain") or "Other", role),
+        "impact_metric": impact_metric_for(signal.get("domain") or "Other", role),
+        "feedback_to_capture": feedback_for(signal.get("domain") or "Other", role, signal.get("tracking_metric") or ""),
+        "related_memory_query": related_query_for(signal.get("domain") or "Other", signal.get("entity") or "", signal.get("tags") or [], role),
+        "card_type": signal_metadata.get("card_type") or default_card_type(role, actionability),
+        "confidence": signal.get("confidence") or "Medium",
+        "status": "codified",
+        "raw_staging_status": "processed",
+        "action_status": "open" if actionability in {"now", "next", "review", "watch"} and role != "archive" else "cancelled",
+        "pattern": f"{signal.get('domain') or 'Other'} signal library: {signal.get('entity') or 'unassigned'}",
+        "lesson": f"Captured {signal.get('domain') or 'Other'} evidence should be stored as reusable library context, not left dormant in the inbox.",
+        "next_step": signal.get("first_step") or "Open the library entry, compare related context, then decide whether to act, watch, or archive.",
+        "tags": normalize_tags(["context-library", "promoted-signal"] + (signal.get("tags") or [])),
+        "proof_artifact": signal_metadata.get("source_url") or observation_metadata.get("source_url") or "",
+        "metadata": {
+            "library_type": "contextual_memory",
+            "library_domain": signal.get("domain") or observation.get("domain") or "Other",
+            "library_route": signal.get("route") or "",
+            "raw_observation_id": observation["id"],
+            "processed_signal_id": signal["id"],
+            "processing_job_id": signal.get("job_id") or "",
+            "source_id": signal_metadata.get("source_id") or observation_metadata.get("source_id") or "",
+            "source_name": signal_metadata.get("source_name") or observation_metadata.get("source_name") or "",
+            "source_url": signal_metadata.get("source_url") or observation_metadata.get("source_url") or "",
+            "ingest_item_id": signal_metadata.get("ingest_item_id") or observation_metadata.get("ingest_item_id") or "",
+            "snapshot_id": signal_metadata.get("snapshot_id") or observation_metadata.get("snapshot_id") or "",
+            "run_id": signal_metadata.get("run_id") or observation_metadata.get("run_id") or "",
+            "content_hash": signal_metadata.get("content_hash") or observation_metadata.get("content_hash") or "",
+            "raw_preserved": True,
+            "promotion_contract": "v0.96 context library promotion",
+        },
+    }
+    entry = codify_payload(entry_payload)
+    entry["status"] = "codified"
+    entry["raw_staging_status"] = "processed"
+    entry["metadata"] = entry_payload["metadata"]
+    inserted = insert_entry(conn, entry)
+    contextualize_entry(conn, inserted)
+    upsert_action_for_entry(conn, inserted)
+    update_pattern_stats(conn, inserted)
+    create_pull_rules(conn, inserted)
+    audit(conn, "promote", "entry", inserted["id"], {
+        "raw_observation_id": observation["id"],
+        "processed_signal_id": signal["id"],
+        "domain": inserted.get("domain"),
+    })
+    return row_to_entry(conn.execute("SELECT * FROM entries WHERE id=?", (inserted["id"],)).fetchone())
+
+
 def load_inbox_observation(conn, observation_id: str) -> dict:
     row = conn.execute("SELECT * FROM raw_observations WHERE id=?", (observation_id,)).fetchone()
     if not row:
@@ -8801,6 +8908,28 @@ def process_inbox_observation(observation_id: str) -> dict:
     now = now_iso()
     with connect() as conn:
         observation = load_inbox_observation(conn, observation_id)
+        if observation.get("processing_status") == "processed" and observation.get("latest_signal"):
+            existing_signal = observation["latest_signal"]
+            existing_entry = promote_processed_signal_to_library(conn, observation, existing_signal)
+            signal_metadata = existing_signal.get("metadata") or {}
+            if signal_metadata.get("library_entry_id") != existing_entry["id"]:
+                signal_metadata["library_entry_id"] = existing_entry["id"]
+                signal_metadata["library_promoted_at"] = now_iso()
+                conn.execute(
+                    "UPDATE processed_signals SET updated_at=?, metadata=? WHERE id=?",
+                    (now_iso(), json.dumps(signal_metadata, ensure_ascii=False), existing_signal["id"]),
+                )
+                conn.commit()
+                observation = load_inbox_observation(conn, observation_id)
+                existing_signal = observation["latest_signal"]
+            existing_job_row = conn.execute("SELECT * FROM processing_jobs WHERE id=?", (observation.get("latest_job_id"),)).fetchone() if observation.get("latest_job_id") else None
+            return {
+                "observation": observation,
+                "processing_job": row_to_processing_job(existing_job_row) if existing_job_row else None,
+                "processed_signal": existing_signal,
+                "library_entry": row_to_entry(conn.execute("SELECT * FROM entries WHERE id=?", (existing_entry["id"],)).fetchone()),
+                "idempotent": True,
+            }
         job_row = conn.execute(
             "SELECT * FROM processing_jobs WHERE observation_id=? AND status IN ('queued','failed') ORDER BY created_at DESC LIMIT 1",
             (observation_id,),
@@ -8847,12 +8976,28 @@ def process_inbox_observation(observation_id: str) -> dict:
                 "UPDATE raw_observations SET updated_at=?, processing_status='processed', latest_job_id=?, latest_signal_id=? WHERE id=?",
                 (now_iso(), job["id"], signal["id"], observation_id),
             )
-            audit(conn, "process", "raw_observation", observation_id, {"processing_job_id": job["id"], "processed_signal_id": signal["id"], "route": signal["route"]})
+            processed_row = conn.execute("SELECT * FROM processed_signals WHERE id=?", (signal["id"],)).fetchone()
+            processed_signal = row_to_processed_signal(processed_row)
+            library_entry = promote_processed_signal_to_library(conn, observation, processed_signal)
+            processed_signal_metadata = processed_signal.get("metadata") or {}
+            processed_signal_metadata["library_entry_id"] = library_entry["id"]
+            processed_signal_metadata["library_promoted_at"] = now_iso()
+            conn.execute(
+                "UPDATE processed_signals SET updated_at=?, metadata=? WHERE id=?",
+                (now_iso(), json.dumps(processed_signal_metadata, ensure_ascii=False), signal["id"]),
+            )
+            audit(conn, "process", "raw_observation", observation_id, {
+                "processing_job_id": job["id"],
+                "processed_signal_id": signal["id"],
+                "library_entry_id": library_entry["id"],
+                "route": signal["route"],
+            })
             conn.commit()
             return {
                 "observation": load_inbox_observation(conn, observation_id),
                 "processing_job": row_to_processing_job(conn.execute("SELECT * FROM processing_jobs WHERE id=?", (job["id"],)).fetchone()),
                 "processed_signal": row_to_processed_signal(conn.execute("SELECT * FROM processed_signals WHERE id=?", (signal["id"],)).fetchone()),
+                "library_entry": row_to_entry(conn.execute("SELECT * FROM entries WHERE id=?", (library_entry["id"],)).fetchone()),
             }
         except Exception as exc:
             message = str(exc)
@@ -8882,6 +9027,111 @@ def recent_inbox_observations(limit: int = 20) -> dict:
             "processed": conn.execute("SELECT COUNT(*) FROM raw_observations WHERE processing_status='processed'").fetchone()[0],
         }
     return {"observations": observations, "count": len(observations), "counts": counts}
+
+
+def process_queued_observations(payload: dict | None = None) -> dict:
+    payload = payload or {}
+    domain = clean_text(payload.get("domain"))
+    try:
+        limit = max(1, min(int(payload.get("limit") or 20), 100))
+    except Exception:
+        limit = 20
+    where = ["processing_status IN ('queued','error')"]
+    args: list = []
+    if domain:
+        where.append("domain = ?")
+        args.append(domain)
+    with connect() as conn:
+        rows = conn.execute(
+            f"SELECT id FROM raw_observations WHERE {' AND '.join(where)} ORDER BY created_at ASC LIMIT ?",
+            (*args, limit),
+        ).fetchall()
+    processed = []
+    errors = []
+    for row in rows:
+        observation_id = row["id"]
+        try:
+            result = process_inbox_observation(observation_id)
+            processed.append({
+                "observation_id": observation_id,
+                "processed_signal_id": (result.get("processed_signal") or {}).get("id"),
+                "library_entry_id": (result.get("library_entry") or {}).get("id"),
+                "route": (result.get("processed_signal") or {}).get("route"),
+            })
+        except Exception as exc:
+            errors.append({"observation_id": observation_id, "error": str(exc)})
+    return {
+        "domain": domain or "All",
+        "requested_limit": limit,
+        "processed": processed,
+        "processed_count": len(processed),
+        "errors": errors,
+        "error_count": len(errors),
+    }
+
+
+def context_library(params: dict | None = None) -> dict:
+    params = params or {}
+    domain = clean_text((params.get("domain") or [""])[0]) if isinstance(params.get("domain"), list) else clean_text(params.get("domain"))
+    query = clean_text((params.get("q") or params.get("query") or [""])[0]) if isinstance(params.get("q") or params.get("query"), list) else clean_text(params.get("q") or params.get("query"))
+    limit_raw = (params.get("limit") or ["50"])[0] if isinstance(params.get("limit"), list) else params.get("limit")
+    try:
+        limit = max(1, min(int(limit_raw or 50), 100))
+    except Exception:
+        limit = 50
+    where = ["status NOT IN ('deleted','archived')"]
+    args: list = []
+    if domain:
+        where.append("domain = ?")
+        args.append(domain)
+    if query:
+        like = f"%{query.lower()}%"
+        where.append("""(
+            LOWER(COALESCE(title,'')) LIKE ?
+            OR LOWER(COALESCE(entity,'')) LIKE ?
+            OR LOWER(COALESCE(signal,'')) LIKE ?
+            OR LOWER(COALESCE(interpretation,'')) LIKE ?
+            OR LOWER(COALESCE(tags,'')) LIKE ?
+        )""")
+        args.extend([like, like, like, like, like])
+    sql = f"""
+        SELECT * FROM entries
+        WHERE {' AND '.join(where)}
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT ?
+    """
+    with connect() as conn:
+        rows = conn.execute(sql, (*args, limit)).fetchall()
+        entries = [row_to_entry(row) for row in rows]
+        domain_counts = [dict(row) for row in conn.execute(
+            """
+            SELECT COALESCE(domain, 'Other') AS domain, COUNT(*) AS count
+            FROM entries
+            WHERE status NOT IN ('deleted','archived')
+            GROUP BY COALESCE(domain, 'Other')
+            ORDER BY count DESC, domain ASC
+            """
+        ).fetchall()]
+        route_counts = [dict(row) for row in conn.execute(
+            """
+            SELECT COALESCE(json_extract(metadata, '$.library_route'), signal_role, 'watch') AS route, COUNT(*) AS count
+            FROM entries
+            WHERE status NOT IN ('deleted','archived')
+              AND (? = '' OR domain = ?)
+            GROUP BY COALESCE(json_extract(metadata, '$.library_route'), signal_role, 'watch')
+            ORDER BY count DESC, route ASC
+            """,
+            (domain, domain),
+        ).fetchall()]
+    return {
+        "domain": domain or "All",
+        "query": query,
+        "entries": entries,
+        "count": len(entries),
+        "domain_counts": domain_counts,
+        "route_counts": route_counts,
+        "library_contract": "Processed signals are promoted into contextual memory entries with raw evidence provenance.",
+    }
 
 
 def import_all(payload: dict) -> dict:
@@ -9156,6 +9406,8 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/inbox/recent":
                 limit = int(clean_text((params.get("limit") or ["20"])[0]) or 20)
                 return self.send_json(recent_inbox_observations(limit=limit))
+            if path == "/api/context-library":
+                return self.send_json(context_library(params))
             # Human Analyst Workbench GET endpoints - MINIMAL SLICE
             if path == "/api/workbench/reviews":
                 try:
@@ -9476,6 +9728,8 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/inbox":
                 result = create_inbox_observation(payload)
                 return self.send_json({"success": True, **result}, 201)
+            if path == "/api/inbox/process-queued":
+                return self.send_json({"success": True, **process_queued_observations(payload)}, 201)
             if path.startswith("/api/inbox/") and path.endswith("/process"):
                 observation_id = unquote(path.split("/api/inbox/", 1)[1].rsplit("/process", 1)[0])
                 return self.send_json({"success": True, **process_inbox_observation(observation_id)}, 201)

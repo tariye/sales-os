@@ -212,6 +212,7 @@ function setActiveView(view) {
   if (next === "capture") {
     loadRuntimeStatus();
     loadRecentCaptures();
+    loadContextLibrary();
   }
   if (next === "human-review") loadTestModeStatus();
   if (next === "sources") loadSources();
@@ -330,6 +331,7 @@ function updateCaptureConnectionFromRuntime() {
 
 function processedSignalHTML(signal) {
   if (!signal) return "";
+  const libraryEntryId = signal.metadata?.library_entry_id || "";
   return `<div class="item action-card processed-signal-card" data-signal-route="${esc(signal.route || "")}">
     <h3>${esc(signal.signal || "Processed Signal")}</h3>
     <div class="meta">
@@ -344,6 +346,27 @@ function processedSignalHTML(signal) {
     ${kvHTML("Tracking Metric", signal.tracking_metric || "")}
     ${kvHTML("Resurface When", signal.resurfacing_trigger || "")}
     ${kvHTML("Signal ID", signal.id || "")}
+    ${kvHTML("Library Entry", libraryEntryId)}
+  </div>`;
+}
+
+function contextLibraryEntryHTML(entry) {
+  const meta = entry.metadata || {};
+  return `<div class="item action-card context-library-card" data-library-entry="${esc(entry.id || "")}">
+    <h3>${esc(entry.signal || entry.title || "Library Signal")}</h3>
+    <div class="meta">
+      <span class="tag">${esc(entry.domain || "Other")}</span>
+      <span class="tag">${esc(entry.signal_role || "watch")}</span>
+      <span class="tag">${esc(entry.actionability || "watch")}</span>
+      ${meta.library_route ? `<span class="tag">${esc(meta.library_route)}</span>` : ""}
+    </div>
+    <p class="muted">${esc(entry.interpretation || "")}</p>
+    ${kvHTML("Entity", entry.entity || "")}
+    ${kvHTML("Returned Action", entry.returned_action || "")}
+    ${kvHTML("Tracking Metric", entry.tracking_metric || "")}
+    ${kvHTML("Source", meta.source_name || entry.source_type || "")}
+    ${kvHTML("Observation", meta.raw_observation_id || "")}
+    ${kvHTML("Entry ID", entry.id || "")}
   </div>`;
 }
 
@@ -444,6 +467,7 @@ async function processObservation(observationId) {
     renderCaptureSuccess(result.observation);
     toast("Processed signal");
     await loadRecentCaptures();
+    await loadContextLibrary();
   } catch (err) {
     if (output) output.innerHTML = `<div class="item error"><h3>Processing Error</h3><p class="muted">${esc(err.message)}</p></div>`;
   }
@@ -457,9 +481,60 @@ async function loadRecentCaptures() {
     $("recentCaptures").innerHTML = observations.length
       ? observations.map(obs => observationCardHTML(obs)).join("")
       : `<div class="item"><h3>No captures yet</h3><p class="muted">Use Capture Signal to create the first raw observation.</p></div>`;
+    await loadContextLibrary();
   } catch (err) {
     setCaptureConnection("error", "Disconnected", `Recent captures failed: ${err.message}`);
     $("recentCaptures").innerHTML = `<div class="item error"><h3>Recent Captures Unavailable</h3><p class="muted">${esc(err.message)}</p></div>`;
+  }
+}
+
+async function loadContextLibrary() {
+  if (!$("contextLibraryList")) return;
+  try {
+    const data = await api("/context-library?domain=Investing&limit=20");
+    const entries = data.entries || [];
+    $("contextLibraryStats").innerHTML = [
+      statHTML(data.count ?? entries.length, "Investing Entries"),
+      statHTML((data.route_counts || []).map(r => `${r.route}:${r.count}`).join(" · ") || "none", "Routes"),
+      statHTML((data.domain_counts || []).find(d => d.domain === "Investing")?.count ?? 0, "Total Investing Memory"),
+    ].join("");
+    $("contextLibraryList").innerHTML = entries.length
+      ? entries.map(contextLibraryEntryHTML).join("")
+      : `<div class="item"><h3>No Investing Library Entries</h3><p class="muted">Capture and process an Investing signal to promote it into contextual memory.</p></div>`;
+  } catch (err) {
+    $("contextLibraryStats").innerHTML = "";
+    $("contextLibraryList").innerHTML = `<div class="item error"><h3>Library Unavailable</h3><p class="muted">${esc(err.message)}</p></div>`;
+  }
+}
+
+async function processInvestingQueue() {
+  const btn = $("processInvestingQueue");
+  try {
+    if (btn) btn.disabled = true;
+    if ($("contextLibraryStatus")) {
+      $("contextLibraryStatus").innerHTML = `<div class="item"><h3>Processing Investing Queue</h3><p class="muted">Promoting queued Investing observations into contextual memory...</p></div>`;
+    }
+    await visibleFeedbackDelay();
+    const result = await api("/inbox/process-queued", {
+      method: "POST",
+      body: JSON.stringify({ domain: "Investing", limit: 25 }),
+    });
+    if ($("contextLibraryStatus")) {
+      $("contextLibraryStatus").innerHTML = `<div class="item">
+        <h3>Investing Queue Processed</h3>
+        ${kvHTML("Processed", result.processed_count ?? 0)}
+        ${kvHTML("Errors", result.error_count ?? 0)}
+      </div>`;
+    }
+    toast(`Processed ${result.processed_count || 0} Investing capture(s)`);
+    await loadRecentCaptures();
+    await loadContextLibrary();
+  } catch (err) {
+    if ($("contextLibraryStatus")) {
+      $("contextLibraryStatus").innerHTML = `<div class="item error"><h3>Queue Processing Failed</h3><p class="muted">${esc(err.message)}</p></div>`;
+    }
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -1283,6 +1358,8 @@ function bindRefreshButtons() {
   $("refreshRuntimeStatus")?.addEventListener("click", loadRuntimeStatus);
   $("refreshOverview")?.addEventListener("click", loadOverview);
   $("refreshInbox")?.addEventListener("click", loadRecentCaptures);
+  $("refreshContextLibrary")?.addEventListener("click", loadContextLibrary);
+  $("processInvestingQueue")?.addEventListener("click", processInvestingQueue);
   $("captureSignalBtn")?.addEventListener("click", captureSignal);
   $("createSourceBtn")?.addEventListener("click", createSourceFromUI);
   $("runLatestSourceBtn")?.addEventListener("click", () => runSourcePull(latestCreatedSourceId));
