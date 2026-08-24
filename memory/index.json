@@ -8,7 +8,7 @@
   "entity_aliases": "memory/entity_aliases.json",
   "entries": "memory/entries.jsonl",
   "export_status": "memory/export_status.json",
-  "generated_at": "2026-07-18T08:18:23Z",
+  "generated_at": "2026-08-24T07:17:46Z",
   "health": "memory/system_health.json",
   "manifest": "memory/briefing_manifest.json",
   "patterns": "memory/patterns.jsonl",

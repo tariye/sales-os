@@ -1,54 +1,5 @@
 {
-  "critical_alerts": [
-    {
-      "action": "Complete the authenticated API cross-chat loop and record the result.",
-      "domain": "Info Analyzer OS",
-      "id": "IA-20260716202129-6A81E6",
-      "signal": "Authenticated API can write structured chat memory into the Intelligence Ledger."
-    },
-    {
-      "action": "Test a visual setup checklist during the next onboarding rep.",
-      "domain": "Lab",
-      "id": "IA-20260716202127-FC4355",
-      "signal": "The knowledge-transfer system is inconsistent."
-    },
-    {
-      "action": "insights",
-      "domain": "Investing",
-      "id": "ESI-SIG-20260623190049-354FFA",
-      "signal": "Cash conversion signal"
-    },
-    {
-      "action": "insights",
-      "domain": "Investing",
-      "id": "ESI-SIG-20260623190252-A3F079",
-      "signal": "Cash conversion signal"
-    },
-    {
-      "action": "insights",
-      "domain": "Investing",
-      "id": "ESI-SIG-20260624085026-DA9748",
-      "signal": "Cash conversion signal"
-    },
-    {
-      "action": "insights",
-      "domain": "Investing",
-      "id": "ESI-SIG-20260624085028-E7B2AB",
-      "signal": "Cash conversion signal"
-    },
-    {
-      "action": "insights",
-      "domain": "Investing",
-      "id": "ESI-SIG-20260624085028-EECDDA",
-      "signal": "Cash conversion signal"
-    },
-    {
-      "action": "insights",
-      "domain": "Investing",
-      "id": "ESI-SIG-20260624090005-AF084D",
-      "signal": "Cash conversion signal"
-    }
-  ],
+  "critical_alerts": [],
   "current_constraints": [
     "SQLite is authoritative; GitHub memory files are compact exports for ChatGPT.",
     "Do not export the full database into chat context.",
@@ -58,108 +9,23 @@
     "active_domains": [
       [
         "Investing",
-        88
+        58
       ],
       [
-        "Lab",
-        7
-      ],
-      [
-        "Business",
-        3
-      ],
-      [
-        "Info Analyzer OS",
-        1
-      ],
-      [
-        "AI Project",
+        "Other",
         1
       ]
     ],
     "entity_aliases": {
-      "duplicate_groups_detected": 10,
-      "duplicate_groups_reconciled": 16,
+      "duplicate_groups_detected": 2,
+      "duplicate_groups_reconciled": 8,
       "unresolved_duplicate_entities": 0
     },
     "source_of_truth": "data/info_analyzer.db",
     "system": "Info Analyzer OS / Sales OS",
     "transport_layer": "memory/"
   },
-  "current_priorities": [
-    {
-      "action": "Define the failure mode, mitigation step, and metric to watch.",
-      "domain": "Business",
-      "entity": "Customer Retention",
-      "id": "ACT-B46138D689A950CC",
-      "priority": "High",
-      "track": "Units sold, conversion rate, margin, customer response, time to sale",
-      "why": "Repeat purchases declining 15%"
-    },
-    {
-      "action": "Compare against old belief. Update confidence with evidence.",
-      "domain": "Business",
-      "entity": "Info Analyzer Intelligence Ledger Raw Data",
-      "id": "ACT-CC94C1BB6CF652CD",
-      "priority": "High",
-      "track": "Signal tracked and acted upon",
-      "why": "Contradiction in Business: Info Analyzer Intelligence Ledger Raw Data: Raw Signals: South Korean..."
-    },
-    {
-      "action": "Identify failure mode. Define mitigation and metric to watch.",
-      "domain": "AI Project",
-      "entity": "Info Analyzer database",
-      "id": "ACT-F5E1265B954159AA",
-      "priority": "High",
-      "track": "Signal tracked and acted upon",
-      "why": "Risk in AI Project: The pull engine keeps surfacing Investing entries when I query..."
-    },
-    {
-      "action": "Compare against old belief. Update confidence with evidence.",
-      "domain": "Fitness",
-      "entity": "Arm training",
-      "id": "ACT-E24BB7F781B75408",
-      "priority": "High",
-      "track": "Signal tracked and acted upon",
-      "why": "Contradiction in Fitness: Been training arms 2x per week for 6 weeks. Arm..."
-    },
-    {
-      "action": "Identify failure mode. Define mitigation and metric to watch.",
-      "domain": "Business",
-      "entity": "Value proposition",
-      "id": "ACT-54D7A8AB94EA5BA7",
-      "priority": "High",
-      "track": "Signal tracked and acted upon",
-      "why": "Risk in Business: Potential customer asked: what makes you different from competitors? I..."
-    },
-    {
-      "action": "Identify failure mode. Define mitigation and metric to watch.",
-      "domain": "Career",
-      "entity": "Resume",
-      "id": "ACT-348A57783B8E5B48",
-      "priority": "High",
-      "track": "Signal tracked and acted upon",
-      "why": "Risk in Career: I applied to 4 roles this month. Got responses from..."
-    },
-    {
-      "action": "Identify failure mode. Define mitigation and metric to watch.",
-      "domain": "Lab",
-      "entity": "Robot arm calibration",
-      "id": "ACT-4EA59FDE56075E0C",
-      "priority": "High",
-      "track": "Signal tracked and acted upon",
-      "why": "Risk in Lab: During the last 3 data collection sessions, the robot arm..."
-    },
-    {
-      "action": "Monitor whether NVIDIA reroutes China demand through partners or loses it permanently. Update thesis if H20 ban becomes permanent.",
-      "domain": "Investing",
-      "entity": "NVIDIA",
-      "id": "ACT-0DE765D7511C5318",
-      "priority": "High",
-      "track": "Data center revenue ex-China, gross margin stability above 75%, Q2 actual vs $45B guide.",
-      "why": "NVIDIA is printing revenue but the China H20 export ban is a $15B known risk that is not yet priced as a structural ceiling \u2014 it is being treated as a one-time headwind."
-    }
-  ],
+  "current_priorities": [],
   "decisions": [
     {
       "aliases": [
@@ -169,7 +35,7 @@
         "AI memory"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_position": "investigate",
       "decision_question": "Should SK Hynix be investigated, bought, watched, or avoided based on AI memory demand, valuation, and cycle risk?",
       "domain": "Investing",
@@ -192,7 +58,7 @@
       "status": "open",
       "title": "SK Hynix: investigate, buy, watch, or avoid",
       "tracking_metric": "HBM demand, AI memory pricing, capex discipline, gross margin trend, and customer concentration.",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
       "aliases": [
@@ -200,7 +66,7 @@
         "transition readiness"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_position": "prepare",
       "decision_question": "Is the Nashville transition ready to execute, or should it remain in preparation?",
       "domain": "Personal Operations",
@@ -223,7 +89,7 @@
       "status": "open",
       "title": "Nashville transition readiness",
       "tracking_metric": "Cash runway, job pipeline, housing plan, family constraints, and move date confidence.",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
       "aliases": [
@@ -232,7 +98,7 @@
         "dedicated compute"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_position": "defer",
       "decision_question": "Is dedicated compute needed now for projects, or should the purchase be deferred until utilization is proven?",
       "domain": "AI Project",
@@ -255,7 +121,7 @@
       "status": "open",
       "title": "Dedicated compute purchase: needed now or defer",
       "tracking_metric": "Utilization hours, blocked workloads, rental cost, project revenue/proof value, and hardware payback period.",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
       "aliases": [
@@ -264,7 +130,7 @@
         "condition pricing"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_position": "investigate",
       "decision_question": "What pricing and condition strategy should be used for the bassinet listing?",
       "domain": "Business",
@@ -287,263 +153,453 @@
       "status": "open",
       "title": "Bassinet pricing and condition strategy",
       "tracking_metric": "Comparable prices, condition score, delivery/setup questions, listing views, saves, offers, and days-to-sale.",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
-      "confidence_after": 0.65,
-      "confidence_before": 0.65,
-      "created_at": "2026-07-16T20:21:29+00:00",
-      "current_rule": "The API is the correct live connection layer for cross-chat intelligence.",
-      "decision_question": "What decision should change for Authenticated Ledger API?",
-      "domain": "Info Analyzer OS",
-      "entity": "Authenticated Ledger API",
-      "entry_id": "IA-20260716202129-6A81E6",
-      "feedback_metric": "Entry saved, retrieved, alert acknowledged, feedback logged.",
-      "id": "DREV-76CA417E95775BC2",
-      "kind": "decision_review",
-      "recommended_change": "Complete the authenticated API cross-chat loop and record the result.",
-      "result": null,
-      "rule_update": null,
-      "signal": "Authenticated API can write structured chat memory into the Intelligence Ledger.",
-      "status": "open",
-      "updated_at": "2026-07-16T20:21:29+00:00"
-    },
-    {
-      "confidence_after": 0.65,
+      "confidence_after": 0.55,
       "confidence_before": 0.5,
-      "created_at": "2026-07-16T20:21:28+00:00",
-      "current_rule": "Visual setup checklists strengthen knowledge transfer when verbal coaching is inconsistent.",
-      "decision_question": "What decision should change for Operator setup training?",
-      "domain": "Lab",
-      "entity": "Operator setup training",
-      "entry_id": "IA-20260716202127-FC4355",
-      "feedback_metric": "Setup errors and independent completion time.",
-      "id": "DREV-4C15D68EC5FE5173",
+      "created_at": "2026-07-29T18:49:20+00:00",
+      "current_rule": "When AI Memory Boom Goes Bust. Micron, SK Hynix, Sandisk Plunge 30% \u2014 and Are Still Falling - 24/7 Wall St. appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184920-CF6A71",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-0DAE93AD5BA751CC",
       "kind": "decision_review",
-      "recommended_change": "Test a visual setup checklist during the next onboarding rep.",
+      "recommended_change": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "result": null,
       "rule_update": null,
-      "signal": "The knowledge-transfer system is inconsistent.",
+      "signal": "AI Memory Boom Goes Bust. Micron, SK Hynix, Sandisk Plunge 30% \u2014 and Are Still Falling - 24/7 Wall St.",
       "status": "open",
-      "updated_at": "2026-07-16T20:21:28+00:00"
+      "updated_at": "2026-07-29T18:49:20+00:00"
     },
     {
-      "confidence_after": 0.65,
-      "confidence_before": 0.65,
-      "created_at": "2026-07-16T19:58:18+00:00",
-      "current_rule": "The API is the correct live connection layer for cross-chat intelligence.",
-      "decision_question": "What decision should change for Authenticated Ledger API?",
-      "domain": "Info Analyzer OS",
-      "entity": "Authenticated Ledger API",
-      "entry_id": "IA-20260716195818-53DB20",
-      "feedback_metric": "Entry saved, retrieved, alert acknowledged, feedback logged.",
-      "id": "DREV-1F2A1D42FE9850A7",
-      "kind": "decision_review",
-      "recommended_change": "Complete the authenticated API cross-chat loop and record the result.",
-      "result": null,
-      "rule_update": null,
-      "signal": "Authenticated API can write structured chat memory into the Intelligence Ledger.",
-      "status": "open",
-      "updated_at": "2026-07-16T19:58:19+00:00"
-    },
-    {
-      "confidence_after": 0.65,
-      "confidence_before": 0.65,
-      "created_at": "2026-07-16T19:58:16+00:00",
-      "current_rule": "The API is the correct live connection layer for cross-chat intelligence.",
-      "decision_question": "What decision should change for Authenticated Ledger API?",
-      "domain": "Info Analyzer OS",
-      "entity": "Authenticated Ledger API",
-      "entry_id": "IA-20260716195816-0C8DB8",
-      "feedback_metric": "Entry saved, retrieved, alert acknowledged, feedback logged.",
-      "id": "DREV-6E89B6530B1356A9",
-      "kind": "decision_review",
-      "recommended_change": "Complete the authenticated API cross-chat loop and record the result.",
-      "result": null,
-      "rule_update": null,
-      "signal": "Authenticated API can write structured chat memory into the Intelligence Ledger.",
-      "status": "open",
-      "updated_at": "2026-07-16T19:58:16+00:00"
-    },
-    {
-      "confidence_after": 0.65,
+      "confidence_after": 0.55,
       "confidence_before": 0.5,
-      "created_at": "2026-07-16T18:49:05+00:00",
-      "current_rule": "The API is the correct live connection layer for cross-chat intelligence.",
-      "decision_question": "What decision should change for Authenticated Ledger API?",
-      "domain": "Info Analyzer OS",
-      "entity": "Authenticated Ledger API",
-      "entry_id": "IA-20260716184905-639A12",
-      "feedback_metric": "Entry saved, retrieved, alert acknowledged, feedback logged.",
-      "id": "DREV-D13CF3299EE45935",
+      "created_at": "2026-07-29T18:49:20+00:00",
+      "current_rule": "When SK Hynix shares tank as exponential earnings growth fails to satisfy AI-charged expectations - CNBC appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184920-C8EE21",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-4C88F15317245DD6",
       "kind": "decision_review",
-      "recommended_change": "Complete the authenticated API cross-chat loop and record the result.",
+      "recommended_change": "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
       "result": null,
       "rule_update": null,
-      "signal": "Authenticated API can write structured chat memory into the Intelligence Ledger.",
+      "signal": "SK Hynix shares tank as exponential earnings growth fails to satisfy AI-charged expectations - CNBC",
       "status": "open",
-      "updated_at": "2026-07-16T18:49:06+00:00"
+      "updated_at": "2026-07-29T18:49:20+00:00"
     },
     {
-      "confidence_after": 0.65,
+      "confidence_after": 0.55,
       "confidence_before": 0.5,
-      "created_at": "2026-07-16T18:47:56+00:00",
-      "current_rule": "The API is the correct live connection layer for cross-chat intelligence.",
-      "decision_question": "What decision should change for Authenticated Ledger API?",
-      "domain": "Other",
-      "entity": "Authenticated Ledger API",
-      "entry_id": "IA-20260716184756-B07F55",
-      "feedback_metric": "Entry saved, retrieved, alert acknowledged, feedback logged.",
-      "id": "DREV-50D5E9E7EA3358D1",
+      "created_at": "2026-07-29T18:49:20+00:00",
+      "current_rule": "When AI memory boom drives SK hynix to record quarterly profit - Bitget appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184920-3BECB5",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-6902ACA5EB755DA6",
       "kind": "decision_review",
-      "recommended_change": "Complete the authenticated API cross-chat loop and record the result.",
+      "recommended_change": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "result": null,
       "rule_update": null,
-      "signal": "Authenticated API can write structured chat memory into the Intelligence Ledger.",
+      "signal": "AI memory boom drives SK hynix to record quarterly profit - Bitget",
       "status": "open",
-      "updated_at": "2026-07-16T18:47:56+00:00"
+      "updated_at": "2026-07-29T18:49:20+00:00"
+    },
+    {
+      "confidence_after": 0.55,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-29T18:49:19+00:00",
+      "current_rule": "When Did SK Hynix\u2019s Record $42 Billion Q2 Profit Just Prove the Memory Boom Went Bust? - Yahoo Finance appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184919-E00120",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-13480903BA99589A",
+      "kind": "decision_review",
+      "recommended_change": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+      "result": null,
+      "rule_update": null,
+      "signal": "Did SK Hynix\u2019s Record $42 Billion Q2 Profit Just Prove the Memory Boom Went Bust? - Yahoo Finance",
+      "status": "open",
+      "updated_at": "2026-07-29T18:49:19+00:00"
+    },
+    {
+      "confidence_after": 0.55,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-29T18:49:19+00:00",
+      "current_rule": "When SK Hynix's record profit misses forecasts, shares slump 10% despite robust AI chip demand - reuters.com appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184919-835F3C",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-2D744736E82F56FD",
+      "kind": "decision_review",
+      "recommended_change": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+      "result": null,
+      "rule_update": null,
+      "signal": "SK Hynix's record profit misses forecasts, shares slump 10% despite robust AI chip demand - reuters.com",
+      "status": "open",
+      "updated_at": "2026-07-29T18:49:19+00:00"
+    },
+    {
+      "confidence_after": 0.55,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-29T18:49:19+00:00",
+      "current_rule": "When Did SK Hynix\u2019s Record $42 Billion Q2 Profit Just Prove the Memory Boom Went Bust? - 24/7 Wall St. appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184919-D1FF1D",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-C576A474B4B1522C",
+      "kind": "decision_review",
+      "recommended_change": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+      "result": null,
+      "rule_update": null,
+      "signal": "Did SK Hynix\u2019s Record $42 Billion Q2 Profit Just Prove the Memory Boom Went Bust? - 24/7 Wall St.",
+      "status": "open",
+      "updated_at": "2026-07-29T18:49:19+00:00"
+    },
+    {
+      "confidence_after": 0.55,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-29T18:49:19+00:00",
+      "current_rule": "When SK hynix's Q2 Earnings: Agentic AI Broadens Memory Demand - Moomoo appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184919-C31513",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-80D6504C12AD5F6E",
+      "kind": "decision_review",
+      "recommended_change": "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
+      "result": null,
+      "rule_update": null,
+      "signal": "SK hynix's Q2 Earnings: Agentic AI Broadens Memory Demand - Moomoo",
+      "status": "open",
+      "updated_at": "2026-07-29T18:49:19+00:00"
+    },
+    {
+      "confidence_after": 0.55,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-29T18:49:19+00:00",
+      "current_rule": "When SK hynix to Showcase Revolutionary 16-Layer HBM3E and 122TB SSD at CES 2025 as AI Memory Leader - Stock Titan appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184919-CAA576",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-1176C3208E0C5A11",
+      "kind": "decision_review",
+      "recommended_change": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+      "result": null,
+      "rule_update": null,
+      "signal": "SK hynix to Showcase Revolutionary 16-Layer HBM3E and 122TB SSD at CES 2025 as AI Memory Leader - Stock Titan",
+      "status": "open",
+      "updated_at": "2026-07-29T18:49:19+00:00"
+    },
+    {
+      "confidence_after": 0.55,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-29T18:49:19+00:00",
+      "current_rule": "When SK Hynix posts record Q2 profit on AI surge but misses estimates; shares fall 9.6% - Investing.com appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184919-94249C",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-48B4C564412D5961",
+      "kind": "decision_review",
+      "recommended_change": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+      "result": null,
+      "rule_update": null,
+      "signal": "SK Hynix posts record Q2 profit on AI surge but misses estimates; shares fall 9.6% - Investing.com",
+      "status": "open",
+      "updated_at": "2026-07-29T18:49:19+00:00"
+    },
+    {
+      "confidence_after": 0.55,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-29T18:49:19+00:00",
+      "current_rule": "When SK Hynix Stock Slides as AI Chip Boom Meets Reality - NAI500 appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184919-0E4EC1",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-42CDCE0DDAB1561B",
+      "kind": "decision_review",
+      "recommended_change": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+      "result": null,
+      "rule_update": null,
+      "signal": "SK Hynix Stock Slides as AI Chip Boom Meets Reality - NAI500",
+      "status": "open",
+      "updated_at": "2026-07-29T18:49:19+00:00"
+    },
+    {
+      "confidence_after": 0.55,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-29T18:49:19+00:00",
+      "current_rule": "When SK Hynix Misses Estimates Despite Profit Surge: ETFs in Focus - theglobeandmail.com appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184919-FF1E59",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-B8030349016654C9",
+      "kind": "decision_review",
+      "recommended_change": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+      "result": null,
+      "rule_update": null,
+      "signal": "SK Hynix Misses Estimates Despite Profit Surge: ETFs in Focus - theglobeandmail.com",
+      "status": "open",
+      "updated_at": "2026-07-29T18:49:19+00:00"
+    },
+    {
+      "confidence_after": 0.55,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-29T18:49:19+00:00",
+      "current_rule": "When KOSPI Triggers Historic Back-to-Back Circuit Breakers as AI Memory Rally Faces Structural Reckoning - techtimes.com appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184919-9A5828",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-4212982135C151FA",
+      "kind": "decision_review",
+      "recommended_change": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+      "result": null,
+      "rule_update": null,
+      "signal": "KOSPI Triggers Historic Back-to-Back Circuit Breakers as AI Memory Rally Faces Structural Reckoning - techtimes.com",
+      "status": "open",
+      "updated_at": "2026-07-29T18:49:19+00:00"
+    },
+    {
+      "confidence_after": 0.55,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-29T18:49:19+00:00",
+      "current_rule": "When AI memory boom lifts SK hynix to record $41.6B profit but falls short of estimates - Korea JoongAng Daily appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184919-457B38",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-7F7DF627A00F5A58",
+      "kind": "decision_review",
+      "recommended_change": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+      "result": null,
+      "rule_update": null,
+      "signal": "AI memory boom lifts SK hynix to record $41.6B profit but falls short of estimates - Korea JoongAng Daily",
+      "status": "open",
+      "updated_at": "2026-07-29T18:49:19+00:00"
+    },
+    {
+      "confidence_after": 0.55,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-29T18:49:19+00:00",
+      "current_rule": "When SK Hynix set to report record Q2 earnings as AI chip demand surges - eciks.org appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184919-9BE528",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-3DAC26721E2C52BB",
+      "kind": "decision_review",
+      "recommended_change": "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
+      "result": null,
+      "rule_update": null,
+      "signal": "SK Hynix set to report record Q2 earnings as AI chip demand surges - eciks.org",
+      "status": "open",
+      "updated_at": "2026-07-29T18:49:19+00:00"
+    },
+    {
+      "confidence_after": 0.55,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-29T18:49:19+00:00",
+      "current_rule": "When SK Hynix Q2 2026 Earnings: AI Memory Chip Boom Drives Record Profits - Intellectia AI appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184919-8490F7",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-9D31E54120855CB7",
+      "kind": "decision_review",
+      "recommended_change": "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
+      "result": null,
+      "rule_update": null,
+      "signal": "SK Hynix Q2 2026 Earnings: AI Memory Chip Boom Drives Record Profits - Intellectia AI",
+      "status": "open",
+      "updated_at": "2026-07-29T18:49:19+00:00"
+    },
+    {
+      "confidence_after": 0.55,
+      "confidence_before": 0.5,
+      "created_at": "2026-07-29T18:49:19+00:00",
+      "current_rule": "When SK Hynix Earnings Could Test AI Memory Selloff Thesis - Micron Technology (NASDAQ:MU), Western Digital (N - benzinga.com appears, compare it against Decision changed, action created, result logged, and follow-up metric reviewed. before changing action.",
+      "decision_question": "What decision should change for Investment thesis?",
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "entry_id": "IA-20260729184919-9683F1",
+      "feedback_metric": "Decision changed, action created, result logged, and follow-up metric reviewed.",
+      "id": "DREV-BB5F6831EE8C5DCF",
+      "kind": "decision_review",
+      "recommended_change": "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
+      "result": null,
+      "rule_update": null,
+      "signal": "SK Hynix Earnings Could Test AI Memory Selloff Thesis - Micron Technology (NASDAQ:MU), Western Digital (N - benzinga.com",
+      "status": "open",
+      "updated_at": "2026-07-29T18:49:19+00:00"
     }
   ],
-  "generated_at": "2026-07-18T08:18:23Z",
+  "generated_at": "2026-08-24T07:17:46Z",
   "open_loops": [
     {
-      "action": "Define the failure mode, mitigation step, and metric to watch.",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "due_date": "",
-      "id": "ACT-B46138D689A950CC",
-      "source_entry": "IA-20260712230008-BD11A4",
+      "id": "ACT-0DAE93AD5BA751CC",
+      "source_entry": "IA-20260729184920-CF6A71",
       "status": "open"
     },
     {
-      "action": "Compare against old belief. Update confidence with evidence.",
+      "action": "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
       "due_date": "",
-      "id": "ACT-CC94C1BB6CF652CD",
-      "source_entry": "IA-20260703232609-15CA52",
+      "id": "ACT-4C88F15317245DD6",
+      "source_entry": "IA-20260729184920-C8EE21",
       "status": "open"
     },
     {
-      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "due_date": "",
-      "id": "ACT-F5E1265B954159AA",
-      "source_entry": "IA-20260629083024-3567F5",
+      "id": "ACT-6902ACA5EB755DA6",
+      "source_entry": "IA-20260729184920-3BECB5",
       "status": "open"
     },
     {
-      "action": "Compare against old belief. Update confidence with evidence.",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "due_date": "",
-      "id": "ACT-E24BB7F781B75408",
-      "source_entry": "IA-20260629083024-7B302A",
+      "id": "ACT-13480903BA99589A",
+      "source_entry": "IA-20260729184919-E00120",
       "status": "open"
     },
     {
-      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "due_date": "",
-      "id": "ACT-54D7A8AB94EA5BA7",
-      "source_entry": "IA-20260629083209-754D78",
+      "id": "ACT-2D744736E82F56FD",
+      "source_entry": "IA-20260729184919-835F3C",
       "status": "open"
     },
     {
-      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "due_date": "",
-      "id": "ACT-348A57783B8E5B48",
-      "source_entry": "IA-20260629082955-7F37C2",
+      "id": "ACT-C576A474B4B1522C",
+      "source_entry": "IA-20260729184919-D1FF1D",
       "status": "open"
     },
     {
-      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "action": "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
       "due_date": "",
-      "id": "ACT-4EA59FDE56075E0C",
-      "source_entry": "IA-20260629082955-D59947",
+      "id": "ACT-80D6504C12AD5F6E",
+      "source_entry": "IA-20260729184919-C31513",
       "status": "open"
     },
     {
-      "action": "Monitor whether NVIDIA reroutes China demand through partners or loses it permanently. Update thesis if H20 ban becomes permanent.",
-      "due_date": "2026-08-01",
-      "id": "ACT-0DE765D7511C5318",
-      "source_entry": "IA-20260629082935-64DFE8",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+      "due_date": "",
+      "id": "ACT-1176C3208E0C5A11",
+      "source_entry": "IA-20260729184919-CAA576",
       "status": "open"
     },
     {
-      "action": "Build a minimal investor tracking table today: Name, Last Contact, Follow-Up Date, Status, Notes. Enter every current investor and prospect. Set a weekly 15-minute review cadence.",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "due_date": "",
-      "id": "ACT-615A578122735179",
-      "source_entry": "IA-20260629082236-206A1C",
+      "id": "ACT-48B4C564412D5961",
+      "source_entry": "IA-20260729184919-94249C",
       "status": "open"
     },
     {
-      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "due_date": "",
-      "id": "ACT-FD3DC537930758FE",
-      "source_entry": "ESI-SIG-20260623190049-354FFA",
+      "id": "ACT-42CDCE0DDAB1561B",
+      "source_entry": "IA-20260729184919-0E4EC1",
       "status": "open"
     },
     {
-      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "due_date": "",
-      "id": "ACT-3346B6E0263E5DDE",
-      "source_entry": "ESI-SIG-20260623190252-A3F079",
+      "id": "ACT-B8030349016654C9",
+      "source_entry": "IA-20260729184919-FF1E59",
       "status": "open"
     },
     {
-      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "due_date": "",
-      "id": "ACT-D122F6BFBA7B5952",
-      "source_entry": "ESI-SIG-20260624085026-DA9748",
+      "id": "ACT-4212982135C151FA",
+      "source_entry": "IA-20260729184919-9A5828",
       "status": "open"
     },
     {
-      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "due_date": "",
-      "id": "ACT-C2103715C33A540A",
-      "source_entry": "ESI-SIG-20260624085028-E7B2AB",
+      "id": "ACT-7F7DF627A00F5A58",
+      "source_entry": "IA-20260729184919-457B38",
       "status": "open"
     },
     {
-      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "action": "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
       "due_date": "",
-      "id": "ACT-9A0B21BAFEC95CD1",
-      "source_entry": "ESI-SIG-20260624085028-EECDDA",
+      "id": "ACT-3DAC26721E2C52BB",
+      "source_entry": "IA-20260729184919-9BE528",
       "status": "open"
     },
     {
-      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "action": "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
       "due_date": "",
-      "id": "ACT-5849FBD3A16E5693",
-      "source_entry": "ESI-SIG-20260624090005-AF084D",
+      "id": "ACT-9D31E54120855CB7",
+      "source_entry": "IA-20260729184919-8490F7",
       "status": "open"
     },
     {
-      "action": "Review Apple Inc. economics and update the monitor metric",
+      "action": "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
       "due_date": "",
-      "id": "ACT-7B197CF25025564D",
-      "source_entry": "ESI-SIG-20260624091948-6610AA",
+      "id": "ACT-BB5F6831EE8C5DCF",
+      "source_entry": "IA-20260729184919-9683F1",
       "status": "open"
     },
     {
-      "action": "Build a trackable sales follow-up loop for SALES",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "due_date": "",
-      "id": "ACT-8FA9896B3B2D598D",
-      "source_entry": "IA-20260627220144-8F931A",
+      "id": "ACT-3997538289995D3A",
+      "source_entry": "IA-20260729184919-4FF830",
       "status": "open"
     },
     {
-      "action": "Build a trackable sales follow-up loop for SALES",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "due_date": "",
-      "id": "ACT-594383BF2F045FB1",
-      "source_entry": "IA-20260627220152-60F6BB",
+      "id": "ACT-D7C300C42F675302",
+      "source_entry": "IA-20260729184919-052F62",
       "status": "open"
     },
     {
-      "action": "Build a trackable sales follow-up loop for SALES",
+      "action": "Build a trackable sales follow-up loop for Investment thesis",
       "due_date": "",
-      "id": "ACT-6DD489BC5A1B598B",
-      "source_entry": "IA-20260627220159-A8D267",
+      "id": "ACT-5D8CDCAFFFB75AF6",
+      "source_entry": "IA-20260726053234-E56C28",
       "status": "open"
     },
     {
-      "action": "Build a trackable sales follow-up loop for SALES",
+      "action": "Review Investment thesis economics and update the monitor metric",
       "due_date": "",
-      "id": "ACT-65585207D03C5EAB",
-      "source_entry": "IA-20260627220329-8A5467",
+      "id": "ACT-EFC1778A143A58E9",
+      "source_entry": "IA-20260726053234-7DA20E",
       "status": "open"
     }
   ],
@@ -555,7 +611,7 @@
         "transition readiness"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_blocker": "Needs consolidated plan, cash runway view, and trigger dates.",
       "current_milestone": "Define readiness checklist and weekly decision gates.",
       "domain": "Personal Operations",
@@ -572,7 +628,7 @@
       "status": "active",
       "summary": "Coordinate relocation readiness, cash runway, job search, housing, and family logistics as one operating project.",
       "title": "Nashville Transition",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
       "aliases": [
@@ -582,7 +638,7 @@
         "resume"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_blocker": "Needs response-rate tracking and sharper proof artifacts.",
       "current_milestone": "Turn applications into a measurable pipeline.",
       "domain": "Career",
@@ -599,7 +655,7 @@
       "status": "active",
       "summary": "Track applications, interviews, proof artifacts, role targeting, and follow-up cadence.",
       "title": "Job Search / Career Intelligence Ledger",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
       "aliases": [
@@ -609,7 +665,7 @@
         "trending items"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_blocker": "Needs consistent unit economics by item type.",
       "current_milestone": "Convert sales signals into inventory and listing actions.",
       "domain": "Business",
@@ -626,7 +682,7 @@
       "status": "active",
       "summary": "Build a sourcing, pricing, listing, objection, and sell-through loop for liquidation/resale operations.",
       "title": "Sales OS Liquidation",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
       "aliases": [
@@ -636,7 +692,7 @@
         "Sales OS memory"
       ],
       "confidence": "High",
-      "created_at": "2026-07-15T19:57:30Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_blocker": "Needs verified write-import-export-read loop.",
       "current_milestone": "Prove bidirectional ChatGPT-GitHub-SQLite synchronization.",
       "domain": "Info Analyzer OS",
@@ -653,86 +709,7 @@
       "status": "active",
       "summary": "Maintain the decision intelligence system that converts raw inputs into tracked memory, actions, and briefings.",
       "title": "Intelligence Ledger / Info Analyzer",
-      "updated_at": "2026-07-18T08:18:23Z"
-    },
-    {
-      "aliases": [
-        "Groove",
-        "music intelligence",
-        "asset lab music"
-      ],
-      "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
-      "current_blocker": "Needs repeatable library schema and examples.",
-      "current_milestone": "Clarify asset extraction and labeling workflow.",
-      "domain": "Music",
-      "entity": "Groove OS",
-      "id": "project-groove-os",
-      "kind": "canonical_project",
-      "lifecycle": "investigating",
-      "metadata": {
-        "provenance": "memory_manager_v0.84",
-        "source": "canonical_project_seed"
-      },
-      "next_action": "Break one audio asset into section map, glossary, sound example, and reuse notes.",
-      "related_query": "groove os music asset lab extraction emotional commercial reuse",
-      "status": "active",
-      "summary": "Develop a music intelligence system for extracting emotional, structural, sync, and reuse value from audio assets.",
-      "title": "Groove OS",
-      "updated_at": "2026-07-18T08:18:23Z"
-    },
-    {
-      "aliases": [
-        "home monitoring",
-        "sentinel",
-        "home signals"
-      ],
-      "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
-      "current_blocker": "Needs clear sensor/event list and decision rules.",
-      "current_milestone": "Define minimum viable monitoring scope.",
-      "domain": "AI Project",
-      "entity": "Home Sentinel",
-      "id": "project-home-sentinel",
-      "kind": "canonical_project",
-      "lifecycle": "investigating",
-      "metadata": {
-        "provenance": "memory_manager_v0.84",
-        "source": "canonical_project_seed"
-      },
-      "next_action": "List monitored events, thresholds, alert levels, and response actions.",
-      "related_query": "home sentinel monitoring threshold alert action loop",
-      "status": "active",
-      "summary": "Build a home/system monitoring concept around signals, thresholds, alerts, and action loops.",
-      "title": "Home Sentinel",
-      "updated_at": "2026-07-18T08:18:23Z"
-    },
-    {
-      "aliases": [
-        "operator training",
-        "concept library",
-        "SOP library",
-        "lab training"
-      ],
-      "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
-      "current_blocker": "Needs extraction labels and reusable examples.",
-      "current_milestone": "Turn lab patterns into concept cards and checklists.",
-      "domain": "Lab",
-      "entity": "Operator Training Concept Library",
-      "id": "project-operator-training-concept-library",
-      "kind": "canonical_project",
-      "lifecycle": "investigating",
-      "metadata": {
-        "provenance": "memory_manager_v0.84",
-        "source": "canonical_project_seed"
-      },
-      "next_action": "Create concept cards for calibration drift, setup errors, SOP gaps, and usable data hours.",
-      "related_query": "operator training SOP calibration quality feedback loop usable data",
-      "status": "active",
-      "summary": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets.",
-      "title": "Operator Training Concept Library",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
       "aliases": [
@@ -742,7 +719,7 @@
         "agent loop"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-18T08:17:32Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_blocker": "Needs durable proof artifacts from each loop instead of informal session summaries.",
       "current_milestone": "Make loop testing a default release gate for API, memory, and cockpit changes.",
       "domain": "AI Project",
@@ -759,7 +736,86 @@
       "status": "active",
       "summary": "Build and test agent loops that repeatedly plan, execute, verify, and repair until the system works in practice.",
       "title": "Agent Harness / Loop Engineering",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
+    },
+    {
+      "aliases": [
+        "Groove",
+        "music intelligence",
+        "asset lab music"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-08-24T06:27:42Z",
+      "current_blocker": "Needs repeatable library schema and examples.",
+      "current_milestone": "Clarify asset extraction and labeling workflow.",
+      "domain": "Music",
+      "entity": "Groove OS",
+      "id": "project-groove-os",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "Break one audio asset into section map, glossary, sound example, and reuse notes.",
+      "related_query": "groove os music asset lab extraction emotional commercial reuse",
+      "status": "active",
+      "summary": "Develop a music intelligence system for extracting emotional, structural, sync, and reuse value from audio assets.",
+      "title": "Groove OS",
+      "updated_at": "2026-08-24T07:17:46Z"
+    },
+    {
+      "aliases": [
+        "home monitoring",
+        "sentinel",
+        "home signals"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-08-24T06:27:42Z",
+      "current_blocker": "Needs clear sensor/event list and decision rules.",
+      "current_milestone": "Define minimum viable monitoring scope.",
+      "domain": "AI Project",
+      "entity": "Home Sentinel",
+      "id": "project-home-sentinel",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "List monitored events, thresholds, alert levels, and response actions.",
+      "related_query": "home sentinel monitoring threshold alert action loop",
+      "status": "active",
+      "summary": "Build a home/system monitoring concept around signals, thresholds, alerts, and action loops.",
+      "title": "Home Sentinel",
+      "updated_at": "2026-08-24T07:17:46Z"
+    },
+    {
+      "aliases": [
+        "operator training",
+        "concept library",
+        "SOP library",
+        "lab training"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-08-24T06:27:42Z",
+      "current_blocker": "Needs extraction labels and reusable examples.",
+      "current_milestone": "Turn lab patterns into concept cards and checklists.",
+      "domain": "Lab",
+      "entity": "Operator Training Concept Library",
+      "id": "project-operator-training-concept-library",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "Create concept cards for calibration drift, setup errors, SOP gaps, and usable data hours.",
+      "related_query": "operator training SOP calibration quality feedback loop usable data",
+      "status": "active",
+      "summary": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets.",
+      "title": "Operator Training Concept Library",
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
       "aliases": [
@@ -769,7 +825,7 @@
         "compute thesis"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-18T08:17:32Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_blocker": "Needs current source data, trigger thresholds, and decision rules before capital allocation.",
       "current_milestone": "Convert AI infrastructure ideas into watchable company and market signals.",
       "domain": "Investing",
@@ -786,1097 +842,115 @@
       "status": "active",
       "summary": "Track AI infrastructure signals across compute, memory, networking, robotics data, edge systems, and deployment economics.",
       "title": "AI Infrastructure Investment Thesis",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     }
   ],
-  "recent_accountability": [
-    {
-      "action": "Complete the authenticated API cross-chat loop and record the result.",
-      "id": "ACT-76CA417E95775BC2",
-      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
-      "status": "done"
-    },
-    {
-      "action": "Test a visual setup checklist during the next onboarding rep.",
-      "id": "ACT-4C15D68EC5FE5173",
-      "result": "The visual checklist reduced setup errors from three to one and reduced coaching intervention.",
-      "status": "done"
-    },
-    {
-      "action": "Complete the authenticated API cross-chat loop and record the result.",
-      "id": "ACT-1F2A1D42FE9850A7",
-      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
-      "status": "done"
-    },
-    {
-      "action": "Complete the authenticated API cross-chat loop and record the result.",
-      "id": "ACT-6E89B6530B1356A9",
-      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
-      "status": "done"
-    },
-    {
-      "action": "Complete the authenticated API cross-chat loop and record the result.",
-      "id": "ACT-D13CF3299EE45935",
-      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
-      "status": "done"
-    },
-    {
-      "action": "Complete the authenticated API cross-chat loop and record the result.",
-      "id": "ACT-50D5E9E7EA3358D1",
-      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
-      "status": "done"
-    },
-    {
-      "action": "After every sales call, create a CRM row with: Lead name, date, what they said, objection, next step, and follow-up date.",
-      "id": "ACT-9D143F9B474F5FB6",
-      "result": "Created a Google Sheet with columns: Lead, Date, What They Said, Objection, Next Step, Follow-Up Date. Used it after the very next call. Follow-up sent same day. Lead replied next morning.",
-      "status": "done"
-    },
-    {
-      "action": "Click Track Signal or archive the item.",
-      "id": "ACT-DBA2E5DA09E1597B",
-      "result": null,
-      "status": "cancelled"
-    },
-    {
-      "action": "Click Track Signal or archive the item.",
-      "id": "ACT-6EC5362D6C875241",
-      "result": null,
-      "status": "cancelled"
-    },
-    {
-      "action": "Click Track Signal or archive the item.",
-      "id": "ACT-8DE3D9857AA65996",
-      "result": null,
-      "status": "cancelled"
-    },
-    {
-      "action": "Click Track Signal or archive the item.",
-      "id": "ACT-0BE657FD2E165DD4",
-      "result": null,
-      "status": "cancelled"
-    },
-    {
-      "action": "Click Track Signal or archive the item.",
-      "id": "ACT-BD3779C1C3A35259",
-      "result": null,
-      "status": "cancelled"
-    }
-  ],
+  "recent_accountability": [],
   "recent_changes": [],
   "recent_lessons": [
     {
-      "domain": "Info Analyzer OS",
-      "entity": "Authenticated Ledger API",
-      "id": "IA-20260716202129-6A81E6",
-      "lesson": "The API is the correct live connection layer for cross-chat intelligence."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-E56C28",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Lab",
-      "entity": "Operator setup training",
-      "id": "IA-20260716202127-FC4355",
-      "lesson": "Visual setup checklists strengthen knowledge transfer when verbal coaching is inconsistent."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-7DA20E",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Business",
-      "entity": "How You Define the Problem Determines Whether You Solve It",
-      "id": "IA-20260622010849-B76C8B",
-      "lesson": "A business rep becomes valuable when it turns observation into offer, test, and measured outcome."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-54EF8C",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "AI Project",
-      "entity": "Routing Intelligence Framework",
-      "id": "IA-20260626083952-82B4E9",
-      "lesson": "Data turns vague feeling into measurable signal. Without data you say 'I feel stronger.' With data you know Exercise A produced 0.18 inches, Exercise B 0.05. Without data you say 'sales are down.' With data you know repeat customers fell from 41% to 23%. Data gives the map. Feedback updates the map. Reps train the driver. Intelligence is how well you route."
+      "domain": "Investing",
+      "entity": "SK Hynix Goes to Wall Street - TradingView SK Hynix Goes to Wall Street TradingView",
+      "id": "IA-20260726053234-047C80",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Lab",
-      "entity": "The No. 1 Business Skill You\u2019ll Need in 2025",
-      "id": "IA-20260626173926-8C2DC8",
-      "lesson": "Training system is infrastructure. Clean reps require clear standards, feedback, and repeatable process."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-AAFAC8",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Business",
-      "entity": "The Secret to Having More Energy as an Entrepreneur",
-      "id": "IA-20260626174001-612071",
-      "lesson": "A business rep becomes valuable when it turns observation into offer, test, and measured outcome."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-20AC36",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Business",
-      "entity": "The Art of the Elevator Pitch",
-      "id": "IA-20260626174059-11B276",
-      "lesson": "A business rep becomes valuable when it turns observation into offer, test, and measured outcome."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-62E630",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Lab",
-      "entity": "Become a Millionaire in 5 Years or Less",
-      "id": "IA-20260626174148-FE7E1D",
-      "lesson": "Training system is infrastructure. Clean reps require clear standards, feedback, and repeatable process."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-3A3923",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     }
   ],
   "top_patterns": [
     {
       "confidence": "High",
-      "created_at": "2026-06-27T21:53:54+00:00",
+      "created_at": "2026-07-26T05:32:34+00:00",
       "domains": [
         "Investing"
       ],
-      "entry_count": 90,
-      "id": "PAT-5D15EA5FFF5C5C2C",
-      "last_entry_id": "ESI-ACT-AE58C7C4349ADA",
+      "entry_count": 19,
+      "id": "PAT-F38A9C9BA9145149",
+      "last_entry_id": "IA-20260726053234-FA0162",
       "metadata": {},
-      "pattern": "Economic action: Track",
+      "pattern": "Investing signal library: Investment thesis",
       "tags": [
+        "context-library",
+        "promoted-signal",
+        "automatic-capture",
+        "source-pull",
+        "rss",
         "investing",
-        "economic-action",
-        "track",
         "memory",
-        "context",
-        "action",
-        "risk",
-        "osi",
-        "opportunity"
-      ],
-      "updated_at": "2026-07-03T23:25:32+00:00"
-    },
-    {
-      "confidence": "High",
-      "created_at": "2026-06-27T22:01:44+00:00",
-      "domains": [
-        "Network+",
-        "Lab",
-        "Other",
-        "Investing",
-        "Business"
-      ],
-      "entry_count": 27,
-      "id": "PAT-6C91A980E32458F0",
-      "last_entry_id": "IA-20260630203259-CFFDF0",
-      "metadata": {},
-      "pattern": "Non-trackable signal is useless; every signal needs a metric, trigger, action, or review loop.",
-      "tags": [
-        "network+",
-        "training",
-        "sop",
-        "operator",
-        "quality",
-        "failure mode",
-        "dashboard",
-        "metric",
-        "revenue",
-        "margin",
-        "inventory",
-        "cash flow",
-        "valuation",
-        "customer",
-        "pricing",
-        "osi",
-        "router",
-        "switch",
-        "security",
-        "resume",
-        "lab",
-        "skill",
-        "database",
-        "action",
-        "risk",
-        "other",
-        "recategorized",
-        "investing",
-        "portfolio",
-        "tcp",
-        "subnet",
-        "memory",
-        "context",
-        "pattern",
         "arms",
-        "extracted-action",
-        "business",
-        "sales",
-        "pipeline",
-        "test-v045"
-      ],
-      "updated_at": "2026-06-30T20:32:59+00:00"
-    },
-    {
-      "confidence": "High",
-      "created_at": "2026-07-12T05:16:45+00:00",
-      "domains": [
-        "AI Project"
-      ],
-      "entry_count": 17,
-      "id": "PAT-6F4C139A1CFC52D5",
-      "last_entry_id": "IA-20260716202147-F1288D",
-      "metadata": {},
-      "pattern": "Signals become more powerful when they are broken into labeled assets with metrics, examples, and resurfacing triggers.",
-      "tags": [
-        "ai project",
-        "asset-lab",
-        "signal-breakdown",
-        "signal",
-        "action",
-        "metric",
-        "customer",
-        "extraction",
-        "proof",
-        "context",
-        "pattern"
-      ],
-      "updated_at": "2026-07-16T20:21:48+00:00"
-    },
-    {
-      "confidence": "High",
-      "created_at": "2026-07-12T16:13:15+00:00",
-      "domains": [
-        "Business"
-      ],
-      "entry_count": 16,
-      "id": "PAT-E593EACF1E255B53",
-      "last_entry_id": "IA-20260716202146-EDC8D3",
-      "metadata": {},
-      "pattern": "When repeated objections cluster around one offer, test clarity before adding more traffic.",
-      "tags": [
-        "business",
-        "decision-qa",
-        "1783872794",
-        "customer",
-        "1783872879",
-        "1783920257",
-        "1783920282",
-        "1783920437",
-        "1783926747",
-        "1783930395",
-        "1783930870",
-        "1783931121",
-        "1783967126",
-        "1783967873",
-        "1783968142",
-        "1784144491",
-        "1784227781",
-        "1784231914",
-        "1784233306"
-      ],
-      "updated_at": "2026-07-16T20:21:46+00:00"
-    },
-    {
-      "confidence": "High",
-      "created_at": "2026-06-27T21:53:54+00:00",
-      "domains": [
-        "Investing"
-      ],
-      "entry_count": 9,
-      "id": "PAT-7FF041F359415C4D",
-      "last_entry_id": "ESI-ACT-08A906C6C06187",
-      "metadata": {},
-      "pattern": "Economic action: Analyze",
-      "tags": [
-        "investing",
-        "economic-action",
-        "analyze",
-        "quality",
-        "revenue",
-        "customer",
-        "pricing",
-        "action",
-        "risk",
-        "inventory"
-      ],
-      "updated_at": "2026-06-27T21:53:54+00:00"
-    },
-    {
-      "confidence": "High",
-      "created_at": "2026-06-27T21:53:54+00:00",
-      "domains": [
-        "Investing"
-      ],
-      "entry_count": 8,
-      "id": "PAT-2B2522B576045BAB",
-      "last_entry_id": "ESI-SIG-20260624091948-EFDB7C",
-      "metadata": {},
-      "pattern": "Economic signal: demand",
-      "tags": [
-        "investing",
-        "sec",
-        "demand",
-        "revenue",
-        "backend-sourced",
-        "economic-signal",
-        "quality",
-        "customer",
-        "pricing"
-      ],
-      "updated_at": "2026-06-27T21:53:54+00:00"
-    },
-    {
-      "confidence": "High",
-      "created_at": "2026-06-27T21:53:54+00:00",
-      "domains": [
-        "Investing"
-      ],
-      "entry_count": 8,
-      "id": "PAT-468B40419D495A95",
-      "last_entry_id": "ESI-SIG-20260624091948-C91F3F",
-      "metadata": {},
-      "pattern": "Economic signal: profit",
-      "tags": [
-        "investing",
-        "sec",
-        "profit",
-        "margin",
-        "backend-sourced",
-        "economic-signal",
         "revenue"
       ],
-      "updated_at": "2026-06-27T21:53:54+00:00"
+      "updated_at": "2026-07-26T05:32:34+00:00"
     },
     {
-      "confidence": "High",
-      "created_at": "2026-06-27T21:53:54+00:00",
+      "confidence": "Low",
+      "created_at": "2026-07-26T05:32:34+00:00",
       "domains": [
         "Investing"
       ],
-      "entry_count": 8,
-      "id": "PAT-1C3E62B9FEFC5303",
-      "last_entry_id": "ESI-SIG-20260624091948-6610AA",
+      "entry_count": 1,
+      "id": "PAT-51CB93C84D315AC8",
+      "last_entry_id": "IA-20260726053234-047C80",
       "metadata": {},
-      "pattern": "Economic signal: cash",
+      "pattern": "Investing signal library: SK Hynix Goes to Wall Street - TradingView SK Hynix Goes to Wall Street TradingView",
       "tags": [
-        "investing",
-        "sec",
-        "cash-quality",
-        "cfo",
-        "backend-sourced",
-        "economic-signal",
-        "quality",
-        "revenue",
-        "inventory",
-        "cash flow"
+        "context-library",
+        "promoted-signal",
+        "automatic-capture",
+        "source-pull",
+        "rss",
+        "investing"
       ],
-      "updated_at": "2026-06-27T21:53:54+00:00"
-    },
-    {
-      "confidence": "High",
-      "created_at": "2026-06-27T21:53:54+00:00",
-      "domains": [
-        "Investing"
-      ],
-      "entry_count": 8,
-      "id": "PAT-0A40B0F1E56F5D8A",
-      "last_entry_id": "ESI-SIG-20260624091948-8CE6D5",
-      "metadata": {},
-      "pattern": "Economic signal: balance-sheet",
-      "tags": [
-        "investing",
-        "sec",
-        "balance-sheet",
-        "liquidity",
-        "backend-sourced",
-        "economic-signal",
-        "quality",
-        "inventory"
-      ],
-      "updated_at": "2026-06-27T21:53:54+00:00"
-    },
-    {
-      "confidence": "High",
-      "created_at": "2026-07-05T02:21:40+00:00",
-      "domains": [
-        "Business",
-        "Career",
-        "Lab",
-        "AI Project"
-      ],
-      "entry_count": 5,
-      "id": "PAT-40F3D07979E65BB6",
-      "last_entry_id": "IA-20260629083209-754D78",
-      "metadata": {},
-      "pattern": "Recurring risk signal pattern",
-      "tags": [
-        "business",
-        "sales",
-        "pipeline",
-        "follow-up",
-        "crm",
-        "conversion",
-        "resume",
-        "career",
-        "job search",
-        "interview",
-        "proof",
-        "outcomes",
-        "switch",
-        "calibration",
-        "sop",
-        "operator",
-        "robot",
-        "error rate",
-        "lab",
-        "ai project",
-        "database",
-        "balance",
-        "retrieval",
-        "pull engine",
-        "domain",
-        "context",
-        "value proposition",
-        "pitch",
-        "differentiation",
-        "quality",
-        "customer"
-      ],
-      "updated_at": "2026-07-05T02:34:35+00:00"
-    },
-    {
-      "confidence": "High",
-      "created_at": "2026-06-27T21:53:54+00:00",
-      "domains": [
-        "Lab"
-      ],
-      "entry_count": 5,
-      "id": "PAT-442F1A31CB3D5D4F",
-      "last_entry_id": "IA-20260627203830-8A487F",
-      "metadata": {},
-      "pattern": "Scaling exposes weak process; training, SOPs, and feedback loops are infrastructure.",
-      "tags": [
-        "lab",
-        "training",
-        "operator",
-        "ai",
-        "pattern",
-        "customer",
-        "skill",
-        "action",
-        "music",
-        "fitness",
-        "revenue",
-        "osi",
-        "arms",
-        "job",
-        "context",
-        "metric",
-        "sop",
-        "risk",
-        "recovery",
-        "emotion",
-        "dashboard",
-        "stock",
-        "margin",
-        "inventory",
-        "security",
-        "volume",
-        "quality",
-        "pricing",
-        "portfolio",
-        "database"
-      ],
-      "updated_at": "2026-06-27T21:53:54+00:00"
-    },
-    {
-      "confidence": "Medium",
-      "created_at": "2026-07-05T02:35:29+00:00",
-      "domains": [
-        "AI Project"
-      ],
-      "entry_count": 4,
-      "id": "PAT-830A67330898572B",
-      "last_entry_id": "IA-20260704004254-09AD65",
-      "metadata": {},
-      "pattern": "Recurring action signal pattern",
-      "tags": [
-        "ai project",
-        "v060",
-        "test"
-      ],
-      "updated_at": "2026-07-05T02:35:50+00:00"
+      "updated_at": "2026-07-26T05:32:34+00:00"
     }
   ],
-  "upcoming_deadlines": [
-    {
-      "action": "Monitor whether NVIDIA reroutes China demand through partners or loses it permanently. Update thesis if H20 ban becomes permanent.",
-      "due_date": "2026-08-01",
-      "id": "ACT-0DE765D7511C5318",
-      "priority": "High"
-    },
-    {
-      "action": "Compare acquisition cost, sell-through, and gross margin for the top five phone models, then add the best two to today's sourcing list.",
-      "due_date": "2026-07-11",
-      "id": "ACT-9D0055443B125DFE",
-      "priority": "Medium"
-    },
-    {
-      "action": "Define trigger condition and review date. Resurface when triggered.",
-      "due_date": "2026-07-06",
-      "id": "ACT-162E099D6ED95D15",
-      "priority": "Medium"
-    }
-  ],
-  "watchlist": [
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "Paypal",
-      "id": "WLI-20260704190327-1714AB",
-      "industry": "",
-      "note": "",
-      "price": 95.82,
-      "return_potential": 28.63,
-      "sector": "",
-      "support_price": null,
-      "target_price": 1128.36,
-      "ticker": ""
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "DWT",
-      "id": "WLI-20260704190327-6C7ACB",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": null,
-      "sector": "Oil Bears",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "DWT"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "TREE",
-      "id": "WLI-20260704190327-B98D94",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "TREE"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "Kraft",
-      "id": "WLI-20260704190327-E28AB5",
-      "industry": "",
-      "note": "",
-      "price": 19.71,
-      "return_potential": 14.07,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": ""
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "MNST",
-      "id": "WLI-20260704190327-6BE1E1",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "MNST"
-    },
-    {
-      "catalyst": "sell off",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "IGC",
-      "id": "WLI-20260704190327-99ADEE",
-      "industry": "",
-      "note": "",
-      "price": 5.08,
-      "return_potential": 17.71653543,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "IGC"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "TSLA",
-      "id": "WLI-20260704190327-91FB31",
-      "industry": "",
-      "note": "",
-      "price": 258.5,
-      "return_potential": null,
-      "sector": "",
-      "support_price": 250.56,
-      "target_price": null,
-      "ticker": "TSLA"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "Monster",
-      "id": "WLI-20260704190327-8BF165",
-      "industry": "",
-      "note": "",
-      "price": 57.36,
-      "return_potential": 13.16,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": ""
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "ETSY",
-      "id": "WLI-20260704190327-AB8BB7",
-      "industry": "",
-      "note": "IPO, new, pot hih gwth",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "ETSY"
-    },
-    {
-      "catalyst": "sell off",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "VTVT",
-      "id": "WLI-20260704190327-D46C73",
-      "industry": "",
-      "note": "",
-      "price": 3.37,
-      "return_potential": 21.06824926,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "VTVT"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "NVDA",
-      "id": "WLI-20260704190327-E1E4BB",
-      "industry": "",
-      "note": "",
-      "price": 247.0,
-      "return_potential": null,
-      "sector": "",
-      "support_price": 235.13,
-      "target_price": null,
-      "ticker": "NVDA"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "Apple",
-      "id": "WLI-20260704190327-9D821D",
-      "industry": "",
-      "note": "",
-      "price": 243.0,
-      "return_potential": 84.85,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": ""
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "CLH",
-      "id": "WLI-20260704190327-022025",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "CLH"
-    },
-    {
-      "catalyst": "sell off",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "OGEN",
-      "id": "WLI-20260704190327-7CB689",
-      "industry": "",
-      "note": "",
-      "price": 1.62,
-      "return_potential": 6.790123457,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "OGEN"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "NFLX",
-      "id": "WLI-20260704190327-F25E51",
-      "industry": "",
-      "note": "",
-      "price": 340.0,
-      "return_potential": null,
-      "sector": "",
-      "support_price": 321.1,
-      "target_price": null,
-      "ticker": "NFLX"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "Microsoft",
-      "id": "WLI-20260704190327-51DCD0",
-      "industry": "",
-      "note": "",
-      "price": 137.0,
-      "return_potential": 53.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": ""
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "DKS",
-      "id": "WLI-20260704190327-AA128D",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "DKS"
-    },
-    {
-      "catalyst": "sell off",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "TSLA",
-      "id": "WLI-20260704190327-A899F3",
-      "industry": "",
-      "note": "",
-      "price": 255.0,
-      "return_potential": 1.568627451,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "TSLA"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "Disney",
-      "id": "WLI-20260704190327-E9C6A6",
-      "industry": "",
-      "note": "",
-      "price": 90.8,
-      "return_potential": 62.61,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": ""
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "KFY",
-      "id": "WLI-20260704190327-C6A6CD",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "KFY"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "TRVN",
-      "id": "WLI-20260704190327-B7847C",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": null,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "TRVN"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "JPM",
-      "id": "WLI-20260704190327-9E3926",
-      "industry": "",
-      "note": "",
-      "price": 86.85,
-      "return_potential": 54.25,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "JPM"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "POOL",
-      "id": "WLI-20260704190327-D09ACD",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "POOL"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "SQ",
-      "id": "WLI-20260704190327-46122A",
-      "industry": "",
-      "note": "",
-      "price": 51.05,
-      "return_potential": 36.2,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "SQ"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "SEDG",
-      "id": "WLI-20260704190327-AB0D14",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "SEDG"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "EWZ",
-      "id": "WLI-20260704190327-E68D83",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": null,
-      "sector": "Brazil Bull",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "EWZ"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "NVDA",
-      "id": "WLI-20260704190327-7028EF",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "NVDA"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "YUM",
-      "id": "WLI-20260704190327-5DE531",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "YUM"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "MCD",
-      "id": "WLI-20260704190327-66E804",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "MCD"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "ALLE",
-      "id": "WLI-20260704190327-8A6CDD",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "ALLE"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "QQQ",
-      "id": "WLI-20260704190327-CB7181",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": null,
-      "sector": "Nasdaq Top",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "QQQ"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "VVNT",
-      "id": "WLI-20260704190327-B30261",
-      "industry": "",
-      "note": "IPO, new, pot hih gwth",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "VVNT"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "DGRS",
-      "id": "WLI-20260704190327-D3E8F8",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": null,
-      "sector": "SmallCap Quality Dividend Growth",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "DGRS"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "LEN",
-      "id": "WLI-20260704190327-CB270A",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "LEN"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "HomeBuilders Bull",
-      "id": "WLI-20260704190327-5A029D",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": null,
-      "sector": "HomeBuilders Bull",
-      "support_price": null,
-      "target_price": null,
-      "ticker": ""
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "TFC",
-      "id": "WLI-20260704190327-8A4900",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "TFC"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "UMPQ",
-      "id": "WLI-20260704190327-F579E3",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "UMPQ"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "USB",
-      "id": "WLI-20260704190327-20DAF0",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "USB"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "RMAX",
-      "id": "WLI-20260704190327-602090",
-      "industry": "",
-      "note": "IPO, pot hih gwth",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "RMAX"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "JLL",
-      "id": "WLI-20260704190327-7ACA03",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "JLL"
-    }
-  ],
+  "upcoming_deadlines": [],
+  "watchlist": [],
   "weekend_goals": [
-    "Define the failure mode, mitigation step, and metric to watch.",
-    "Compare against old belief. Update confidence with evidence.",
-    "Identify failure mode. Define mitigation and metric to watch.",
-    "Compare against old belief. Update confidence with evidence.",
-    "Identify failure mode. Define mitigation and metric to watch."
+    "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+    "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
+    "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+    "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+    "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome."
   ]
 }

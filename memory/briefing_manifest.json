@@ -1,38 +1,7 @@
 {
-  "daily_watch_items": [
-    {
-      "action": "Complete the authenticated API cross-chat loop and record the result.",
-      "domain": "Info Analyzer OS",
-      "id": "IA-20260716202129-6A81E6",
-      "signal": "Authenticated API can write structured chat memory into the Intelligence Ledger."
-    },
-    {
-      "action": "Test a visual setup checklist during the next onboarding rep.",
-      "domain": "Lab",
-      "id": "IA-20260716202127-FC4355",
-      "signal": "The knowledge-transfer system is inconsistent."
-    },
-    {
-      "action": "insights",
-      "domain": "Investing",
-      "id": "ESI-SIG-20260623190049-354FFA",
-      "signal": "Cash conversion signal"
-    },
-    {
-      "action": "insights",
-      "domain": "Investing",
-      "id": "ESI-SIG-20260623190252-A3F079",
-      "signal": "Cash conversion signal"
-    },
-    {
-      "action": "insights",
-      "domain": "Investing",
-      "id": "ESI-SIG-20260624085026-DA9748",
-      "signal": "Cash conversion signal"
-    }
-  ],
-  "generated_at": "2026-07-18T08:18:23Z",
-  "pattern_count": 59,
+  "daily_watch_items": [],
+  "generated_at": "2026-08-24T07:17:46Z",
+  "pattern_count": 2,
   "projects_requiring_attention": [
     {
       "aliases": [
@@ -41,7 +10,7 @@
         "transition readiness"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_blocker": "Needs consolidated plan, cash runway view, and trigger dates.",
       "current_milestone": "Define readiness checklist and weekly decision gates.",
       "domain": "Personal Operations",
@@ -58,7 +27,7 @@
       "status": "active",
       "summary": "Coordinate relocation readiness, cash runway, job search, housing, and family logistics as one operating project.",
       "title": "Nashville Transition",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
       "aliases": [
@@ -68,7 +37,7 @@
         "resume"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_blocker": "Needs response-rate tracking and sharper proof artifacts.",
       "current_milestone": "Turn applications into a measurable pipeline.",
       "domain": "Career",
@@ -85,7 +54,7 @@
       "status": "active",
       "summary": "Track applications, interviews, proof artifacts, role targeting, and follow-up cadence.",
       "title": "Job Search / Career Intelligence Ledger",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
       "aliases": [
@@ -95,7 +64,7 @@
         "trending items"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_blocker": "Needs consistent unit economics by item type.",
       "current_milestone": "Convert sales signals into inventory and listing actions.",
       "domain": "Business",
@@ -112,7 +81,7 @@
       "status": "active",
       "summary": "Build a sourcing, pricing, listing, objection, and sell-through loop for liquidation/resale operations.",
       "title": "Sales OS Liquidation",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
       "aliases": [
@@ -122,7 +91,7 @@
         "Sales OS memory"
       ],
       "confidence": "High",
-      "created_at": "2026-07-15T19:57:30Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_blocker": "Needs verified write-import-export-read loop.",
       "current_milestone": "Prove bidirectional ChatGPT-GitHub-SQLite synchronization.",
       "domain": "Info Analyzer OS",
@@ -139,86 +108,7 @@
       "status": "active",
       "summary": "Maintain the decision intelligence system that converts raw inputs into tracked memory, actions, and briefings.",
       "title": "Intelligence Ledger / Info Analyzer",
-      "updated_at": "2026-07-18T08:18:23Z"
-    },
-    {
-      "aliases": [
-        "Groove",
-        "music intelligence",
-        "asset lab music"
-      ],
-      "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
-      "current_blocker": "Needs repeatable library schema and examples.",
-      "current_milestone": "Clarify asset extraction and labeling workflow.",
-      "domain": "Music",
-      "entity": "Groove OS",
-      "id": "project-groove-os",
-      "kind": "canonical_project",
-      "lifecycle": "investigating",
-      "metadata": {
-        "provenance": "memory_manager_v0.84",
-        "source": "canonical_project_seed"
-      },
-      "next_action": "Break one audio asset into section map, glossary, sound example, and reuse notes.",
-      "related_query": "groove os music asset lab extraction emotional commercial reuse",
-      "status": "active",
-      "summary": "Develop a music intelligence system for extracting emotional, structural, sync, and reuse value from audio assets.",
-      "title": "Groove OS",
-      "updated_at": "2026-07-18T08:18:23Z"
-    },
-    {
-      "aliases": [
-        "home monitoring",
-        "sentinel",
-        "home signals"
-      ],
-      "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
-      "current_blocker": "Needs clear sensor/event list and decision rules.",
-      "current_milestone": "Define minimum viable monitoring scope.",
-      "domain": "AI Project",
-      "entity": "Home Sentinel",
-      "id": "project-home-sentinel",
-      "kind": "canonical_project",
-      "lifecycle": "investigating",
-      "metadata": {
-        "provenance": "memory_manager_v0.84",
-        "source": "canonical_project_seed"
-      },
-      "next_action": "List monitored events, thresholds, alert levels, and response actions.",
-      "related_query": "home sentinel monitoring threshold alert action loop",
-      "status": "active",
-      "summary": "Build a home/system monitoring concept around signals, thresholds, alerts, and action loops.",
-      "title": "Home Sentinel",
-      "updated_at": "2026-07-18T08:18:23Z"
-    },
-    {
-      "aliases": [
-        "operator training",
-        "concept library",
-        "SOP library",
-        "lab training"
-      ],
-      "confidence": "Medium",
-      "created_at": "2026-07-15T19:57:30Z",
-      "current_blocker": "Needs extraction labels and reusable examples.",
-      "current_milestone": "Turn lab patterns into concept cards and checklists.",
-      "domain": "Lab",
-      "entity": "Operator Training Concept Library",
-      "id": "project-operator-training-concept-library",
-      "kind": "canonical_project",
-      "lifecycle": "investigating",
-      "metadata": {
-        "provenance": "memory_manager_v0.84",
-        "source": "canonical_project_seed"
-      },
-      "next_action": "Create concept cards for calibration drift, setup errors, SOP gaps, and usable data hours.",
-      "related_query": "operator training SOP calibration quality feedback loop usable data",
-      "status": "active",
-      "summary": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets.",
-      "title": "Operator Training Concept Library",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
       "aliases": [
@@ -228,7 +118,7 @@
         "agent loop"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-18T08:17:32Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_blocker": "Needs durable proof artifacts from each loop instead of informal session summaries.",
       "current_milestone": "Make loop testing a default release gate for API, memory, and cockpit changes.",
       "domain": "AI Project",
@@ -245,7 +135,86 @@
       "status": "active",
       "summary": "Build and test agent loops that repeatedly plan, execute, verify, and repair until the system works in practice.",
       "title": "Agent Harness / Loop Engineering",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
+    },
+    {
+      "aliases": [
+        "Groove",
+        "music intelligence",
+        "asset lab music"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-08-24T06:27:42Z",
+      "current_blocker": "Needs repeatable library schema and examples.",
+      "current_milestone": "Clarify asset extraction and labeling workflow.",
+      "domain": "Music",
+      "entity": "Groove OS",
+      "id": "project-groove-os",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "Break one audio asset into section map, glossary, sound example, and reuse notes.",
+      "related_query": "groove os music asset lab extraction emotional commercial reuse",
+      "status": "active",
+      "summary": "Develop a music intelligence system for extracting emotional, structural, sync, and reuse value from audio assets.",
+      "title": "Groove OS",
+      "updated_at": "2026-08-24T07:17:46Z"
+    },
+    {
+      "aliases": [
+        "home monitoring",
+        "sentinel",
+        "home signals"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-08-24T06:27:42Z",
+      "current_blocker": "Needs clear sensor/event list and decision rules.",
+      "current_milestone": "Define minimum viable monitoring scope.",
+      "domain": "AI Project",
+      "entity": "Home Sentinel",
+      "id": "project-home-sentinel",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "List monitored events, thresholds, alert levels, and response actions.",
+      "related_query": "home sentinel monitoring threshold alert action loop",
+      "status": "active",
+      "summary": "Build a home/system monitoring concept around signals, thresholds, alerts, and action loops.",
+      "title": "Home Sentinel",
+      "updated_at": "2026-08-24T07:17:46Z"
+    },
+    {
+      "aliases": [
+        "operator training",
+        "concept library",
+        "SOP library",
+        "lab training"
+      ],
+      "confidence": "Medium",
+      "created_at": "2026-08-24T06:27:42Z",
+      "current_blocker": "Needs extraction labels and reusable examples.",
+      "current_milestone": "Turn lab patterns into concept cards and checklists.",
+      "domain": "Lab",
+      "entity": "Operator Training Concept Library",
+      "id": "project-operator-training-concept-library",
+      "kind": "canonical_project",
+      "lifecycle": "investigating",
+      "metadata": {
+        "provenance": "memory_manager_v0.84",
+        "source": "canonical_project_seed"
+      },
+      "next_action": "Create concept cards for calibration drift, setup errors, SOP gaps, and usable data hours.",
+      "related_query": "operator training SOP calibration quality feedback loop usable data",
+      "status": "active",
+      "summary": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets.",
+      "title": "Operator Training Concept Library",
+      "updated_at": "2026-08-24T07:17:46Z"
     },
     {
       "aliases": [
@@ -255,7 +224,7 @@
         "compute thesis"
       ],
       "confidence": "Medium",
-      "created_at": "2026-07-18T08:17:32Z",
+      "created_at": "2026-08-24T06:27:42Z",
       "current_blocker": "Needs current source data, trigger thresholds, and decision rules before capital allocation.",
       "current_milestone": "Convert AI infrastructure ideas into watchable company and market signals.",
       "domain": "Investing",
@@ -272,7 +241,7 @@
       "status": "active",
       "summary": "Track AI infrastructure signals across compute, memory, networking, robotics data, edge systems, and deployment economics.",
       "title": "AI Infrastructure Investment Thesis",
-      "updated_at": "2026-07-18T08:18:23Z"
+      "updated_at": "2026-08-24T07:17:46Z"
     }
   ],
   "questions_still_unanswered": [
@@ -280,7 +249,7 @@
     "Which watchlist item crossed a trigger since the last briefing?",
     "Which repeated pattern should become a reusable playbook rule?"
   ],
-  "quick_action_count": 75,
+  "quick_action_count": 59,
   "suggested_accountability_prompts": [
     "What action did you complete, and what result should be logged?",
     "Which signal changed a decision today?",
@@ -290,193 +259,6 @@
     "Closed actions unless the result created a new decision rule.",
     "Raw historical entries without an open action, watch trigger, or contradiction."
   ],
-  "todays_highest_priorities": [
-    {
-      "action": "Define the failure mode, mitigation step, and metric to watch.",
-      "domain": "Business",
-      "entity": "Customer Retention",
-      "id": "ACT-B46138D689A950CC",
-      "priority": "High",
-      "track": "Units sold, conversion rate, margin, customer response, time to sale",
-      "why": "Repeat purchases declining 15%"
-    },
-    {
-      "action": "Compare against old belief. Update confidence with evidence.",
-      "domain": "Business",
-      "entity": "Info Analyzer Intelligence Ledger Raw Data",
-      "id": "ACT-CC94C1BB6CF652CD",
-      "priority": "High",
-      "track": "Signal tracked and acted upon",
-      "why": "Contradiction in Business: Info Analyzer Intelligence Ledger Raw Data: Raw Signals: South Korean..."
-    },
-    {
-      "action": "Identify failure mode. Define mitigation and metric to watch.",
-      "domain": "AI Project",
-      "entity": "Info Analyzer database",
-      "id": "ACT-F5E1265B954159AA",
-      "priority": "High",
-      "track": "Signal tracked and acted upon",
-      "why": "Risk in AI Project: The pull engine keeps surfacing Investing entries when I query..."
-    },
-    {
-      "action": "Compare against old belief. Update confidence with evidence.",
-      "domain": "Fitness",
-      "entity": "Arm training",
-      "id": "ACT-E24BB7F781B75408",
-      "priority": "High",
-      "track": "Signal tracked and acted upon",
-      "why": "Contradiction in Fitness: Been training arms 2x per week for 6 weeks. Arm..."
-    },
-    {
-      "action": "Identify failure mode. Define mitigation and metric to watch.",
-      "domain": "Business",
-      "entity": "Value proposition",
-      "id": "ACT-54D7A8AB94EA5BA7",
-      "priority": "High",
-      "track": "Signal tracked and acted upon",
-      "why": "Risk in Business: Potential customer asked: what makes you different from competitors? I..."
-    }
-  ],
-  "weekly_watch_items": [
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "Paypal",
-      "id": "WLI-20260704190327-1714AB",
-      "industry": "",
-      "note": "",
-      "price": 95.82,
-      "return_potential": 28.63,
-      "sector": "",
-      "support_price": null,
-      "target_price": 1128.36,
-      "ticker": ""
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "DWT",
-      "id": "WLI-20260704190327-6C7ACB",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": null,
-      "sector": "Oil Bears",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "DWT"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "TREE",
-      "id": "WLI-20260704190327-B98D94",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "TREE"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "Kraft",
-      "id": "WLI-20260704190327-E28AB5",
-      "industry": "",
-      "note": "",
-      "price": 19.71,
-      "return_potential": 14.07,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": ""
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "MNST",
-      "id": "WLI-20260704190327-6BE1E1",
-      "industry": "",
-      "note": "",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "MNST"
-    },
-    {
-      "catalyst": "sell off",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "IGC",
-      "id": "WLI-20260704190327-99ADEE",
-      "industry": "",
-      "note": "",
-      "price": 5.08,
-      "return_potential": 17.71653543,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "IGC"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "TSLA",
-      "id": "WLI-20260704190327-91FB31",
-      "industry": "",
-      "note": "",
-      "price": 258.5,
-      "return_potential": null,
-      "sector": "",
-      "support_price": 250.56,
-      "target_price": null,
-      "ticker": "TSLA"
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "Monster",
-      "id": "WLI-20260704190327-8BF165",
-      "industry": "",
-      "note": "",
-      "price": 57.36,
-      "return_potential": 13.16,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": ""
-    },
-    {
-      "catalyst": "",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "ETSY",
-      "id": "WLI-20260704190327-AB8BB7",
-      "industry": "",
-      "note": "IPO, new, pot hih gwth",
-      "price": null,
-      "return_potential": 0.0,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "ETSY"
-    },
-    {
-      "catalyst": "sell off",
-      "created_at": "2026-07-04T19:03:27+00:00",
-      "display_name": "VTVT",
-      "id": "WLI-20260704190327-D46C73",
-      "industry": "",
-      "note": "",
-      "price": 3.37,
-      "return_potential": 21.06824926,
-      "sector": "",
-      "support_price": null,
-      "target_price": null,
-      "ticker": "VTVT"
-    }
-  ]
+  "todays_highest_priorities": [],
+  "weekly_watch_items": []
 }

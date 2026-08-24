@@ -1,6 +1,6 @@
 {
   "assistant_bundle": {
-    "bytes": 42229,
+    "bytes": 31500,
     "errors": [],
     "max_bytes": 150000,
     "path": "memory/assistant_bundle.json",
@@ -25,21 +25,23 @@
     "memory/entity_aliases.json"
   ],
   "counts": {
-    "actions": 120,
-    "decisions": 10,
-    "entity_aliases": 16,
-    "entries": 100,
-    "patterns": 59,
+    "actions": 59,
+    "decisions": 43,
+    "entity_aliases": 8,
+    "entries": 59,
+    "patterns": 2,
     "projects": 9,
-    "watchlist": 126
+    "watchlist": 0
   },
+  "current_run_id": "export-20260824-071746",
   "entity_aliases": {
-    "duplicate_groups_detected": 10,
-    "duplicate_groups_reconciled": 16,
+    "duplicate_groups_detected": 2,
+    "duplicate_groups_reconciled": 8,
     "unresolved_duplicate_entities": 0
   },
   "export_success": true,
-  "generated_at": "2026-07-18T08:18:23Z",
+  "generated_at": "2026-08-24T07:17:46Z",
+  "immutable_commit": "",
   "import_result": {
     "archived": "",
     "duplicates": 0,
@@ -47,14 +49,14 @@
     "pending_before": 0
   },
   "json_errors": [],
-  "last_push": "2026-07-18T08:19:17Z",
-  "last_push_commit": "5a94649e50aedae804a1b2d8cbeb8b341756bb37",
-  "source_of_truth": "data/info_analyzer.db",
+  "publication_status": "pending",
+  "remote_head_sha": "",
+  "source_of_truth": "/Users/admin/Library/Application Support/InfoAnalyzer/active/info_analyzer.db",
   "validation": {
     "broken_links": 0,
     "duplicate_entities": 0,
-    "duplicate_groups_detected": 10,
-    "duplicate_groups_reconciled": 16,
+    "duplicate_groups_detected": 2,
+    "duplicate_groups_reconciled": 8,
     "errors": [],
     "missing_required_files": [],
     "ok": true,

@@ -1,48 +1,5 @@
 {
-  "accountability_state": [
-    {
-      "action": "Complete the authenticated API cross-chat loop and record the result.",
-      "id": "ACT-76CA417E95775BC2",
-      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
-      "status": "done"
-    },
-    {
-      "action": "Test a visual setup checklist during the next onboarding rep.",
-      "id": "ACT-4C15D68EC5FE5173",
-      "result": "The visual checklist reduced setup errors from three to one and reduced coaching intervention.",
-      "status": "done"
-    },
-    {
-      "action": "Complete the authenticated API cross-chat loop and record the result.",
-      "id": "ACT-1F2A1D42FE9850A7",
-      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
-      "status": "done"
-    },
-    {
-      "action": "Complete the authenticated API cross-chat loop and record the result.",
-      "id": "ACT-6E89B6530B1356A9",
-      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
-      "status": "done"
-    },
-    {
-      "action": "Complete the authenticated API cross-chat loop and record the result.",
-      "id": "ACT-D13CF3299EE45935",
-      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
-      "status": "done"
-    },
-    {
-      "action": "Complete the authenticated API cross-chat loop and record the result.",
-      "id": "ACT-50D5E9E7EA3358D1",
-      "result": "Authenticated API loop completed: write, retrieve, acknowledge, and feedback all passed.",
-      "status": "done"
-    },
-    {
-      "action": "After every sales call, create a CRM row with: Lead name, date, what they said, objection, next step, and follow-up date.",
-      "id": "ACT-9D143F9B474F5FB6",
-      "result": "Created a Google Sheet with columns: Lead, Date, What They Said, Objection, Next Step, Follow-Up Date. Used it after the very next call. Follow-up sent same day. Lead replied next\u2026",
-      "status": "done"
-    }
-  ],
+  "accountability_state": [],
   "active_decisions": [
     {
       "confidence": 0.6,
@@ -113,15 +70,15 @@
       "contradicting_evidence": [],
       "current_state": "open",
       "decision_trigger": "",
-      "entity": "Authenticated Ledger API",
-      "id": "DREV-76CA417E95775BC2",
+      "entity": "Investment thesis",
+      "id": "DREV-0DAE93AD5BA751CC",
       "next_evidence_needed": [
-        "Entry saved, retrieved, alert acknowledged, feedback logged."
+        "Decision changed, action created, result logged, and follow-up metric reviewed."
       ],
-      "question": "What decision should change for Authenticated Ledger API?",
+      "question": "What decision should change for Investment thesis?",
       "review_cadence": "daily",
       "supporting_evidence": [
-        "Complete the authenticated API cross-chat loop and record the result."
+        "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome."
       ]
     },
     {
@@ -129,15 +86,15 @@
       "contradicting_evidence": [],
       "current_state": "open",
       "decision_trigger": "",
-      "entity": "Operator setup training",
-      "id": "DREV-4C15D68EC5FE5173",
+      "entity": "Investment thesis",
+      "id": "DREV-4C88F15317245DD6",
       "next_evidence_needed": [
-        "Setup errors and independent completion time."
+        "Decision changed, action created, result logged, and follow-up metric reviewed."
       ],
-      "question": "What decision should change for Operator setup training?",
+      "question": "What decision should change for Investment thesis?",
       "review_cadence": "daily",
       "supporting_evidence": [
-        "Test a visual setup checklist during the next onboarding rep."
+        "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule."
       ]
     },
     {
@@ -145,15 +102,15 @@
       "contradicting_evidence": [],
       "current_state": "open",
       "decision_trigger": "",
-      "entity": "Authenticated Ledger API",
-      "id": "DREV-1F2A1D42FE9850A7",
+      "entity": "Investment thesis",
+      "id": "DREV-6902ACA5EB755DA6",
       "next_evidence_needed": [
-        "Entry saved, retrieved, alert acknowledged, feedback logged."
+        "Decision changed, action created, result logged, and follow-up metric reviewed."
       ],
-      "question": "What decision should change for Authenticated Ledger API?",
+      "question": "What decision should change for Investment thesis?",
       "review_cadence": "daily",
       "supporting_evidence": [
-        "Complete the authenticated API cross-chat loop and record the result."
+        "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome."
       ]
     },
     {
@@ -161,15 +118,15 @@
       "contradicting_evidence": [],
       "current_state": "open",
       "decision_trigger": "",
-      "entity": "Authenticated Ledger API",
-      "id": "DREV-6E89B6530B1356A9",
+      "entity": "Investment thesis",
+      "id": "DREV-13480903BA99589A",
       "next_evidence_needed": [
-        "Entry saved, retrieved, alert acknowledged, feedback logged."
+        "Decision changed, action created, result logged, and follow-up metric reviewed."
       ],
-      "question": "What decision should change for Authenticated Ledger API?",
+      "question": "What decision should change for Investment thesis?",
       "review_cadence": "daily",
       "supporting_evidence": [
-        "Complete the authenticated API cross-chat loop and record the result."
+        "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome."
       ]
     },
     {
@@ -177,15 +134,15 @@
       "contradicting_evidence": [],
       "current_state": "open",
       "decision_trigger": "",
-      "entity": "Authenticated Ledger API",
-      "id": "DREV-D13CF3299EE45935",
+      "entity": "Investment thesis",
+      "id": "DREV-2D744736E82F56FD",
       "next_evidence_needed": [
-        "Entry saved, retrieved, alert acknowledged, feedback logged."
+        "Decision changed, action created, result logged, and follow-up metric reviewed."
       ],
-      "question": "What decision should change for Authenticated Ledger API?",
+      "question": "What decision should change for Investment thesis?",
       "review_cadence": "daily",
       "supporting_evidence": [
-        "Complete the authenticated API cross-chat loop and record the result."
+        "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome."
       ]
     },
     {
@@ -193,15 +150,15 @@
       "contradicting_evidence": [],
       "current_state": "open",
       "decision_trigger": "",
-      "entity": "Authenticated Ledger API",
-      "id": "DREV-50D5E9E7EA3358D1",
+      "entity": "Investment thesis",
+      "id": "DREV-C576A474B4B1522C",
       "next_evidence_needed": [
-        "Entry saved, retrieved, alert acknowledged, feedback logged."
+        "Decision changed, action created, result logged, and follow-up metric reviewed."
       ],
-      "question": "What decision should change for Authenticated Ledger API?",
+      "question": "What decision should change for Investment thesis?",
       "review_cadence": "daily",
       "supporting_evidence": [
-        "Complete the authenticated API cross-chat loop and record the result."
+        "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome."
       ]
     }
   ],
@@ -211,158 +168,20 @@
       "domains": [
         "Investing"
       ],
-      "entry_count": 90,
-      "id": "PAT-5D15EA5FFF5C5C2C",
+      "entry_count": 19,
+      "id": "PAT-F38A9C9BA9145149",
       "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Economic action: Track"
+      "pattern": "Investing signal library: Investment thesis"
     },
     {
-      "confidence": "High",
-      "domains": [
-        "Network+",
-        "Lab",
-        "Other",
-        "Investing",
-        "Business"
-      ],
-      "entry_count": 27,
-      "id": "PAT-6C91A980E32458F0",
-      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Non-trackable signal is useless; every signal needs a metric, trigger, action, or review loop."
-    },
-    {
-      "confidence": "High",
-      "domains": [
-        "AI Project"
-      ],
-      "entry_count": 17,
-      "id": "PAT-6F4C139A1CFC52D5",
-      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Signals become more powerful when they are broken into labeled assets with metrics, examples, and resurfacing triggers."
-    },
-    {
-      "confidence": "High",
-      "domains": [
-        "Business"
-      ],
-      "entry_count": 16,
-      "id": "PAT-E593EACF1E255B53",
-      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "When repeated objections cluster around one offer, test clarity before adding more traffic."
-    },
-    {
-      "confidence": "High",
+      "confidence": "Low",
       "domains": [
         "Investing"
       ],
-      "entry_count": 9,
-      "id": "PAT-7FF041F359415C4D",
+      "entry_count": 1,
+      "id": "PAT-51CB93C84D315AC8",
       "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Economic action: Analyze"
-    },
-    {
-      "confidence": "High",
-      "domains": [
-        "Investing"
-      ],
-      "entry_count": 8,
-      "id": "PAT-2B2522B576045BAB",
-      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Economic signal: demand"
-    },
-    {
-      "confidence": "High",
-      "domains": [
-        "Investing"
-      ],
-      "entry_count": 8,
-      "id": "PAT-468B40419D495A95",
-      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Economic signal: profit"
-    },
-    {
-      "confidence": "High",
-      "domains": [
-        "Investing"
-      ],
-      "entry_count": 8,
-      "id": "PAT-1C3E62B9FEFC5303",
-      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Economic signal: cash"
-    },
-    {
-      "confidence": "High",
-      "domains": [
-        "Investing"
-      ],
-      "entry_count": 8,
-      "id": "PAT-0A40B0F1E56F5D8A",
-      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Economic signal: balance-sheet"
-    },
-    {
-      "confidence": "High",
-      "domains": [
-        "Business",
-        "Career",
-        "Lab",
-        "AI Project"
-      ],
-      "entry_count": 5,
-      "id": "PAT-40F3D07979E65BB6",
-      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Recurring risk signal pattern"
-    },
-    {
-      "confidence": "High",
-      "domains": [
-        "Lab"
-      ],
-      "entry_count": 5,
-      "id": "PAT-442F1A31CB3D5D4F",
-      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Scaling exposes weak process; training, SOPs, and feedback loops are infrastructure."
-    },
-    {
-      "confidence": "Medium",
-      "domains": [
-        "AI Project"
-      ],
-      "entry_count": 4,
-      "id": "PAT-830A67330898572B",
-      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Recurring action signal pattern"
-    },
-    {
-      "confidence": "Medium",
-      "domains": [
-        "Music"
-      ],
-      "entry_count": 3,
-      "id": "PAT-AD29705D9B265E1D",
-      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Songs become more valuable when reusable sections, glossary terms, and sound examples are labeled for later routing."
-    },
-    {
-      "confidence": "Medium",
-      "domains": [
-        "Fitness",
-        "Business"
-      ],
-      "entry_count": 3,
-      "id": "PAT-1F3B36C7739B5515",
-      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Recurring contradiction signal pattern"
-    },
-    {
-      "confidence": "Medium",
-      "domains": [
-        "Business"
-      ],
-      "entry_count": 3,
-      "id": "PAT-FC8B817F735B5B71",
-      "monitor": "Promote to action if this pattern repeats or changes a current decision.",
-      "pattern": "Business opportunities appear where friction, poor packaging, or poor distribution hides value."
+      "pattern": "Investing signal library: SK Hynix Goes to Wall Street - TradingView SK Hynix Goes to Wall Street TradingView"
     }
   ],
   "active_projects": [
@@ -419,6 +238,19 @@
       "why_now": "Maintain the decision intelligence system that converts raw inputs into tracked memory, actions, and briefings."
     },
     {
+      "blocker": "Needs durable proof artifacts from each loop instead of informal session summaries.",
+      "current_milestone": "Make loop testing a default release gate for API, memory, and cockpit changes.",
+      "deadline": "",
+      "evidence_required": "agent harness loop engineering acceptance test proof repair",
+      "id": "project-agent-harness-loop-engineering",
+      "name": "Agent Harness / Loop Engineering",
+      "next_action": "Attach loop proof outputs to the relevant release and memory export.",
+      "priority": 2,
+      "review_cadence": "daily",
+      "status": "active",
+      "why_now": "Build and test agent loops that repeatedly plan, execute, verify, and repair until the system works in practice."
+    },
+    {
       "blocker": "Needs repeatable library schema and examples.",
       "current_milestone": "Clarify asset extraction and labeling workflow.",
       "deadline": "",
@@ -458,19 +290,6 @@
       "why_now": "Capture operator training, SOP, calibration, quality, and feedback-loop concepts as reusable decision assets."
     },
     {
-      "blocker": "Needs durable proof artifacts from each loop instead of informal session summaries.",
-      "current_milestone": "Make loop testing a default release gate for API, memory, and cockpit changes.",
-      "deadline": "",
-      "evidence_required": "agent harness loop engineering acceptance test proof repair",
-      "id": "project-agent-harness-loop-engineering",
-      "name": "Agent Harness / Loop Engineering",
-      "next_action": "Attach loop proof outputs to the relevant release and memory export.",
-      "priority": 2,
-      "review_cadence": "daily",
-      "status": "active",
-      "why_now": "Build and test agent loops that repeatedly plan, execute, verify, and repair until the system works in practice."
-    },
-    {
       "blocker": "Needs current source data, trigger thresholds, and decision rules before capital allocation.",
       "current_milestone": "Convert AI infrastructure ideas into watchable company and market signals.",
       "deadline": "",
@@ -484,96 +303,17 @@
       "why_now": "Track AI infrastructure signals across compute, memory, networking, robotics data, edge systems, and deployment economics."
     }
   ],
-  "briefing_priorities": [
-    "Define the failure mode, mitigation step, and metric to watch.",
-    "Compare against old belief. Update confidence with evidence.",
-    "Identify failure mode. Define mitigation and metric to watch.",
-    "Compare against old belief. Update confidence with evidence.",
-    "Identify failure mode. Define mitigation and metric to watch."
-  ],
-  "critical_alerts": [
-    {
-      "id": "ACT-0DE765D7511C5318",
-      "next_action": "Monitor whether NVIDIA reroutes China demand through partners or loses it permanently. Update thesis if H20 ban becomes permanent.",
-      "severity": "high",
-      "signal": "NVIDIA is printing revenue but the China H20 export ban is a $15B known risk that is not yet priced as a structural ceiling \u2014 it is being treated as a one-time headwind.",
-      "type": "action"
-    },
-    {
-      "id": "ACT-106771F645F05C47",
-      "next_action": "Execute, then log result back into the DB.",
-      "severity": "high",
-      "signal": "Translation run found a Action Signal in Lab.",
-      "type": "action"
-    },
-    {
-      "id": "ACT-87DE73E76FC2547C",
-      "next_action": "Execute, then log result back into the DB.",
-      "severity": "high",
-      "signal": "Translation run found a Action Signal in Lab.",
-      "type": "action"
-    },
-    {
-      "id": "ACT-13531FB6E4515E40",
-      "next_action": "Define the failure mode, mitigation step, and metric to watch.",
-      "severity": "high",
-      "signal": "Risk signal detected in Lab: How Companies Use Generative AI To Execute With Speed by Sara Brown Sep 24, 2024 For the last few years, companies have been experimenting with use ca\u2026",
-      "type": "action"
-    },
-    {
-      "id": "ACT-CA09EC5E110C5580",
-      "next_action": "Define the failure mode, mitigation step, and metric to watch.",
-      "severity": "high",
-      "signal": "Risk signal detected in Business: I keep missing follow-ups with leads. Had 3 potential customers this week and only responded to 1. The other 2 ghosted after my delay.",
-      "type": "action"
-    },
-    {
-      "id": "ACT-FD3DC537930758FE",
-      "next_action": "Review NVIDIA CORP economics and update the monitor metric",
-      "severity": "high",
-      "signal": "Cash conversion signal",
-      "type": "action"
-    },
-    {
-      "id": "ACT-3346B6E0263E5DDE",
-      "next_action": "Review NVIDIA CORP economics and update the monitor metric",
-      "severity": "high",
-      "signal": "Cash conversion signal",
-      "type": "action"
-    },
-    {
-      "id": "ACT-D122F6BFBA7B5952",
-      "next_action": "Review NVIDIA CORP economics and update the monitor metric",
-      "severity": "high",
-      "signal": "Cash conversion signal",
-      "type": "action"
-    },
-    {
-      "id": "ACT-C2103715C33A540A",
-      "next_action": "Review NVIDIA CORP economics and update the monitor metric",
-      "severity": "high",
-      "signal": "Cash conversion signal",
-      "type": "action"
-    },
-    {
-      "id": "ACT-9A0B21BAFEC95CD1",
-      "next_action": "Review NVIDIA CORP economics and update the monitor metric",
-      "severity": "high",
-      "signal": "Cash conversion signal",
-      "type": "action"
-    }
-  ],
+  "briefing_priorities": [],
+  "critical_alerts": [],
   "current_context": {
     "career_state": "Career and job-search context is tracked through the Career Intelligence Ledger project.",
     "current_transition": "External ChatGPT memory bridge and daily briefing retrieval are the active transition.",
-    "important_deadlines": [
-      "2026-08-01"
-    ],
+    "important_deadlines": [],
     "primary_constraint": "Use the compact assistant bundle for briefings; SQLite remains the source of truth and must not be committed."
   },
   "entity_alias_summary": {
-    "duplicate_groups_detected": 10,
-    "duplicate_groups_reconciled": 16,
+    "duplicate_groups_detected": 2,
+    "duplicate_groups_reconciled": 8,
     "unresolved_duplicate_entities": 0
   },
   "exclude_unless_material": [
@@ -582,9 +322,9 @@
     "Credentials or host secrets",
     "Non-actionable archive notes"
   ],
-  "export_run_id": "export-20260718-081823",
+  "export_run_id": "export-20260824-071746",
   "export_success": true,
-  "generated_at": "2026-07-18T08:18:23Z",
+  "generated_at": "2026-08-24T07:17:46Z",
   "privacy_validation_passed": true,
   "recent_activity": [
     {
@@ -707,421 +447,294 @@
       "type": "operating_state_exported"
     },
     {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-07-18T08:18:23Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-07-18T08:18:23Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "entity": "GitHub memory bridge",
+      "id": "activity-2026-07-18T08:19:17Z-5a94649e50ae",
+      "summary": "Verified origin/main at 5a94649e50aedae804a1b2d8cbeb8b341756bb37.",
+      "time": "2026-07-18T08:19:17Z",
+      "type": "remote_push_verified"
+    },
+    {
       "id": "CHATGPT-FETCH-TEST-202607",
       "next_action": "Confirm the Daily Intelligence Briefing references this record.",
-      "signal": "ChatGPT can retrieve the current Intelligence Ledger operating state through an immutable GitHub commit URL.",
+      "signal": "ChatGPT can retrieve the current Intelligence Ledger operating state through an immutable git commit.",
       "status": "ready",
       "type": "system_acceptance_test"
     }
   ],
   "recent_lessons": [
     {
-      "domain": "Info Analyzer OS",
-      "entity": "Authenticated Ledger API",
-      "id": "IA-20260716202129-6A81E6",
-      "lesson": "The API is the correct live connection layer for cross-chat intelligence."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-E56C28",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Lab",
-      "entity": "Operator setup training",
-      "id": "IA-20260716202127-FC4355",
-      "lesson": "Visual setup checklists strengthen knowledge transfer when verbal coaching is inconsistent."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-7DA20E",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Business",
-      "entity": "How You Define the Problem Determines Whether You Solve It",
-      "id": "IA-20260622010849-B76C8B",
-      "lesson": "A business rep becomes valuable when it turns observation into offer, test, and measured outcome."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-54EF8C",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "AI Project",
-      "entity": "Routing Intelligence Framework",
-      "id": "IA-20260626083952-82B4E9",
-      "lesson": "Data turns vague feeling into measurable signal. Without data you say 'I feel stronger.' With data you know Exercise A produced 0.18 inches, Exercise B 0.05. Without data you say \u2026"
+      "domain": "Investing",
+      "entity": "SK Hynix Goes to Wall Street - TradingView SK Hynix Goes to Wall Street TradingView",
+      "id": "IA-20260726053234-047C80",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Lab",
-      "entity": "The No. 1 Business Skill You\u2019ll Need in 2025",
-      "id": "IA-20260626173926-8C2DC8",
-      "lesson": "Training system is infrastructure. Clean reps require clear standards, feedback, and repeatable process."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-AAFAC8",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Business",
-      "entity": "The Secret to Having More Energy as an Entrepreneur",
-      "id": "IA-20260626174001-612071",
-      "lesson": "A business rep becomes valuable when it turns observation into offer, test, and measured outcome."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-20AC36",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Business",
-      "entity": "The Art of the Elevator Pitch",
-      "id": "IA-20260626174059-11B276",
-      "lesson": "A business rep becomes valuable when it turns observation into offer, test, and measured outcome."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-62E630",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Lab",
-      "entity": "Become a Millionaire in 5 Years or Less",
-      "id": "IA-20260626174148-FE7E1D",
-      "lesson": "Training system is infrastructure. Clean reps require clear standards, feedback, and repeatable process."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-3A3923",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Lab",
-      "entity": "MBA Case Studies Articles 3",
-      "id": "IA-20260626174226-BCB8B7",
-      "lesson": "Training system is infrastructure. Clean reps require clear standards, feedback, and repeatable process."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-490A1E",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     },
     {
-      "domain": "Lab",
-      "entity": "Using Mathematical Optimization to Solve Complex Business Challenges",
-      "id": "IA-20260627203810-2067CE",
-      "lesson": "Non-trackable signal is not actionable. Every saved signal needs proof, metric, trigger, or next review."
+      "domain": "Investing",
+      "entity": "Investment thesis",
+      "id": "IA-20260726053234-F43A79",
+      "lesson": "Captured Investing evidence should be stored as reusable library context, not left dormant in the inbox."
     }
   ],
   "schema_version": "1.0",
-  "source_of_truth": "data/info_analyzer.db",
+  "source_of_truth": "/Users/admin/Library/Application Support/InfoAnalyzer/active/info_analyzer.db",
   "top_actions": [
     {
-      "action": "Monitor whether NVIDIA reroutes China demand through partners or loses it permanently. Update thesis if H20 ban becomes permanent.",
-      "deadline": "2026-08-01",
-      "id": "ACT-0DE765D7511C5318",
+      "action": "Review this source item for Other, decide whether it changes an active rule, and log the decision outcome.",
+      "deadline": "",
+      "id": "ACT-EBC2B08AA4755E1D",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "Data center revenue ex-China, gross margin stability above 75%, Q2 actual vs $45B guide."
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Execute, then log result back into the DB.",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-106771F645F05C47",
+      "id": "ACT-C8EB58780EFD549D",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "Setup error rate, usable data hours, calibration pass rate"
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Execute, then log result back into the DB.",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-87DE73E76FC2547C",
+      "id": "ACT-D064CF1A76D65B8F",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "Setup error rate, usable data hours, calibration pass rate"
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Define the failure mode, mitigation step, and metric to watch.",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-13531FB6E4515E40",
+      "id": "ACT-EDE4443917CB5B6B",
       "last_accountability_response": "",
-      "priority": 1,
-      "project_id": "project-operator-training-concept-library",
-      "status": "open",
-      "success_metric": "Error rate, usable data hours, cycle time, checklist completion, escalation count"
-    },
-    {
-      "action": "Define the failure mode, mitigation step, and metric to watch.",
-      "deadline": "",
-      "id": "ACT-CA09EC5E110C5580",
-      "last_accountability_response": "",
-      "priority": 1,
-      "project_id": "project-sales-os-liquidation",
-      "status": "open",
-      "success_metric": "Units sold, conversion rate, margin, customer response, time to sale"
-    },
-    {
-      "action": "Review NVIDIA CORP economics and update the monitor metric",
-      "deadline": "",
-      "id": "ACT-FD3DC537930758FE",
-      "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-3346B6E0263E5DDE",
+      "id": "ACT-80FA84F27AB55169",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-D122F6BFBA7B5952",
+      "id": "ACT-02724FBD4BB1587C",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-C2103715C33A540A",
+      "id": "ACT-4D4486795D7E5EBC",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-9A0B21BAFEC95CD1",
+      "id": "ACT-48E046D908FF5F0D",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Review NVIDIA CORP economics and update the monitor metric",
+      "action": "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
       "deadline": "",
-      "id": "ACT-5849FBD3A16E5693",
+      "id": "ACT-53C2B831A8D45920",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+      "success_metric": "SK Hynix\u2019s HBM Empire Powers 65% US Revenue \u2014 Is This the Must-Own AI Stock?"
     },
     {
-      "action": "Review Apple Inc. economics and update the monitor metric",
+      "action": "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
       "deadline": "",
-      "id": "ACT-7B197CF25025564D",
+      "id": "ACT-DE5644BC432E5314",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "CFO / net income, FCF, receivables growth vs revenue, inventory growth vs revenue, deferred revenue"
+      "success_metric": "SK Hynix\u2019s HBM Empire Powers 65% US Revenue \u2014 Is This the Must-Own AI Stock?"
     },
     {
-      "action": "Build a trackable sales follow-up loop for SALES",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-8FA9896B3B2D598D",
+      "id": "ACT-DFEA15D0D9C25C6D",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "Confidence before/after and evidence that changed it"
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Build a trackable sales follow-up loop for SALES",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-594383BF2F045FB1",
+      "id": "ACT-0A1817F129BD5673",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "Confidence before/after and evidence that changed it"
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Build a trackable sales follow-up loop for SALES",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-6DD489BC5A1B598B",
+      "id": "ACT-474A610D7C0454ED",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "Confidence before/after and evidence that changed it"
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Build a trackable sales follow-up loop for SALES",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-65585207D03C5EAB",
+      "id": "ACT-1158C53313335F1B",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
       "status": "open",
-      "success_metric": "Confidence before/after and evidence that changed it"
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Turn Tron Ares Network Case Study into a tracked action",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-777B63A6D0715711",
+      "id": "ACT-B7C1E69229AA59F9",
       "last_accountability_response": "",
-      "priority": 1,
+      "priority": 2,
       "project_id": "",
-      "status": "waiting",
-      "success_metric": "Confidence before/after and evidence that changed it"
+      "status": "open",
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Build a minimal investor tracking table today: Name, Last Contact, Follow-Up Date, Status, Notes. Enter every current investor and prospect. Set a weekly 15-minute review cadence.",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-615A578122735179",
+      "id": "ACT-ADE9FC6BCC95515E",
       "last_accountability_response": "",
-      "priority": 1,
-      "project_id": "project-sales-os-liquidation",
+      "priority": 2,
+      "project_id": "",
       "status": "open",
-      "success_metric": "Missed follow-up count per month (target: 0). Follow-up response rate. Average days between initial contact and next touchpoint."
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-348A57783B8E5B48",
+      "id": "ACT-4902B1E6F3585B66",
       "last_accountability_response": "",
-      "priority": 1,
-      "project_id": "project-job-search",
+      "priority": 2,
+      "project_id": "",
       "status": "open",
-      "success_metric": "Signal tracked and acted upon"
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     },
     {
-      "action": "Identify failure mode. Define mitigation and metric to watch.",
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
       "deadline": "",
-      "id": "ACT-4EA59FDE56075E0C",
+      "id": "ACT-A4A661E20E32518B",
       "last_accountability_response": "",
-      "priority": 1,
-      "project_id": "project-operator-training-concept-library",
+      "priority": 2,
+      "project_id": "",
       "status": "open",
-      "success_metric": "Signal tracked and acted upon"
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
+    },
+    {
+      "action": "Open the latest source evidence for Investing, compare revenue, margin, cash, and risk signals, then update the decision rule.",
+      "deadline": "",
+      "id": "ACT-4B237055B62F5E02",
+      "last_accountability_response": "",
+      "priority": 2,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
+    },
+    {
+      "action": "Review this source item for Investing, decide whether it changes an active rule, and log the decision outcome.",
+      "deadline": "",
+      "id": "ACT-3833DAB669D05F17",
+      "last_accountability_response": "",
+      "priority": 2,
+      "project_id": "",
+      "status": "open",
+      "success_metric": "Decision changed, action created, result logged, and follow-up metric reviewed."
     }
   ],
-  "watchlist": [
-    {
-      "id": "WLI-20260704190327-1714AB",
-      "name": "Paypal",
-      "signal": "",
-      "ticker": "",
-      "trigger": "1128.36"
-    },
-    {
-      "id": "WLI-20260704190327-6C7ACB",
-      "name": "DWT",
-      "signal": "",
-      "ticker": "DWT",
-      "trigger": ""
-    },
-    {
-      "id": "WLI-20260704190327-B98D94",
-      "name": "TREE",
-      "signal": "",
-      "ticker": "TREE",
-      "trigger": ""
-    },
-    {
-      "id": "WLI-20260704190327-E28AB5",
-      "name": "Kraft",
-      "signal": "",
-      "ticker": "",
-      "trigger": "14.07"
-    },
-    {
-      "id": "WLI-20260704190327-6BE1E1",
-      "name": "MNST",
-      "signal": "",
-      "ticker": "MNST",
-      "trigger": ""
-    },
-    {
-      "id": "WLI-20260704190327-99ADEE",
-      "name": "IGC",
-      "signal": "sell off",
-      "ticker": "IGC",
-      "trigger": "17.71653543"
-    },
-    {
-      "id": "WLI-20260704190327-91FB31",
-      "name": "TSLA",
-      "signal": "",
-      "ticker": "TSLA",
-      "trigger": "250.56"
-    },
-    {
-      "id": "WLI-20260704190327-8BF165",
-      "name": "Monster",
-      "signal": "",
-      "ticker": "",
-      "trigger": "13.16"
-    },
-    {
-      "id": "WLI-20260704190327-AB8BB7",
-      "name": "ETSY",
-      "signal": "IPO, new, pot hih gwth",
-      "ticker": "ETSY",
-      "trigger": ""
-    },
-    {
-      "id": "WLI-20260704190327-D46C73",
-      "name": "VTVT",
-      "signal": "sell off",
-      "ticker": "VTVT",
-      "trigger": "21.06824926"
-    },
-    {
-      "id": "WLI-20260704190327-E1E4BB",
-      "name": "NVDA",
-      "signal": "",
-      "ticker": "NVDA",
-      "trigger": "235.13"
-    },
-    {
-      "id": "WLI-20260704190327-9D821D",
-      "name": "Apple",
-      "signal": "",
-      "ticker": "",
-      "trigger": "84.85"
-    },
-    {
-      "id": "WLI-20260704190327-022025",
-      "name": "CLH",
-      "signal": "",
-      "ticker": "CLH",
-      "trigger": ""
-    },
-    {
-      "id": "WLI-20260704190327-7CB689",
-      "name": "OGEN",
-      "signal": "sell off",
-      "ticker": "OGEN",
-      "trigger": "6.790123457"
-    },
-    {
-      "id": "WLI-20260704190327-F25E51",
-      "name": "NFLX",
-      "signal": "",
-      "ticker": "NFLX",
-      "trigger": "321.1"
-    },
-    {
-      "id": "WLI-20260704190327-51DCD0",
-      "name": "Microsoft",
-      "signal": "",
-      "ticker": "",
-      "trigger": "53.0"
-    },
-    {
-      "id": "WLI-20260704190327-AA128D",
-      "name": "DKS",
-      "signal": "",
-      "ticker": "DKS",
-      "trigger": ""
-    },
-    {
-      "id": "WLI-20260704190327-A899F3",
-      "name": "TSLA",
-      "signal": "sell off",
-      "ticker": "TSLA",
-      "trigger": "1.568627451"
-    },
-    {
-      "id": "WLI-20260704190327-E9C6A6",
-      "name": "Disney",
-      "signal": "",
-      "ticker": "",
-      "trigger": "62.61"
-    },
-    {
-      "id": "WLI-20260704190327-C6A6CD",
-      "name": "KFY",
-      "signal": "",
-      "ticker": "KFY",
-      "trigger": ""
-    }
-  ],
+  "watchlist": [],
   "weekend_clarity": [
     "Stabilize the ChatGPT read path through one immutable assistant bundle.",
     "Prioritize transition-critical actions, open decisions, and proof artifacts over background themes."
