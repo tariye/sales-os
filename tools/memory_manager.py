@@ -303,7 +303,160 @@ def export_run_id(generated_at: str) -> str:
 
 
 def source_of_truth_ref() -> str:
-    return "data/info_analyzer.db"
+    try:
+        return str(DB_PATH.relative_to(ROOT))
+    except ValueError:
+        return str(DB_PATH)
+
+
+def _path_text(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def _parse_iso(value: str) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _iso_or_empty(value: str | None) -> str:
+    return value or ""
+
+
+def _freshness_status(age_minutes: float | None, green_minutes: float = 26 * 60, yellow_minutes: float = 48 * 60) -> str:
+    if age_minutes is None:
+        return "red"
+    if age_minutes <= green_minutes:
+        return "green"
+    if age_minutes <= yellow_minutes:
+        return "yellow"
+    return "red"
+
+
+def _severity_from_status(status: str) -> int:
+    return {"green": 0, "yellow": 1, "red": 2}.get(status, 2)
+
+
+def _overall_status(*statuses: str) -> str:
+    if any(status == "red" for status in statuses):
+        return "red"
+    if any(status == "yellow" for status in statuses):
+        return "yellow"
+    return "green"
+
+
+def _load_existing_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _db_source_state(generated_at: str) -> dict[str, Any]:
+    checked_at = generated_at
+    exists = DB_PATH.exists()
+    modified_at = ""
+    age_minutes = None
+    if exists:
+        modified_at_dt = datetime.fromtimestamp(DB_PATH.stat().st_mtime, tz=timezone.utc).replace(microsecond=0)
+        modified_at = modified_at_dt.isoformat().replace("+00:00", "Z")
+        checked_dt = _parse_iso(checked_at) or datetime.now(timezone.utc)
+        age_minutes = max(0.0, (checked_dt - modified_at_dt).total_seconds() / 60.0)
+    status = "green" if exists else "red"
+    if age_minutes is not None:
+        status = _freshness_status(age_minutes)
+    return {
+        "status": status,
+        "checked_at": checked_at,
+        "path": _path_text(DB_PATH),
+        "exists": exists,
+        "modified_at": modified_at,
+        "age_minutes": round(age_minutes, 1) if age_minutes is not None else None,
+    }
+
+
+def _build_publication_health(
+    generated_at: str,
+    run_id: str,
+    source_state: dict[str, Any],
+    db_validation: dict[str, Any],
+    export_success: bool,
+    *,
+    current_stage: str,
+    publication_status: str,
+    immutable_commit: str = "",
+    pointer_commit: str = "",
+    remote_head_sha: str = "",
+    remote_verified_at: str = "",
+    last_failure: dict[str, Any] | None = None,
+    previous_health: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    previous_health = previous_health or {}
+    export_state = {
+        "status": "green" if export_success else "red",
+        "run_id": run_id,
+        "last_attempt": generated_at,
+        "last_success": generated_at if export_success else _iso_or_empty(previous_health.get("export", {}).get("last_success")),
+    }
+    validation_state = {
+        "status": "green" if db_validation.get("ok") else "red",
+        "last_attempt": generated_at,
+        "last_success": generated_at if db_validation.get("ok") else _iso_or_empty(previous_health.get("validation", {}).get("last_success")),
+        "errors": db_validation.get("errors", []),
+    }
+    publication_state = {
+        "status": publication_status,
+        "last_attempt": generated_at,
+        "last_success": remote_verified_at if publication_status == "green" else _iso_or_empty(previous_health.get("publication", {}).get("last_success")),
+        "immutable_commit": immutable_commit or _iso_or_empty(previous_health.get("publication", {}).get("immutable_commit")),
+        "pointer_commit": pointer_commit or _iso_or_empty(previous_health.get("publication", {}).get("pointer_commit")),
+        "remote_branch": "origin/main",
+        "remote_head_sha": remote_head_sha or _iso_or_empty(previous_health.get("publication", {}).get("remote_head_sha")),
+        "remote_verified_at": remote_verified_at or _iso_or_empty(previous_health.get("publication", {}).get("remote_verified_at")),
+    }
+    source_age_minutes = source_state.get("age_minutes")
+    source_status = source_state.get("status") or "red"
+    freshness_state = {
+        "age_minutes": source_age_minutes if source_age_minutes is not None else 0,
+        "status": _freshness_status(source_age_minutes) if source_age_minutes is not None else "red",
+        "basis": "source_db_mtime",
+    }
+    overall_status = _overall_status(source_status, export_state["status"], validation_state["status"], publication_state["status"], freshness_state["status"])
+    return {
+        "checked_at": generated_at,
+        "current_stage": current_stage,
+        "overall_status": overall_status,
+        "source": source_state,
+        "export": export_state,
+        "validation": validation_state,
+        "publication": publication_state,
+        "freshness": freshness_state,
+        "last_failure": last_failure,
+        "export_success": export_success and db_validation.get("ok") and publication_status == "green",
+        "last_export": export_state["last_success"],
+        "last_push": publication_state["remote_verified_at"],
+        "last_push_commit": pointer_commit or immutable_commit or _iso_or_empty(previous_health.get("last_push_commit")),
+        "snapshot_age_minutes": freshness_state["age_minutes"],
+        "database": source_status,
+        "broken_links": db_validation.get("broken_links", 0),
+        "orphan_actions": db_validation.get("orphan_actions", 0),
+        "duplicate_entities": db_validation.get("duplicate_entities", 0),
+        "duplicate_groups_detected": db_validation.get("duplicate_groups_detected", 0),
+        "duplicate_groups_reconciled": db_validation.get("duplicate_groups_reconciled", 0),
+        "chat_inbox_pending": previous_health.get("chat_inbox_pending", 0),
+    }
 
 
 def priority_number(value: Any) -> int:
@@ -1254,7 +1407,7 @@ def build_assistant_bundle(
         "id": "CHATGPT-FETCH-TEST-202607",
         "type": "system_acceptance_test",
         "status": "ready",
-        "signal": "ChatGPT can retrieve the current Intelligence Ledger operating state through an immutable GitHub commit URL.",
+        "signal": "ChatGPT can retrieve the current Intelligence Ledger operating state through an immutable git commit.",
         "next_action": "Confirm the Daily Intelligence Briefing references this record.",
     }
 
@@ -1341,7 +1494,7 @@ def build_assistant_bundle(
     return bundle
 
 
-def build_assistant_fetch(generated_at: str, run_id: str) -> dict[str, Any]:
+def build_assistant_fetch(generated_at: str, run_id: str, immutable_commit: str, publication_commit: str = "", publication_status: str = "pending") -> dict[str, Any]:
     return {
         "schema_version": "1.0",
         "repository": "tariye/sales-os",
@@ -1351,10 +1504,16 @@ def build_assistant_fetch(generated_at: str, run_id: str) -> dict[str, Any]:
         "index_path": "memory/index.json",
         "generated_at": generated_at,
         "export_run_id": run_id,
+        "immutable_commit": immutable_commit,
+        "publication_commit": publication_commit,
+        "publication_status": publication_status,
+        "immutable_bundle_ref": f"{immutable_commit}:memory/assistant_bundle.json" if immutable_commit else "",
+        "immutable_bundle_url": f"https://raw.githubusercontent.com/tariye/sales-os/{immutable_commit}/memory/assistant_bundle.json" if immutable_commit else "",
         "fetch_strategy": [
-            "Read GitHub API branch HEAD SHA",
-            "Fetch assistant_bundle.json using immutable commit SHA",
-            "Use GitHub contents API as fallback",
+            "Read the remote branch with git ls-remote origin refs/heads/main",
+            "Fetch origin/main locally with git fetch origin main",
+            "Read memory/assistant_fetch.json from origin/main",
+            "Read memory/assistant_bundle.json from the immutable_commit recorded in that file",
         ],
     }
 
@@ -1463,25 +1622,71 @@ def append_activity(generated_at: str, import_result: dict[str, Any], export_sta
     return list(reversed(deduped))[-500:]
 
 
-def update_last_push(push_time: str, commit_hash: str) -> None:
+def update_publication_state(
+    push_time: str,
+    commit_hash: str,
+    immutable_commit: str,
+    *,
+    publication_status: str = "green",
+    remote_head_sha: str = "",
+    last_failure: dict[str, Any] | None = None,
+) -> None:
     health_path = MEMORY_DIR / "system_health.json"
     status_path = MEMORY_DIR / "export_status.json"
     activity_path = MEMORY_DIR / "activity.jsonl"
     fetch_path = MEMORY_DIR / "assistant_fetch.json"
-    health = json.loads(health_path.read_text(encoding="utf-8"))
-    export_status = json.loads(status_path.read_text(encoding="utf-8"))
-    health["last_push"] = push_time
-    health["last_push_commit"] = commit_hash
+    health = _load_existing_json(health_path)
+    export_status = _load_existing_json(status_path)
+    current_health = _build_publication_health(
+        push_time,
+        str(export_status.get("current_run_id") or export_status.get("generated_at") or push_time),
+        health.get("source") or _db_source_state(push_time),
+        export_status.get("validation") or {"ok": bool(export_status.get("export_success")), "errors": []},
+        bool(export_status.get("export_success")),
+        current_stage="publication",
+        publication_status=publication_status,
+        immutable_commit=immutable_commit,
+        pointer_commit=commit_hash,
+        remote_head_sha=remote_head_sha,
+        remote_verified_at=push_time if publication_status == "green" else "",
+        last_failure=last_failure,
+        previous_health=health,
+    )
     export_status["last_push"] = push_time
     export_status["last_push_commit"] = commit_hash
-    immutable_bundle_url = f"https://raw.githubusercontent.com/tariye/sales-os/{commit_hash}/memory/assistant_bundle.json"
+    export_status["immutable_commit"] = immutable_commit
+    export_status["publication_status"] = publication_status
+    export_status["remote_head_sha"] = remote_head_sha
+    fetch_generated_at = str(export_status.get("generated_at") or push_time)
+    fetch_run_id = str(export_status.get("current_run_id") or export_status.get("export_run_id") or export_run_id(fetch_generated_at))
     if fetch_path.exists():
-        fetch_meta = json.loads(fetch_path.read_text(encoding="utf-8"))
-        fetch_meta["last_verified_commit"] = commit_hash
-        fetch_meta["immutable_bundle_url"] = immutable_bundle_url
-        fetch_meta["last_verified_at"] = push_time
-        write_json(fetch_path, fetch_meta)
-    write_json(health_path, health)
+        fetch_meta = _load_existing_json(fetch_path)
+    else:
+        fetch_meta = {}
+    if not fetch_meta:
+        fetch_meta = build_assistant_fetch(fetch_generated_at, fetch_run_id, immutable_commit, commit_hash, publication_status)
+    fetch_meta["schema_version"] = "1.0"
+    fetch_meta["repository"] = "tariye/sales-os"
+    fetch_meta["branch"] = "main"
+    fetch_meta["bundle_path"] = "memory/assistant_bundle.json"
+    fetch_meta["health_path"] = "memory/system_health.json"
+    fetch_meta["index_path"] = "memory/index.json"
+    fetch_meta["generated_at"] = fetch_generated_at
+    fetch_meta["export_run_id"] = fetch_run_id
+    fetch_meta["immutable_commit"] = immutable_commit
+    fetch_meta["publication_commit"] = commit_hash
+    fetch_meta["publication_status"] = publication_status
+    fetch_meta["last_verified_commit"] = commit_hash
+    fetch_meta["last_verified_at"] = push_time if publication_status == "green" else _iso_or_empty(fetch_meta.get("last_verified_at"))
+    fetch_meta["fetch_strategy"] = [
+        "Read the remote branch with git ls-remote origin refs/heads/main",
+        "Fetch origin/main locally with git fetch origin main",
+        "Read memory/assistant_fetch.json from origin/main",
+        "Read memory/assistant_bundle.json from the immutable_commit recorded in that file",
+    ]
+    fetch_meta["immutable_bundle_url"] = f"https://raw.githubusercontent.com/tariye/sales-os/{immutable_commit}/memory/assistant_bundle.json" if immutable_commit else fetch_meta.get("immutable_bundle_url", "")
+    write_json(fetch_path, fetch_meta)
+    write_json(health_path, current_health)
     write_json(status_path, export_status)
     activity = read_jsonl(activity_path)
     activity.append(
@@ -1491,15 +1696,58 @@ def update_last_push(push_time: str, commit_hash: str) -> None:
             "type": "remote_push_verified",
             "entity": "GitHub memory bridge",
             "summary": f"Verified origin/main at {commit_hash}.",
-            "immutable_bundle_url": immutable_bundle_url,
+            "immutable_commit": immutable_commit,
+            "remote_head_sha": remote_head_sha or commit_hash,
         }
     )
     write_jsonl(activity_path, activity[-500:])
 
 
+def remote_main_head() -> str:
+    result = run(["git", "ls-remote", "origin", "refs/heads/main"])
+    text = result.stdout.strip()
+    if not text:
+        raise RuntimeError("git ls-remote origin refs/heads/main returned no head")
+    return text.split()[0]
+
+
+def verify_remote_publication(expected_head: str, immutable_commit: str) -> dict[str, Any]:
+    run(["git", "fetch", "origin", "main", "--prune"])
+    remote_head = remote_main_head()
+    if remote_head != expected_head:
+        raise RuntimeError(f"remote main verification failed: origin/main={remote_head}, expected={expected_head}")
+    fetch_json = run(["git", "show", "origin/main:memory/assistant_fetch.json"]).stdout
+    bundle_json = run(["git", "show", "origin/main:memory/assistant_bundle.json"]).stdout
+    health_json = run(["git", "show", "origin/main:memory/system_health.json"]).stdout
+    fetch_meta = json.loads(fetch_json)
+    bundle = json.loads(bundle_json)
+    health = json.loads(health_json)
+    errors = []
+    if fetch_meta.get("immutable_commit") != immutable_commit:
+        errors.append(f"assistant_fetch immutable_commit={fetch_meta.get('immutable_commit')} expected={immutable_commit}")
+    if fetch_meta.get("publication_status") != "green":
+        errors.append(f"assistant_fetch publication_status={fetch_meta.get('publication_status')}")
+    if bundle.get("export_run_id") != fetch_meta.get("export_run_id"):
+        errors.append("assistant_bundle export_run_id does not match assistant_fetch export_run_id")
+    if health.get("publication", {}).get("immutable_commit") != immutable_commit:
+        errors.append(f"system_health publication immutable_commit={health.get('publication', {}).get('immutable_commit')} expected={immutable_commit}")
+    if health.get("overall_status") not in {"green", "yellow"}:
+        errors.append(f"system_health overall_status={health.get('overall_status')}")
+    return {
+        "remote_head": remote_head,
+        "assistant_fetch": fetch_meta,
+        "assistant_bundle": bundle,
+        "system_health": health,
+        "errors": errors,
+    }
+
+
 def export_memory(args: argparse.Namespace) -> int:
     ensure_dirs()
     generated_at = now_iso()
+    run_id = export_run_id(generated_at)
+    source_state = _db_source_state(generated_at)
+    previous_health = _load_existing_json(MEMORY_DIR / "system_health.json")
     conn = connect()
     ensure_operating_tables(conn, generated_at)
     import_result = import_chat_inbox(conn, generated_at) if not args.skip_import else {"pending_before": 0, "imported": 0, "duplicates": 0, "archived": ""}
@@ -1528,6 +1776,7 @@ def export_memory(args: argparse.Namespace) -> int:
     db_validation = validation_report(conn, entity_aliases)
     export_status = {
         "generated_at": generated_at,
+        "current_run_id": run_id,
         "export_success": False,
         "source_of_truth": source_of_truth_ref(),
         "chatgpt_contract_files": REQUIRED_FILES,
@@ -1554,20 +1803,9 @@ def export_memory(args: argparse.Namespace) -> int:
             "duplicate_groups_reconciled": entity_aliases.get("duplicate_groups_reconciled", 0),
             "unresolved_duplicate_entities": entity_aliases.get("unresolved_duplicate_entities", 0),
         },
-    }
-
-    health = {
-        "database": "healthy" if db_validation["ok"] else "needs_attention",
-        "last_export": generated_at,
-        "last_push": "",
-        "snapshot_age_minutes": 0,
-        "broken_links": db_validation["broken_links"],
-        "orphan_actions": db_validation["orphan_actions"],
-        "duplicate_entities": db_validation["duplicate_entities"],
-        "duplicate_groups_detected": db_validation["duplicate_groups_detected"],
-        "duplicate_groups_reconciled": db_validation["duplicate_groups_reconciled"],
-        "chat_inbox_pending": 0 if not (MEMORY_DIR / "chat_inbox.jsonl").read_text(encoding="utf-8").strip() else len(read_jsonl(MEMORY_DIR / "chat_inbox.jsonl")),
-        "export_success": False,
+        "publication_status": "pending",
+        "immutable_commit": "",
+        "remote_head_sha": "",
     }
 
     index = {
@@ -1592,7 +1830,6 @@ def export_memory(args: argparse.Namespace) -> int:
     write_json(MEMORY_DIR / "index.json", index)
 
     export_status["export_success"] = db_validation["ok"]
-    health["export_success"] = export_status["export_success"]
     assistant_bundle = build_assistant_bundle(
         generated_at,
         entries,
@@ -1602,12 +1839,21 @@ def export_memory(args: argparse.Namespace) -> int:
         decisions,
         projects,
         manifest,
-        health,
+        {"export_success": export_status["export_success"]},
         entity_aliases,
     )
-    assistant_fetch = build_assistant_fetch(generated_at, assistant_bundle["export_run_id"])
     write_json(MEMORY_DIR / "assistant_bundle.json", assistant_bundle)
-    write_json(MEMORY_DIR / "assistant_fetch.json", assistant_fetch)
+    health = _build_publication_health(
+        generated_at,
+        run_id,
+        source_state,
+        db_validation,
+        export_status["export_success"],
+        current_stage="export",
+        publication_status="pending",
+        last_failure=None,
+        previous_health=previous_health,
+    )
     bundle_size = (MEMORY_DIR / "assistant_bundle.json").stat().st_size
     bundle_errors = []
     if bundle_size > 150000:
@@ -1623,7 +1869,23 @@ def export_memory(args: argparse.Namespace) -> int:
     }
     if bundle_errors:
         export_status["export_success"] = False
-        health["export_success"] = False
+        health = _build_publication_health(
+            generated_at,
+            run_id,
+            source_state,
+            db_validation,
+            False,
+            current_stage="validation",
+            publication_status="red",
+            last_failure={
+                "stage": "validation",
+                "error_code": "BUNDLE_VALIDATION_FAILED",
+                "error_summary": "; ".join(bundle_errors),
+                "attempted_at": generated_at,
+                "run_id": run_id,
+            },
+            previous_health=previous_health,
+        )
     write_json(MEMORY_DIR / "export_status.json", export_status)
     write_json(MEMORY_DIR / "system_health.json", health)
     activity = append_activity(generated_at, import_result, export_status)
@@ -1635,11 +1897,45 @@ def export_memory(args: argparse.Namespace) -> int:
     if export_errors:
         export_status["export_success"] = False
         export_status["json_errors"] = export_errors
+        health = _build_publication_health(
+            generated_at,
+            run_id,
+            source_state,
+            db_validation,
+            False,
+            current_stage="validation",
+            publication_status="red",
+            last_failure={
+                "stage": "validation",
+                "error_code": "EXPORT_VALIDATION_FAILED",
+                "error_summary": "; ".join(export_errors),
+                "attempted_at": generated_at,
+                "run_id": run_id,
+            },
+            previous_health=previous_health,
+        )
         write_json(MEMORY_DIR / "export_status.json", export_status)
-        health["export_success"] = False
         write_json(MEMORY_DIR / "system_health.json", health)
         return 1
     if not export_status["export_success"]:
+        health = _build_publication_health(
+            generated_at,
+            run_id,
+            source_state,
+            db_validation,
+            False,
+            current_stage="export",
+            publication_status="red",
+            last_failure={
+                "stage": "export",
+                "error_code": "EXPORT_FAILED",
+                "error_summary": "validation did not pass",
+                "attempted_at": generated_at,
+                "run_id": run_id,
+            },
+            previous_health=previous_health,
+        )
+        write_json(MEMORY_DIR / "system_health.json", health)
         return 1
     print(json.dumps({"ok": True, "generated_at": generated_at, "counts": export_status["counts"], "import": import_result}, indent=2))
     return 0
@@ -1664,35 +1960,64 @@ def main() -> int:
     parser.add_argument("--commit-message", default="Update intelligence operating state")
     args = parser.parse_args()
 
-    if args.git:
-        run(["git", "pull", "--rebase", "--autostash"])
     code = export_memory(args)
     if code != 0:
         print("Memory export validation failed; not pushing.", file=sys.stderr)
         return code
     if args.git:
-        run(["git", "add", "memory/", "tools/"])
-        if run(["git", "diff", "--cached", "--quiet"], check=False).returncode != 0:
-            run(["git", "commit", "-m", args.commit_message])
-            run(["git", "push", "-u", "origin", "main"])
-            pushed_commit = run(["git", "rev-parse", "HEAD"]).stdout.strip()
-            run(["git", "fetch", "origin", "--prune"])
-            remote_commit = run(["git", "rev-parse", "origin/main"]).stdout.strip()
-            if remote_commit != pushed_commit:
-                raise RuntimeError(f"push verification failed: origin/main={remote_commit}, expected={pushed_commit}")
-            run(["python3", "tools/verify_chatgpt_fetch.py"])
-            push_time = now_iso()
-            update_last_push(push_time, pushed_commit)
-            run(["git", "add", "memory/system_health.json", "memory/export_status.json", "memory/activity.jsonl", "memory/assistant_fetch.json"])
+        export_status = _load_existing_json(MEMORY_DIR / "export_status.json")
+        run_id = str(export_status.get("current_run_id") or export_status.get("generated_at") or export_run_id(now_iso()))
+        immutable_commit = ""
+        pointer_commit = ""
+        try:
+            run(["git", "add", "memory/"])
             if run(["git", "diff", "--cached", "--quiet"], check=False).returncode != 0:
-                run(["git", "commit", "-m", "Record verified intelligence ledger push"])
-                run(["git", "push", "-u", "origin", "main"])
-                final_commit = run(["git", "rev-parse", "HEAD"]).stdout.strip()
-                run(["git", "fetch", "origin", "--prune"])
-                final_remote = run(["git", "rev-parse", "origin/main"]).stdout.strip()
-                if final_remote != final_commit:
-                    raise RuntimeError(f"final push verification failed: origin/main={final_remote}, expected={final_commit}")
-                run(["python3", "tools/verify_chatgpt_fetch.py"])
+                run(["git", "commit", "-m", f"{args.commit_message} [bundle]"])
+                immutable_commit = run(["git", "rev-parse", "HEAD"]).stdout.strip()
+                run(["git", "push", "origin", "HEAD:main"])
+                remote_bundle_head = remote_main_head()
+                if remote_bundle_head != immutable_commit:
+                    raise RuntimeError(f"bundle push verification failed: origin/main={remote_bundle_head}, expected={immutable_commit}")
+                bundle_verification = verify_remote_publication(immutable_commit, immutable_commit)
+                if bundle_verification["errors"]:
+                    raise RuntimeError("bundle verification failed: " + "; ".join(bundle_verification["errors"]))
+                push_time = now_iso()
+                update_publication_state(push_time, immutable_commit, immutable_commit, publication_status="green", remote_head_sha=immutable_commit)
+                run(["git", "add", "memory/assistant_fetch.json", "memory/system_health.json", "memory/export_status.json", "memory/activity.jsonl"])
+                if run(["git", "diff", "--cached", "--quiet"], check=False).returncode != 0:
+                    run(["git", "commit", "-m", f"{args.commit_message} [pointer]"])
+                    pointer_commit = run(["git", "rev-parse", "HEAD"]).stdout.strip()
+                    run(["git", "push", "origin", "HEAD:main"])
+                    remote_pointer_head = remote_main_head()
+                    if remote_pointer_head != pointer_commit:
+                        raise RuntimeError(f"pointer push verification failed: origin/main={remote_pointer_head}, expected={pointer_commit}")
+                    pointer_verification = verify_remote_publication(pointer_commit, immutable_commit)
+                    if pointer_verification["errors"]:
+                        raise RuntimeError("pointer verification failed: " + "; ".join(pointer_verification["errors"]))
+        except Exception as exc:
+            failure_time = now_iso()
+            failure = {
+                "stage": "publication",
+                "error_code": "GIT_PUBLICATION_FAILED",
+                "error_summary": str(exc),
+                "attempted_at": failure_time,
+                "run_id": run_id,
+                "immutable_commit": immutable_commit,
+                "pointer_commit": pointer_commit,
+            }
+            try:
+                update_publication_state(
+                    failure_time,
+                    pointer_commit or immutable_commit,
+                    immutable_commit or "",
+                    publication_status="red",
+                    remote_head_sha="",
+                    last_failure=failure,
+                )
+            except Exception:
+                pass
+            print(json.dumps({"ok": False, "stage": "publication", "error": str(exc), "run_id": run_id}, indent=2), file=sys.stderr)
+            return 1
     return 0
 
 

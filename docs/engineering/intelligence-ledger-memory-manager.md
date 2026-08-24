@@ -7,7 +7,7 @@ Info Analyzer OS uses SQLite as the source of truth. GitHub is the transport lay
 Agents should start with:
 
 1. Read `memory/index.json`.
-2. Confirm `memory/system_health.json` has `export_success: true`.
+2. Confirm `memory/system_health.json` has `overall_status: green` or `yellow`, and inspect the `source`, `export`, `validation`, and `publication` sections.
 3. Load `memory/snapshots/latest.json`.
 4. Read only the files referenced by the index.
 5. Write new memory candidates to `memory/chat_inbox.jsonl`.
@@ -48,13 +48,18 @@ Run:
 python3 tools/memory_manager.py
 ```
 
-To import `memory/chat_inbox.jsonl`, regenerate exports, validate, commit, and push:
+To import `memory/chat_inbox.jsonl`, regenerate exports, validate, commit the immutable bundle, write the pointer/health update, and push:
 
 ```bash
 python3 tools/memory_manager.py --git
 ```
 
-The exporter will refuse to push if validation fails.
+The exporter will refuse to publish if validation fails. Publication is only considered verified after:
+
+1. `git ls-remote origin refs/heads/main` matches the pushed head.
+2. `git fetch origin main --prune` succeeds.
+3. `git show origin/main:memory/assistant_fetch.json` points at the immutable commit.
+4. `git show <immutable_commit>:memory/assistant_bundle.json` is readable.
 
 ## Chat Inbox Schema
 
