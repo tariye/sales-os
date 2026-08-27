@@ -36,6 +36,12 @@ let healthData = null;
 let jobsRunsData = null;
 let legacyData = null;
 let stockIntelData = null;
+let stockIntelLoading = false;
+let stockIntelTimer = null;
+let stockWatchlist = [];
+const STOCK_WATCHLIST_KEY = "info-analyzer.stock-watchlist.v1";
+const STOCK_SNAPSHOT_MODE_KEY = "info-analyzer.stock-snapshot-mode.v1";
+const DEFAULT_STOCK_WATCHLIST = ["AAPL", "NVDA", "MSFT"];
 const bootstrapData = window.__CUTOVER_BOOTSTRAP__ || null;
 const pathInitialView = window.location.pathname === "/dump" ? "capture" : "";
 const bootstrapInitialView = normalizeView(pathInitialView || new URLSearchParams(window.location.search).get(VIEW_QUERY_KEY) || new URLSearchParams(window.location.search).get("tab") || "");
@@ -87,6 +93,36 @@ function fmtDate(value) {
   }
 }
 
+function fmtMoney(value, currency = "USD") {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "n/a";
+  try {
+    if (currency && currency !== "USD") {
+      return `${n.toFixed(2)} ${currency}`;
+    }
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 2,
+    }).format(n);
+  } catch (err) {
+    return currency && currency !== "USD" ? `${n.toFixed(2)} ${currency}` : `$${n.toFixed(2)}`;
+  }
+}
+
+function fmtPct(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "n/a";
+  const sign = n > 0 ? "+" : "";
+  return `${sign}${(n * 100).toFixed(1)}%`;
+}
+
+function prettyLabel(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\b\w/g, ch => ch.toUpperCase()) || "n/a";
+}
+
 function fmtAge(value) {
   if (value === null || value === undefined || value === "") return "";
   const n = Number(value);
@@ -101,6 +137,23 @@ function fmtAge(value) {
 
 function statHTML(value, label) {
   return `<div class="stat"><strong>${esc(value ?? "n/a")}</strong><span class="muted">${esc(label)}</span></div>`;
+}
+
+function statGroupHTML(title, items, hint = "") {
+  return `
+    <section class="cockpit-group">
+      <div class="cockpit-group-head">
+        <div>
+          <p class="eyebrow">${esc(title)}</p>
+          ${hint ? `<p class="muted">${esc(hint)}</p>` : ""}
+        </div>
+        <span class="cockpit-group-count">${items.length}</span>
+      </div>
+      <div class="stats cockpit-stats-grid">
+        ${items.join("")}
+      </div>
+    </section>
+  `;
 }
 
 function kvHTML(label, value) {
@@ -202,9 +255,11 @@ function persistView(view) {
 
 function setActiveView(view) {
   const next = normalizeView(view);
+  if (next !== "stock-intel") stopStockIntelAutoRefresh();
   persistView(next);
   document.querySelectorAll(".tab").forEach(btn => btn.classList.toggle("active", btn.dataset.view === next));
   document.querySelectorAll(".panel").forEach(panel => panel.classList.toggle("active", panel.id === next));
+  window.scrollTo({ top: 0, behavior: "smooth" });
   if (next === "overview") {
     loadRuntimeStatus();
     loadOverview();
@@ -218,7 +273,10 @@ function setActiveView(view) {
   if (next === "sources") loadSources();
   if (next === "evidence") loadEvidence();
   if (next === "system-health") loadSystemHealth();
-  if (next === "stock-intel") loadStockIntel();
+  if (next === "stock-intel") {
+    startStockIntelAutoRefresh();
+    loadStockIntel();
+  }
   if (next === "jobs-runs") loadJobsRuns();
   if (next === "build-information") loadBuildInformation();
   if (next === "legacy-archive") loadLegacyArchive();
@@ -269,19 +327,42 @@ function buildSummaryCards(data) {
 
 function renderOverview(data) {
   overviewData = data;
-  $("overviewStats").innerHTML = [
+  const sourceCounts = data.source_counts || {};
+  const attentionCount = (data.actions_requiring_intervention || []).length;
+  if ($("overviewSummaryLine")) {
+    const summaryBits = [
+      data.runtime_health?.quick_check === "ok" ? "Runtime healthy" : `Runtime ${data.runtime_health?.quick_check || "unknown"}`,
+      `${sourceCounts.healthy ?? 0} healthy source${(sourceCounts.healthy ?? 0) === 1 ? "" : "s"}`,
+      `${sourceCounts.failed ?? 0} failed`,
+      `${data.jobs_pending ?? 0} pending job${(data.jobs_pending ?? 0) === 1 ? "" : "s"}`,
+      attentionCount ? `${attentionCount} attention item${attentionCount === 1 ? "" : "s"}` : "no attention items",
+    ];
+    $("overviewSummaryLine").textContent = summaryBits.join(" · ");
+  }
+  const systemMetrics = [
     statHTML(data.runtime_health?.quick_check || "n/a", "Runtime Health"),
+    statHTML(data.application_version || "n/a", "Build Version"),
     statHTML(data.scheduler?.owner_id || "unassigned", "Scheduler Leader"),
     statHTML(data.worker?.heartbeat_at ? fmtDate(data.worker.heartbeat_at) : "n/a", "Worker Heartbeat"),
-    statHTML(data.source_counts?.active ?? 0, "Active Sources"),
-    statHTML(data.source_counts?.healthy ?? 0, "Healthy"),
-    statHTML(data.source_counts?.retrying ?? 0, "Retrying"),
-    statHTML(data.source_counts?.stale ?? 0, "Stale"),
-    statHTML(data.source_counts?.failed ?? 0, "Failed"),
-    statHTML(data.source_counts?.dead_letter ?? 0, "Dead Letter"),
-    statHTML(data.evidence_captured_today ?? 0, "Evidence Captured Today"),
+  ];
+  const flowMetrics = [
+    statHTML(sourceCounts.active ?? 0, "Active Sources"),
+    statHTML(sourceCounts.healthy ?? 0, "Healthy"),
+    statHTML(sourceCounts.retrying ?? 0, "Retrying"),
+    statHTML(sourceCounts.stale ?? 0, "Stale"),
+    statHTML(sourceCounts.failed ?? 0, "Failed"),
+    statHTML(sourceCounts.dead_letter ?? 0, "Dead Letter"),
+  ];
+  const workloadMetrics = [
+    statHTML(data.evidence_captured_today ?? 0, "Evidence Today"),
     statHTML(`${data.jobs_pending ?? 0} / ${data.jobs_running ?? 0}`, "Jobs Pending / Running"),
     statHTML(data.latest_evidence_at ? fmtDate(data.latest_evidence_at) : "n/a", "Latest Evidence"),
+    statHTML(data.schema_version ?? "n/a", "Schema"),
+  ];
+  $("overviewStats").innerHTML = [
+    statGroupHTML("System", systemMetrics, "Connection and build posture."),
+    statGroupHTML("Signal Flow", flowMetrics, "Source health and queue state."),
+    statGroupHTML("Workload", workloadMetrics, "What was captured and when."),
   ].join("");
 
   const intervention = data.actions_requiring_intervention || [];
@@ -731,7 +812,7 @@ function renderEvidenceDetail(snapshot) {
       ${kvHTML("Captured Time", fmtDate(snapshot.captured_time || snapshot.created_at || ""))}
       ${kvHTML("Payload Hash", snapshot.payload_hash || "")}
       ${kvHTML("Evidence URL", snapshot.evidence_url || "")}
-      <pre style="white-space:pre-wrap;word-break:break-word;margin:12px 0 0;background:#fffdf8;border:1px solid rgba(24,79,67,.14);border-radius:14px;padding:12px">${esc(snapshot.raw_payload || "")}</pre>
+      <pre style="white-space:pre-wrap;word-break:break-word;margin:12px 0 0;background:rgba(255,255,255,.04);border:1px solid rgba(79,209,197,.14);border-radius:14px;padding:12px;color:inherit">${esc(snapshot.raw_payload || "")}</pre>
     </div>
   `;
 }
@@ -948,27 +1029,515 @@ async function loadLegacyArchive() {
     : `<div class="item"><h3>No historical tables</h3><p class="muted">Legacy archive data has not been copied into the archive path yet.</p></div>`;
 }
 
-function stockResultHTML(payload) {
+function stockSourceLinksHTML(sourceLinks = {}) {
+  const links = [];
+  if (sourceLinks.yahoo_chart) {
+    links.push(`<a href="${esc(sourceLinks.yahoo_chart)}" target="_blank" rel="noreferrer">Chart</a>`);
+  }
+  if (sourceLinks.yahoo_news) {
+    links.push(`<a href="${esc(sourceLinks.yahoo_news)}" target="_blank" rel="noreferrer">News</a>`);
+  }
+  if (sourceLinks.sec_companyfacts) {
+    links.push(`<a href="${esc(sourceLinks.sec_companyfacts)}" target="_blank" rel="noreferrer">SEC</a>`);
+  }
+  return links.length ? links.join(" · ") : "n/a";
+}
+
+function stockWatchlistHTML(items = []) {
+  return items.length
+    ? items.map(item => `
+      <div class="stock-watchlist-item">
+        <div>
+          <strong>${esc(item.symbol || "")}</strong>
+          <span>${esc(item.company || item.symbol || "")}</span>
+        </div>
+        <button class="ghost small" data-remove-stock="${esc(item.symbol || "")}">Remove</button>
+      </div>
+    `).join("")
+    : `<div class="item empty-state"><h3>Empty watchlist</h3><p class="muted">Add a ticker to load the latest available market snapshot. Default watchlist: AAPL, NVDA, MSFT.</p></div>`;
+}
+
+function stockActionSummaryHTML(card) {
+  const signalText = (card.signals || []).join(" · ");
+  return `<div class="item">
+    <h3>${esc(card.symbol || "")} ${esc(card.company || "")}</h3>
+    <div class="meta">
+      <span class="tag">${esc(card.signal_label || "Needs review")}</span>
+      <span class="tag">${esc(card.freshness_state || "")}</span>
+      <span class="tag">${esc(card.review_state || "")}</span>
+      <span class="tag">${esc(fmtMoney(card.price, card.currency))}</span>
+      <span class="tag">${esc(fmtPct(card.one_year_return))}</span>
+    </div>
+    <p class="muted">${esc(card.decision_reason || "")}</p>
+    ${kvHTML("Next step", card.next_step || "")}
+    ${kvHTML("Memory Matches", card.memory_matches ?? 0)}
+    ${kvHTML("Signals", signalText || "")}
+  </div>`;
+}
+
+function stockLiveCardHTML(card) {
+  const signalText = (card.signals || []).join(" · ");
+  const statusClass = (card.freshness_state || "").toLowerCase().includes("error") ? "error" : "";
+  const evidence = (card.evidence_bullets || []).map(line => `<li>${esc(line)}</li>`).join("");
+  return `<div class="item ${statusClass} stock-snapshot-card" data-snapshot-id="${esc(card.snapshot_id || "")}">
+    <div class="stock-card-head">
+      <div>
+        <h3>${esc(card.symbol || "")} ${esc(card.company || "")}</h3>
+        <div class="meta">
+          <span class="tag">${esc(card.signal_label || "Needs review")}</span>
+          <span class="tag">${esc(card.freshness_state || "Needs review")}</span>
+          <span class="tag">${esc(card.review_state || "Needs review")}</span>
+          <span class="tag">${esc(fmtMoney(card.price, card.currency))}</span>
+          <span class="tag">${esc(fmtPct(card.one_year_return))}</span>
+          <span class="tag">${esc(card.news_count ?? 0)} headlines</span>
+        </div>
+      </div>
+      <div class="stock-card-time">
+        <span>Fetched at ${esc(fmtDate(card.fetched_at || card.generated_at || ""))}</span>
+        <span>Provider timestamp ${esc(card.provider_timestamp ? fmtDate(card.provider_timestamp) : "n/a")}</span>
+      </div>
+    </div>
+    ${kvHTML("Provider", card.provider || "")}
+    ${kvHTML("Comparison baseline", card.comparison_baseline || "")}
+    ${kvHTML("Next step", card.next_step || "")}
+    <div class="item-sublist">
+      <b>Evidence</b>
+      ${evidence ? `<ul>${evidence}</ul>` : `<p class="muted">No evidence bullets available.</p>`}
+    </div>
+    ${kvHTML("Signal Mix", signalText || "")}
+    <div class="kv"><b>Sources</b><span>${stockSourceLinksHTML(card.source_links || {})}</span></div>
+    ${kvHTML("Memory Matches", card.memory_matches ?? 0)}
+    ${kvHTML("Snapshot ID", card.snapshot_id || "")}
+    <div class="buttons compact">
+      <button class="secondary small" data-stock-save-mode="draft" data-snapshot-id="${esc(card.snapshot_id || "")}">Save Draft</button>
+      <button class="ghost small" data-stock-save-mode="review" data-snapshot-id="${esc(card.snapshot_id || "")}">Send to Human Review</button>
+    </div>
+  </div>`;
+}
+
+function renderStockIntel(data) {
+  const cards = data.cards || [];
+  stockIntelData = data;
+  if ($("stockLiveBanner")) {
+    const bannerKind = data.empty_watchlist ? "banner-info" : data.error_count && !cards.length ? "banner-error" : "banner-success";
+    $("stockLiveBanner").className = `banner ${bannerKind}`;
+    if ($("stockLiveStatus")) $("stockLiveStatus").textContent = data.snapshot_label || data.snapshot_name || "Latest Available Market Snapshot";
+    if ($("stockLiveSummary")) $("stockLiveSummary").textContent = data.summary_line || data.source_summary || "Latest available market snapshot loaded.";
+  }
+  if ($("stockIntelStats")) {
+    const actionCounts = data.action_counts || {};
+    const freshnessCounts = cards.reduce((acc, card) => {
+      const key = card.freshness_state || "Needs review";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    $("stockIntelStats").innerHTML = [
+      statHTML(data.count ?? cards.length, "Snapshots"),
+      statHTML(freshnessCounts["Fresh snapshot"] ?? 0, "Fresh snapshot"),
+      statHTML(freshnessCounts["Stale snapshot"] ?? 0, "Stale snapshot"),
+      statHTML(data.error_count ?? 0, "Errors"),
+      statHTML(actionCounts["Research candidate"] ?? 0, "Research candidate"),
+      statHTML(actionCounts["Risk flag"] ?? 0, "Risk flag"),
+      statHTML(data.generated_at ? fmtDate(data.generated_at) : "n/a", "Fetched at"),
+    ].join("");
+  }
+  if ($("stockWatchlist")) {
+    $("stockWatchlist").innerHTML = stockWatchlistHTML(data.watchlist || []);
+    document.querySelectorAll("[data-remove-stock]").forEach(button => {
+      button.addEventListener("click", () => {
+        const next = stockWatchlist.filter(symbol => symbol !== button.dataset.removeStock);
+        saveStockWatchlist(next);
+        loadStockIntel().catch(() => {});
+      });
+    });
+  }
+  if ($("stockActionSummary")) {
+    $("stockActionSummary").innerHTML = cards.length
+      ? cards.map(stockActionSummaryHTML).join("")
+      : `<div class="item empty-state"><h3>No snapshot cards</h3><p class="muted">Refresh the command center to pull the latest available market snapshot.</p></div>`;
+  }
+  if ($("stockLiveFeed")) {
+    $("stockLiveFeed").innerHTML = cards.length
+      ? cards.map(stockLiveCardHTML).join("")
+      : data.empty_watchlist
+        ? `<div class="item empty-state"><h3>Empty watchlist</h3><p class="muted">Add a ticker to load the latest available market snapshot.</p></div>`
+        : `<div class="item empty-state"><h3>No snapshot cards</h3><p class="muted">No data returned for the current watchlist.</p></div>`;
+  }
+  document.querySelectorAll("[data-stock-save-mode]").forEach(button => {
+    button.addEventListener("click", () => {
+      const snapshotId = button.dataset.snapshotId || "";
+      const mode = button.dataset.stockSaveMode || "draft";
+      const card = (stockIntelData?.cards || []).find(item => item.snapshot_id === snapshotId);
+      if (card) saveStockSnapshot(card, mode);
+    });
+  });
+}
+
+function loadStockWatchlist() {
+  try {
+    const stored = localStorage.getItem(STOCK_WATCHLIST_KEY);
+    if (stored === null) return DEFAULT_STOCK_WATCHLIST.slice();
+    const raw = JSON.parse(stored || "[]");
+    if (!Array.isArray(raw)) return DEFAULT_STOCK_WATCHLIST.slice();
+    const cleaned = raw.map(item => String(item || "").trim().toUpperCase()).filter(Boolean);
+    return cleaned.length ? [...new Set(cleaned)] : [];
+  } catch (err) {
+    return DEFAULT_STOCK_WATCHLIST.slice();
+  }
+}
+
+function saveStockWatchlist(next) {
+  stockWatchlist = [...new Set((next || []).map(item => String(item || "").trim().toUpperCase()).filter(Boolean))];
+  try {
+    localStorage.setItem(STOCK_WATCHLIST_KEY, JSON.stringify(stockWatchlist));
+  } catch (err) {}
+}
+
+function currentStockMode() {
+  return $("stockSnapshotMode")?.value || "";
+}
+
+function setCurrentStockMode(value) {
+  if ($("stockSnapshotMode")) $("stockSnapshotMode").value = value || "";
+  try {
+    localStorage.setItem(STOCK_SNAPSHOT_MODE_KEY, value || "");
+  } catch (err) {}
+}
+
+function loadStoredStockMode() {
+  try {
+    return localStorage.getItem(STOCK_SNAPSHOT_MODE_KEY) || "";
+  } catch (err) {
+    return "";
+  }
+}
+
+function renderStockSnapshotHistory(data) {
+  if (!$("stockSnapshotHistory")) return;
+  const snapshots = data.snapshots || [];
+  if (!snapshots.length) {
+    $("stockSnapshotHistory").innerHTML = `<div class="item empty-state"><h3>No saved snapshots</h3><p class="muted">Save a draft or send a snapshot to Human Review to make it appear here.</p></div>`;
+    return;
+  }
+  $("stockSnapshotHistory").innerHTML = snapshots.map(snapshot => {
+    const state = snapshot.review_state || "Needs review";
+    const saveMode = snapshot.save_mode || "draft";
+    const payload = snapshot.snapshot || {};
+    const card = payload.card || {};
+    return `<div class="item stock-history-card">
+      <h3>${esc(snapshot.symbol || "")} ${esc(snapshot.company || "")}</h3>
+      <div class="meta">
+        <span class="tag">${esc(saveMode)}</span>
+        <span class="tag">${esc(state)}</span>
+        <span class="tag">${esc(card.signal_label || snapshot.signal_label || "Needs review")}</span>
+      </div>
+      ${kvHTML("Fetched at", fmtDate(snapshot.fetched_at || ""))}
+      ${kvHTML("Provider timestamp", snapshot.provider_timestamp ? fmtDate(snapshot.provider_timestamp) : "n/a")}
+      ${kvHTML("Trusted entry", snapshot.trusted_entry_id || "")}
+      ${kvHTML("Human review", snapshot.human_review_id || "")}
+      ${kvHTML("Comparison baseline", snapshot.comparison_baseline || "")}
+    </div>`;
+  }).join("");
+}
+
+async function loadStockSnapshotHistory() {
+  if (!$("stockSnapshotHistory")) return;
+  try {
+    const data = await api("/stock/snapshot/history?limit=10");
+    renderStockSnapshotHistory(data);
+  } catch (err) {
+    $("stockSnapshotHistory").innerHTML = `<div class="item error"><h3>History unavailable</h3><p class="muted">${esc(err.message)}</p></div>`;
+  }
+}
+
+function stockReviewHeaders() {
+  return {
+    "X-Info-Analyzer-Environment": "active",
+  };
+}
+
+function renderStockReviewQueue(data) {
+  if (!$("stockReviewQueue")) return;
+  const reviews = (data.reviews || []).filter(review => (review.subject_type || "") === "stock_snapshot");
+  if (!reviews.length) {
+    $("stockReviewQueue").innerHTML = `<div class="item empty-state"><h3>No pending stock reviews</h3><p class="muted">Send a snapshot to Human Review to make it appear here.</p></div>`;
+    return;
+  }
+  $("stockReviewQueue").innerHTML = reviews.map(review => `
+    <div class="item stock-review-item" data-stock-review-id="${esc(review.id || "")}">
+      <h3>${esc(review.subject_id || review.id || "")}</h3>
+      <div class="meta">
+        <span class="tag">pending</span>
+        <span class="tag">${esc(review.subject_type || "")}</span>
+        <span class="tag">${esc(review.review_type || "")}</span>
+      </div>
+      <p class="muted">${esc(review.system_interpretation || "(no system interpretation)")}</p>
+      ${kvHTML("System confidence", Number(review.system_confidence || 0).toFixed(2))}
+      <label>Correction
+        <input data-stock-review-correction="${esc(review.id || "")}" placeholder="Optional correction for Correct" />
+      </label>
+      <label>Reason
+        <textarea data-stock-review-reason="${esc(review.id || "")}" rows="2" placeholder="Optional reason"></textarea>
+      </label>
+      <div class="buttons compact">
+        <button class="secondary small" data-stock-review-verdict="confirm" data-stock-review-id="${esc(review.id || "")}">Confirm</button>
+        <button class="secondary small" data-stock-review-verdict="correct" data-stock-review-id="${esc(review.id || "")}">Correct</button>
+        <button class="ghost small" data-stock-review-verdict="needs_more_evidence" data-stock-review-id="${esc(review.id || "")}">Needs more evidence</button>
+      </div>
+    </div>
+  `).join("");
+  document.querySelectorAll("[data-stock-review-verdict]").forEach(button => {
+    button.addEventListener("click", () => submitStockReviewVerdict(button.dataset.stockReviewId || "", button.dataset.stockReviewVerdict || ""));
+  });
+}
+
+async function loadStockHumanReviews() {
+  if (!$("stockReviewQueue")) return;
+  try {
+    const data = await api("/human-review/pending", { headers: stockReviewHeaders() });
+    renderStockReviewQueue(data);
+  } catch (err) {
+    $("stockReviewQueue").innerHTML = `<div class="item error"><h3>Review queue unavailable</h3><p class="muted">${esc(err.message)}</p></div>`;
+  }
+}
+
+async function submitStockReviewVerdict(reviewId, verdict) {
+  if (!reviewId) return;
+  const correction = ($(`[data-stock-review-correction="${reviewId}"]`)?.value || "").trim();
+  const reason = ($(`[data-stock-review-reason="${reviewId}"]`)?.value || "").trim();
+  try {
+    if ($("stockLiveSummary")) $("stockLiveSummary").textContent = verdict === "correct" ? "Submitting correction..." : "Submitting review verdict...";
+    const data = await api(`/human-review/${encodeURIComponent(reviewId)}/verdict`, {
+      method: "POST",
+      headers: stockReviewHeaders(),
+      body: JSON.stringify({
+        verdict,
+        correction: correction || null,
+        reason: reason || null,
+        confidence: 0.9,
+        reviewed_by: "tariye",
+      }),
+    });
+    if (!data.recorded) throw new Error("Review was not recorded");
+    await loadStockHumanReviews();
+    await loadStockSnapshotHistory();
+    await loadStockIntel({ silent: true });
+    toast(verdict === "correct" ? "Stock review corrected" : verdict === "confirm" ? "Stock review confirmed" : "Stock review updated");
+  } catch (err) {
+    toast(`Review failed: ${err.message}`);
+  }
+}
+
+function stockStatusFromRefresh(previous, nextData) {
+  const nextCards = nextData?.cards || [];
+  if (nextData?.empty_watchlist) return "Empty watchlist";
+  if (!nextCards.length) return "No data returned";
+  const previousMap = new Map((previous?.cards || []).map(card => [card.symbol, card.provider_timestamp || ""]));
+  const changed = nextCards.some(card => (previousMap.get(card.symbol) || "") !== (card.provider_timestamp || ""));
+  return changed ? `Fetched at ${fmtDate(nextData.generated_at || "")}` : "No newer provider data available.";
+}
+
+function bindStockCardActions() {
+  document.querySelectorAll("[data-stock-save-mode]").forEach(button => {
+    button.addEventListener("click", () => {
+      const snapshotId = button.dataset.snapshotId || "";
+      const mode = button.dataset.stockSaveMode || "draft";
+      const card = (stockIntelData?.cards || []).find(item => item.snapshot_id === snapshotId);
+      if (card) saveStockSnapshot(card, mode);
+    });
+  });
+}
+
+async function saveStockSnapshot(card, mode) {
+  const endpoint = mode === "review" ? "/stock/snapshot/review" : "/stock/snapshot/draft";
+  const button = Array.from(document.querySelectorAll(`[data-stock-save-mode="${mode}"]`)).find(item => item.dataset.snapshotId === (card.snapshot_id || ""));
+  try {
+    if (button) button.disabled = true;
+    if ($("stockLiveBanner")) {
+      $("stockLiveBanner").className = "banner banner-loading";
+      if ($("stockLiveStatus")) $("stockLiveStatus").textContent = mode === "review" ? "Sending to Human Review..." : "Saving draft...";
+      if ($("stockLiveSummary")) $("stockLiveSummary").textContent = card.comparison_baseline || "Saving snapshot...";
+    }
+    const result = await api(endpoint, {
+      method: "POST",
+      body: JSON.stringify({ card }),
+    });
+    const saved = result.snapshot || {};
+    stockIntelData = {
+      ...stockIntelData,
+      cards: (stockIntelData?.cards || []).map(item => item.snapshot_id === card.snapshot_id ? { ...item, review_state: saved.review_state || item.review_state, human_review_id: saved.human_review_id || item.human_review_id, save_mode: saved.save_mode || item.save_mode, trusted_entry_id: saved.trusted_entry_id || item.trusted_entry_id } : item),
+    };
+    renderStockIntel(stockIntelData);
+    await loadStockSnapshotHistory();
+    await loadStockHumanReviews();
+    toast(mode === "review" ? "Sent to Human Review" : "Draft saved");
+  } catch (err) {
+    toast(`Save failed: ${err.message}`);
+    if ($("stockLiveSummary")) $("stockLiveSummary").textContent = err.message;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+function stockManualEvidenceBullets(analysis = {}) {
+  const quote = analysis.quote || {};
+  const financials = analysis.financials || {};
+  const news = analysis.news || [];
+  const bullets = [];
+  if (quote.price !== undefined && quote.price !== null) {
+    bullets.push(`Latest available quote ${fmtMoney(quote.price, quote.currency)}`);
+  }
+  if (quote.provider_timestamp) {
+    bullets.push(`Provider timestamp ${fmtDate(quote.provider_timestamp)}`);
+  }
+  if (quote.previous_close !== undefined && quote.previous_close !== null) {
+    bullets.push(`Previous close ${fmtMoney(quote.previous_close, quote.currency)}`);
+  }
+  if (financials.latest_quarter?.revenue?.display) {
+    bullets.push(`Latest SEC quarter revenue ${financials.latest_quarter.revenue.display}`);
+  }
+  if (news.length) {
+    bullets.push(`Recent Yahoo Finance headlines scanned: ${news.length}`);
+  }
+  return bullets.slice(0, 4);
+}
+
+function startStockIntelAutoRefresh() {
+  if (stockIntelTimer) return;
+  stockIntelTimer = window.setInterval(() => {
+    if ($("stock-intel")?.classList.contains("active")) {
+      loadStockIntel({ silent: true }).catch(() => {});
+    }
+  }, 60000);
+}
+
+function stopStockIntelAutoRefresh() {
+  if (!stockIntelTimer) return;
+  clearInterval(stockIntelTimer);
+  stockIntelTimer = null;
+}
+
+async function loadStockIntel({ silent = false } = {}) {
+  if (!$("stockLiveFeed")) return;
+  if (stockIntelLoading) return;
+  stockIntelLoading = true;
+  if (!stockWatchlist.length) stockWatchlist = loadStockWatchlist();
+  const previous = stockIntelData;
+  try {
+    if ($("stockOutput") && !$("stockOutput").innerHTML.trim()) {
+      $("stockOutput").innerHTML = `<div class="item empty-state"><h3>Manual probe ready</h3><p class="muted">Use Analyze to inspect one ticker at a time. This does not save automatically.</p></div>`;
+    }
+    if ($("stockLiveBanner")) {
+      $("stockLiveBanner").className = "banner banner-loading";
+      if ($("stockLiveStatus")) $("stockLiveStatus").textContent = "Loading latest available market snapshot...";
+      if ($("stockLiveSummary")) $("stockLiveSummary").textContent = "Fetching the latest available quote, filings, and headlines.";
+    }
+    const mode = $("stockSnapshotMode")?.value || "";
+    try {
+      localStorage.setItem(STOCK_SNAPSHOT_MODE_KEY, mode);
+    } catch (err) {}
+    const data = await api("/stock/snapshot", {
+      method: "POST",
+      body: JSON.stringify({
+        symbols: stockWatchlist,
+        watchlist: stockWatchlist,
+        simulate_state: mode,
+      }),
+    });
+    renderStockIntel(data);
+    if ($("stockLiveBanner")) {
+      $("stockLiveBanner").className = data.error_count && !data.cards?.length ? "banner banner-error" : "banner banner-success";
+      if ($("stockLiveStatus")) $("stockLiveStatus").textContent = data.snapshot_label || "Latest Available Market Snapshot";
+      if ($("stockLiveSummary")) {
+        const prevMap = new Map((previous?.cards || []).map(card => [card.symbol, card.provider_timestamp || ""]));
+        const changed = (data.cards || []).some(card => (prevMap.get(card.symbol) || "") !== (card.provider_timestamp || ""));
+        $("stockLiveSummary").textContent = data.empty_watchlist
+          ? "Empty watchlist"
+          : (changed ? `Fetched at ${fmtDate(data.generated_at || "")}` : "No newer provider data available.");
+      }
+    }
+    await loadStockSnapshotHistory();
+    await loadStockHumanReviews();
+    if (!silent) {
+      toast(data.empty_watchlist ? "Empty watchlist" : "Latest available market snapshot refreshed");
+    }
+    return data;
+  } catch (err) {
+    if ($("stockLiveBanner")) {
+      $("stockLiveBanner").className = "banner banner-error";
+      if ($("stockLiveStatus")) $("stockLiveStatus").textContent = "Snapshot unavailable";
+      if ($("stockLiveSummary")) $("stockLiveSummary").textContent = err.message;
+    }
+    if ($("stockIntelStats")) $("stockIntelStats").innerHTML = "";
+    if ($("stockWatchlist")) {
+      $("stockWatchlist").innerHTML = `<div class="item error"><h3>Snapshot error</h3><p class="muted">${esc(err.message)}</p></div>`;
+    }
+    if ($("stockActionSummary")) {
+      $("stockActionSummary").innerHTML = `<div class="item error"><h3>Snapshot error</h3><p class="muted">${esc(err.message)}</p></div>`;
+    }
+    if ($("stockLiveFeed")) {
+      $("stockLiveFeed").innerHTML = `<div class="item error"><h3>Snapshot failed</h3><p class="muted">${esc(err.message)}</p></div>`;
+    }
+    if (!silent) toast(`Snapshot failed: ${err.message}`);
+    return null;
+  } finally {
+    stockIntelLoading = false;
+  }
+}
+
+function stockManualEvidenceBullets(analysis = {}) {
+  const quote = analysis.quote || {};
+  const financials = analysis.financials || {};
+  const news = analysis.news || [];
+  const bullets = [];
+  if (quote.price !== undefined && quote.price !== null) {
+    bullets.push(`Latest available quote ${fmtMoney(quote.price, quote.currency)}`);
+  }
+  if (quote.provider_timestamp) {
+    bullets.push(`Provider timestamp ${fmtDate(quote.provider_timestamp)}`);
+  }
+  if (quote.previous_close !== undefined && quote.previous_close !== null) {
+    bullets.push(`Previous close ${fmtMoney(quote.previous_close, quote.currency)}`);
+  }
+  if (financials.latest_quarter?.revenue?.display) {
+    bullets.push(`Latest SEC quarter revenue ${financials.latest_quarter.revenue.display}`);
+  }
+  if (news.length) {
+    bullets.push(`Recent Yahoo Finance headlines scanned: ${news.length}`);
+  }
+  return bullets.slice(0, 4);
+}
+
+function manualStockResultHTML(payload) {
   const analysis = payload.analysis || {};
   const company = analysis.company || {};
   const decision = analysis.decision_frame || {};
+  const quote = analysis.quote || {};
   const signals = analysis.signals || [];
-  return `
-    <div class="item">
-      <h3>${esc(company.symbol || "")} ${esc(company.name || "")}</h3>
-      <div class="meta"><span class="tag">pilot</span><span class="tag">${esc(decision.action || "watch")}</span></div>
-      ${kvHTML("Reason", decision.reason || "")}
-      ${kvHTML("Next Step", decision.next_step || "")}
-      ${kvHTML("Tracking Metric", decision.tracking_metric || "")}
-      <div class="kv"><b>Signals</b><span>${esc(signals.slice(0, 4).map(s => s.signal).filter(Boolean).join(" | "))}</span></div>
+  const memoryCount = (analysis.memory_context || []).length;
+  const bullets = stockManualEvidenceBullets(analysis);
+  return `<div class="item">
+    <h3>${esc(company.symbol || "")} ${esc(company.name || "")}</h3>
+    <div class="meta">
+      <span class="tag">${esc(decision.action || "Needs review")}</span>
+      <span class="tag">${esc(fmtMoney(quote.price, quote.currency))}</span>
+      <span class="tag">${esc(fmtPct(quote.one_year_return))}</span>
+      <span class="tag">${esc(quote.market_state || "Latest available")}</span>
     </div>
-  `;
-}
-
-async function loadStockIntel() {
-  if (!$("stockOutput").innerHTML.trim()) {
-    $("stockOutput").innerHTML = `<div class="item"><h3>Ready</h3><p class="muted">Enter a ticker to run a pilot analysis. Save to memory is disabled in this cutover shell.</p></div>`;
-  }
+    <p class="muted">${esc(decision.reason || "")}</p>
+    ${kvHTML("Provider", [analysis.provider?.quote, analysis.provider?.news, analysis.provider?.financials].filter(Boolean).join(" · ") || "Yahoo Finance chart + Yahoo Finance RSS + SEC companyfacts")}
+    ${kvHTML("Next Step", decision.next_step || "")}
+    ${kvHTML("Tracking Metric", decision.tracking_metric || "")}
+    ${kvHTML("Fetched at", fmtDate(analysis.generated_at || ""))}
+    ${kvHTML("Provider timestamp", quote.provider_timestamp ? fmtDate(quote.provider_timestamp) : "n/a")}
+    ${kvHTML("Signals", signals.slice(0, 4).map(s => s.signal).filter(Boolean).join(" · "))}
+    ${kvHTML("Memory Matches", memoryCount)}
+    <div class="item-sublist">
+      <b>Evidence</b>
+      ${bullets.length ? `<ul>${bullets.map(line => `<li>${esc(line)}</li>`).join("")}</ul>` : `<p class="muted">No evidence bullets available.</p>`}
+    </div>
+    <div class="kv"><b>Sources</b><span>${stockSourceLinksHTML(analysis.source_links || {})}</span></div>
+  </div>`;
 }
 
 async function analyzeStock() {
@@ -977,11 +1546,16 @@ async function analyzeStock() {
     toast("Enter a ticker");
     return;
   }
-  const res = await api(`/stock/analyze?symbol=${encodeURIComponent(symbol)}&company=${encodeURIComponent($("stockCompany").value.trim())}`);
-  stockIntelData = res;
-  $("stockOutput").innerHTML = stockResultHTML(res);
-  $("saveStockBtn").disabled = true;
-  toast("Stock analysis loaded");
+  try {
+    const res = await api(`/stock/analyze?symbol=${encodeURIComponent(symbol)}&company=${encodeURIComponent($("stockCompany").value.trim())}`);
+    stockIntelData = res;
+    $("stockOutput").innerHTML = manualStockResultHTML(res);
+    $("saveStockBtn").disabled = true;
+    toast("Latest available quote loaded");
+  } catch (err) {
+    $("stockOutput").innerHTML = `<div class="item error"><h3>Probe Failed</h3><p class="muted">${esc(err.message)}</p></div>`;
+    toast(`Latest available quote failed: ${err.message}`);
+  }
 }
 
 let currentTestSession = null;
@@ -1349,7 +1923,7 @@ function renderBootstrapState() {
 }
 
 function bindViewButtons() {
-  document.querySelectorAll(".tab").forEach(btn => {
+  document.querySelectorAll("[data-view]").forEach(btn => {
     btn.addEventListener("click", () => setActiveView(btn.dataset.view));
   });
 }
@@ -1366,7 +1940,35 @@ function bindRefreshButtons() {
   $("refreshSources")?.addEventListener("click", loadSources);
   $("refreshEvidence")?.addEventListener("click", loadEvidence);
   $("refreshSystemHealth")?.addEventListener("click", loadSystemHealth);
-  $("refreshStockIntel")?.addEventListener("click", loadStockIntel);
+  $("refreshStockIntel")?.addEventListener("click", () => loadStockIntel());
+  $("refreshStockSnapshotHistory")?.addEventListener("click", loadStockSnapshotHistory);
+  $("refreshStockHistory")?.addEventListener("click", loadStockSnapshotHistory);
+  $("refreshStockReviews")?.addEventListener("click", loadStockHumanReviews);
+  $("addStockTicker")?.addEventListener("click", () => {
+    const next = String($("stockWatchlistInput")?.value || "").trim().toUpperCase();
+    if (!next) {
+      toast("Enter a ticker");
+      return;
+    }
+    saveStockWatchlist([...stockWatchlist, next]);
+    if ($("stockWatchlistInput")) $("stockWatchlistInput").value = "";
+    loadStockIntel().catch(() => {});
+  });
+  $("stockWatchlistInput")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      $("addStockTicker")?.click();
+    }
+  });
+  $("clearStockWatchlist")?.addEventListener("click", () => {
+    saveStockWatchlist([]);
+    loadStockIntel().catch(() => {});
+  });
+  $("resetStockWatchlist")?.addEventListener("click", () => {
+    saveStockWatchlist(DEFAULT_STOCK_WATCHLIST);
+    loadStockIntel().catch(() => {});
+  });
+  $("stockSnapshotMode")?.addEventListener("change", () => setCurrentStockMode(currentStockMode()));
   $("analyzeStockBtn")?.addEventListener("click", analyzeStock);
   $("testModeToggle")?.addEventListener("click", toggleTestMode);
   $("importFixtureBtn")?.addEventListener("click", importFixture);
@@ -1418,6 +2020,8 @@ async function boot() {
   renderBootstrapState();
   bindViewButtons();
   bindRefreshButtons();
+  stockWatchlist = loadStockWatchlist();
+  if ($("stockSnapshotMode")) $("stockSnapshotMode").value = loadStoredStockMode();
   await loadRuntimeStatus();
   try {
     await loadInitialBuildInfo();

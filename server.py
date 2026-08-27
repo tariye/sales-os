@@ -86,6 +86,13 @@ except Exception:
     _analyze_stock = None  # type: ignore
 
 
+DEFAULT_STOCK_WATCHLIST = [
+    {"symbol": "AAPL", "company": "Apple Inc."},
+    {"symbol": "NVDA", "company": "NVIDIA Corporation"},
+    {"symbol": "MSFT", "company": "Microsoft Corporation"},
+]
+
+
 def _get_anthropic_client():
     if _anthropic is None:
         return None
@@ -147,7 +154,7 @@ if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
 TEST_DB_PATH_RAW = os.environ.get("INFO_ANALYZER_TEST_DB_PATH", "").strip()
 
-APP_VERSION = "v0.96-context-library"
+APP_VERSION = "v0.98-public-market-snapshot-command-center"
 SCHEMA_VERSION = 2
 DATA_PLANE_LEASE_SECONDS = 30
 SCHEDULER_LEASE_SECONDS = 8
@@ -200,14 +207,14 @@ FEATURE_REGISTRY = [
     },
     {
         "feature_key": "stock_intel",
-        "display_name": "Stock Intel · Pilot",
-        "lifecycle_status": "pilot",
-        "architecture": "legacy analysis surface",
-        "data_source": "active data plane",
+        "display_name": "Public Market Snapshot Command Center",
+        "lifecycle_status": "active",
+        "architecture": "public market snapshot cockpit",
+        "data_source": "Yahoo Finance chart/rss and SEC companyfacts",
         "user_visible": True,
         "replacement_feature": "",
         "deprecated_at": "",
-        "notes": "Operational but visibly pilot-bounded. Save-to-memory is disabled in the shell.",
+        "notes": "Review-first stock snapshot cockpit with honest freshness and human approval gates.",
     },
     {
         "feature_key": "jobs_runs",
@@ -365,6 +372,15 @@ FEATURE_REGISTRY = [
     },
 ]
 APP_VERSIONS = [
+    {
+        "version": "v0.98",
+        "name": "Public Market Snapshot Command Center",
+        "features": [
+            "Stock Intel now shows a public market snapshot for a user-editable watchlist",
+            "Yahoo Finance chart/rss and SEC companyfacts are translated into review-first intelligence cards",
+            "Snapshots disclose provider, fetched_at, provider_timestamp, freshness, evidence, and review state",
+        ],
+    },
     {
         "version": "v0.96",
         "name": "Context Library Promotion",
@@ -1971,6 +1987,31 @@ def init_db() -> None:
             FOREIGN KEY(source_id) REFERENCES ingest_sources(id)
         );
 
+        CREATE TABLE IF NOT EXISTS stock_snapshots (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            batch_id TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            company TEXT,
+            provider TEXT NOT NULL,
+            fetched_at TEXT NOT NULL,
+            provider_timestamp TEXT,
+            market_state TEXT,
+            freshness_state TEXT NOT NULL,
+            review_state TEXT NOT NULL,
+            save_mode TEXT NOT NULL,
+            signal_label TEXT,
+            comparison_baseline TEXT,
+            evidence_json TEXT DEFAULT '[]',
+            snapshot_json TEXT NOT NULL,
+            source_links_json TEXT DEFAULT '{}',
+            human_review_id TEXT,
+            trusted_entry_id TEXT,
+            note TEXT,
+            metadata TEXT DEFAULT '{}'
+        );
+
         CREATE TABLE IF NOT EXISTS source_health_events (
             id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL,
@@ -2061,6 +2102,9 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_processing_jobs_status ON processing_jobs(status, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_processed_signals_observation ON processed_signals(observation_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_processed_signals_route ON processed_signals(route, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_stock_snapshots_batch ON stock_snapshots(batch_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_stock_snapshots_symbol ON stock_snapshots(symbol, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_stock_snapshots_review_state ON stock_snapshots(review_state, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_data_plane_jobs_status ON data_plane_jobs(status, scheduled_for, next_attempt_at);
         CREATE INDEX IF NOT EXISTS idx_data_plane_jobs_source ON data_plane_jobs(source_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_worker_claims_job ON worker_claims(job_id, created_at DESC);
@@ -2240,6 +2284,15 @@ def row_to_entry(row) -> dict:
     d["tags"] = json_loads(d.get("tags"), [])
     d["metadata"] = json_loads(d.get("metadata"), {})
     d["qa_scores"] = json_loads(d.get("qa_scores"), {})
+    return d
+
+
+def row_to_stock_snapshot(row) -> dict:
+    d = dict(row)
+    d["evidence"] = json_loads(d.get("evidence_json"), [])
+    d["snapshot"] = json_loads(d.get("snapshot_json"), {})
+    d["source_links"] = json_loads(d.get("source_links_json"), {})
+    d["metadata"] = json_loads(d.get("metadata"), {})
     return d
 
 
@@ -8594,24 +8647,198 @@ def stock_analysis_entry_payload(analysis: dict) -> dict:
         "entity": name,
         "source_type": "Document",
         "signal": top_signals or f"Stock intelligence card generated for {name}.",
-        "signal_role": "watch" if decision.get("action") == "watch" else "opportunity",
-        "interpretation": decision.get("reason") or "Use the stock card to underwrite financial quality, market context, and memory contradictions.",
-        "trackable_as": "financial metrics + headline catalyst + memory contradiction",
-        "tracking_metric": decision.get("tracking_metric") or "Revenue growth, margin, FCF, debt, guidance, valuation, and catalyst changes.",
-        "returned_action": decision.get("next_step") or f"Review latest filing and news for {name}.",
-        "first_step": decision.get("next_step") or f"Open the latest filing and compare {symbol} revenue, margin, FCF, and valuation.",
-        "actionability": "review",
+        "signal_role": "watch",
+        "interpretation": decision.get("reason") or "Use the snapshot to compare price, filings, headlines, and prior memory before deciding whether the thesis needs an update.",
+        "trackable_as": "price, revenue, margin, cash flow, catalyst change, and review outcome",
+        "tracking_metric": decision.get("tracking_metric") or "Revenue growth, gross margin, operating margin, free cash flow, guidance, and thesis change.",
+        "returned_action": decision.get("next_step") or f"Add to thesis after review for {name}.",
+        "first_step": decision.get("next_step") or f"Open the latest available filing and compare {symbol} revenue, margin, free cash flow, and thesis risk.",
+        "actionability": "watch",
         "pull_trigger_type": "entity",
         "pull_trigger": decision.get("resurfacing_trigger") or f"{symbol}, {name}, earnings, filing, guidance, margin, cash flow",
         "trigger_condition": decision.get("resurfacing_trigger") or f"Resurface when new {symbol} filings, earnings, guidance, or major headlines appear.",
         "result_to_track": decision.get("tracking_metric") or "Decision changed, watch metric updated, or thesis confidence changed.",
-        "feedback_to_capture": "Log whether this became buy research, watchlist update, avoid decision, or contradiction to prior memory.",
+        "feedback_to_capture": "Log whether this became research, watchlist evidence, risk evidence, or a contradiction to prior memory.",
         "pattern": "Stock pattern recognition card",
-        "lesson": "A stock signal becomes useful when live market/news data is compared against financial statements and stored memory.",
+        "lesson": "A stock snapshot becomes useful when public market data is compared against financial statements and stored memory.",
         "tags": ["stock-intel", "investing", symbol.lower(), name.lower()],
         "confidence": "Medium",
         "metadata": {"stock_analysis": analysis, "engine": analysis.get("engine")},
     }
+
+
+def stock_review_state_label(save_mode: str, human_review_id: str = "", trusted_entry_id: str = "") -> str:
+    if trusted_entry_id:
+        return "Trusted after review"
+    if human_review_id:
+        return "Pending Human Review"
+    if save_mode == "draft":
+        return "Unreviewed draft"
+    return "Needs review"
+
+
+def stock_provider_label(analysis: dict) -> str:
+    provider = analysis.get("provider") or {}
+    parts = [part for part in [clean_text(provider.get("quote")), clean_text(provider.get("news")), clean_text(provider.get("financials"))] if part]
+    return " · ".join(parts) or "Yahoo Finance chart + Yahoo Finance RSS + SEC companyfacts"
+
+
+def stock_freshness_state(analysis: dict, simulate_state: str = "") -> str:
+    simulate = clean_text(simulate_state).lower()
+    if simulate == "provider_error":
+        return "Provider error"
+    if simulate == "symbol_error":
+        return "Symbol error"
+    if simulate == "no_data":
+        return "No data"
+    if simulate == "stale":
+        return "Stale snapshot"
+    quote = analysis.get("quote") or {}
+    errors = [clean_text(e).lower() for e in (analysis.get("errors") or []) if clean_text(e)]
+    if not quote or quote.get("price") is None:
+        if any("no quote data" in err or "symbol" in err for err in errors):
+            return "Symbol error"
+        if errors:
+            return "Provider error"
+        return "No data"
+    market_state = clean_text(quote.get("market_state")).upper()
+    if market_state and market_state not in {"REGULAR", "OPEN"}:
+        return "Market closed / latest available"
+    provider_timestamp = clean_text(quote.get("provider_timestamp"))
+    if provider_timestamp:
+        try:
+            age_seconds = (datetime.now(timezone.utc) - datetime.fromisoformat(provider_timestamp.replace("Z", "+00:00"))).total_seconds()
+            if age_seconds > 900:
+                return "Stale snapshot"
+        except Exception:
+            pass
+    if errors:
+        # Ancillary provider failures are still surfaced in evidence, but the
+        # snapshot is honest about the quote freshness if the market feed worked.
+        return "Fresh snapshot"
+    return "Fresh snapshot"
+
+
+def stock_comparison_baseline(analysis: dict) -> str:
+    quote = analysis.get("quote") or {}
+    financials = analysis.get("financials") or {}
+    derived = financials.get("derived") or {}
+    latest_q = financials.get("latest_quarter") or {}
+    latest_a = financials.get("latest_annual") or {}
+    parts = []
+    if quote.get("previous_close") is not None and quote.get("price") is not None:
+        parts.append(f"latest available quote ${quote.get('price'):.2f} versus previous close ${quote.get('previous_close'):.2f}")
+    if quote.get("one_year_low") is not None and quote.get("one_year_high") is not None:
+        parts.append(f"52-week range ${quote.get('one_year_low'):.2f} to ${quote.get('one_year_high'):.2f}")
+    if latest_q.get("revenue") and latest_q.get("revenue").get("display"):
+        parts.append(f"latest reported quarter revenue {latest_q['revenue']['display']}")
+    if derived.get("latest_annual", {}).get("free_cash_flow") is not None:
+        parts.append(f"annual free cash flow estimate {fmt_money(derived['latest_annual']['free_cash_flow'])}")
+    if latest_a.get("net_income") and latest_a.get("net_income").get("display"):
+        parts.append(f"latest annual net income {latest_a['net_income']['display']}")
+    return "; ".join(parts) if parts else "Latest available quote compared with SEC companyfacts and recent headlines."
+
+
+def stock_evidence_bullets_text(analysis: dict) -> list[str]:
+    quote = analysis.get("quote") or {}
+    financials = analysis.get("financials") or {}
+    news = analysis.get("news") or []
+    memory = analysis.get("memory_context") or []
+    q = financials.get("latest_quarter") or {}
+    a = financials.get("latest_annual") or {}
+    bullets: list[str] = []
+    if quote.get("price") is not None:
+        price = quote.get("price")
+        prev = quote.get("previous_close")
+        range_low = quote.get("one_year_low")
+        range_high = quote.get("one_year_high")
+        pieces = [f"Latest available quote {price:.2f}" if isinstance(price, (int, float)) else f"Latest available quote {price}"]
+        if prev is not None:
+            pieces.append(f"previous close {prev:.2f}" if isinstance(prev, (int, float)) else f"previous close {prev}")
+        if range_low is not None and range_high is not None:
+            pieces.append(f"52-week range {range_low:.2f} to {range_high:.2f}" if all(isinstance(x, (int, float)) for x in (range_low, range_high)) else f"52-week range {range_low} to {range_high}")
+        bullets.append("; ".join(pieces))
+    revenue = (q.get("revenue") or {}).get("display")
+    fcf = financials.get("derived", {}).get("latest_annual", {}).get("free_cash_flow")
+    if revenue or fcf is not None:
+        pieces = []
+        if revenue:
+            pieces.append(f"Latest SEC quarter revenue {revenue}")
+        if fcf is not None:
+            pieces.append(f"annual free cash flow {fmt_money(fcf)}")
+        bullets.append("; ".join(pieces))
+    if news:
+        bullets.append(f"Recent Yahoo Finance headlines scanned: {len(news)}")
+    if memory:
+        bullets.append(f"Local memory matches: {len(memory)}")
+    return bullets[:4]
+
+
+def stock_card_payload(analysis: dict, batch_id: str, save_mode: str = "", human_review_id: str = "", trusted_entry_id: str = "", note: str = "", simulate_state: str = "") -> dict:
+    company = analysis.get("company") or {}
+    quote = analysis.get("quote") or {}
+    decision = analysis.get("decision_frame") or {}
+    freshness_state = stock_freshness_state(analysis, simulate_state=simulate_state)
+    provider_label = stock_provider_label(analysis)
+    fetched_at = analysis.get("generated_at") or now_iso()
+    snapshot_id = "SSN-" + uuid.uuid5(uuid.NAMESPACE_URL, f"{batch_id}|{company.get('symbol') or company.get('name') or ''}").hex[:16].upper()
+    review_state = stock_review_state_label(save_mode, human_review_id=human_review_id, trusted_entry_id=trusted_entry_id)
+    evidence = stock_evidence_bullets_text(analysis)
+    if analysis.get("errors"):
+        evidence.extend([f"Provider note: {clean_text(err)}" for err in analysis.get("errors")[:2]])
+    card = {
+        "snapshot_id": snapshot_id,
+        "batch_id": batch_id,
+        "symbol": company.get("symbol") or "",
+        "company": company.get("name") or company.get("symbol") or "",
+        "provider": provider_label,
+        "provider_timestamp": quote.get("provider_timestamp") or "",
+        "fetched_at": fetched_at,
+        "market_state": quote.get("market_state") or "",
+        "freshness_state": freshness_state,
+        "review_state": review_state,
+        "signal_label": decision.get("action") or "Needs review",
+        "comparison_baseline": stock_comparison_baseline(analysis),
+        "evidence_bullets": evidence[:4],
+        "next_step": decision.get("next_step") or "Add to thesis after review.",
+        "source_links": analysis.get("source_links") or {},
+        "price": quote.get("price"),
+        "currency": quote.get("currency"),
+        "previous_close": quote.get("previous_close"),
+        "one_year_high": quote.get("one_year_high"),
+        "one_year_low": quote.get("one_year_low"),
+        "one_year_return": quote.get("one_year_return"),
+        "news_count": len(analysis.get("news") or []),
+        "memory_matches": len(analysis.get("memory_context") or []),
+        "signals": [clean_text(s.get("signal")) for s in (analysis.get("signals") or []) if clean_text(s.get("signal"))][:4],
+        "errors": analysis.get("errors") or [],
+        "save_mode": save_mode or "",
+        "human_review_id": human_review_id or "",
+        "trusted_entry_id": trusted_entry_id or "",
+        "note": note or "",
+        "decision_reason": decision.get("reason") or "",
+        "snapshot": analysis,
+    }
+    return card
+
+
+def stock_watchlist_from_payload(payload: dict) -> list[dict]:
+    if any(key in payload for key in ("watchlist", "symbols", "tickers")):
+        requested = parse_symbol_list(payload.get("symbols") or payload.get("tickers") or payload.get("watchlist"))
+        if not requested:
+            return []
+        watchlist = []
+        seen = set()
+        for symbol in requested:
+            if symbol in seen:
+                continue
+            seen.add(symbol)
+            watchlist.append({
+                "symbol": symbol,
+                "company": next((item["company"] for item in DEFAULT_STOCK_WATCHLIST if item["symbol"] == symbol), symbol),
+            })
+        return watchlist
+    return list(DEFAULT_STOCK_WATCHLIST)
 
 
 def stock_intel(symbol: str, company: str = "", save: bool = False) -> dict:
@@ -8621,16 +8848,355 @@ def stock_intel(symbol: str, company: str = "", save: bool = False) -> dict:
     if not symbol:
         raise ValueError("symbol is required")
     analysis = _analyze_stock(symbol, company_hint=company)
-    payload = stock_analysis_entry_payload(analysis)
-    result = {"analysis": analysis, "entry_payload": payload}
+    result = {"analysis": analysis}
     if save:
-        created = create_entry(payload)
+        with connect() as conn:
+            card = stock_card_payload(analysis, batch_id="manual-probe", save_mode="draft")
+            save_stock_snapshot_record(conn, card, analysis, save_mode="draft", review_state="Unreviewed draft")
+            conn.commit()
         result["saved"] = True
-        result["entry_id"] = created["entry"]["id"]
-        result["entry"] = created["entry"]
+        result["snapshot_id"] = card["snapshot_id"]
     else:
         result["saved"] = False
     return result
+
+
+def parse_bool(value) -> bool:
+    if isinstance(value, list):
+        value = value[0] if value else ""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    return clean_text(value).lower() in {"1", "true", "yes", "y", "on"}
+
+
+def parse_symbol_list(value) -> list[str]:
+    raw_items = value if isinstance(value, list) else [value]
+    symbols: list[str] = []
+    for item in raw_items:
+        for token in str(item or "").split(","):
+            cleaned = clean_text(token).upper()
+            if cleaned and cleaned not in symbols:
+                symbols.append(cleaned)
+    return symbols
+
+
+def fmt_money(value, currency: str = "USD") -> str:
+    try:
+        n = float(value)
+    except Exception:
+        return "n/a"
+    if currency and currency != "USD":
+        return f"{n:,.2f} {currency}"
+    return f"${n:,.2f}"
+
+
+def save_stock_snapshot_record(
+    conn,
+    card: dict,
+    analysis: dict,
+    *,
+    save_mode: str,
+    review_state: str,
+    human_review_id: str = "",
+    trusted_entry_id: str = "",
+    note: str = "",
+) -> dict:
+    snapshot_json = json.dumps({"card": card, "analysis": analysis}, ensure_ascii=False)
+    evidence_json = json.dumps(card.get("evidence_bullets") or [], ensure_ascii=False)
+    source_links_json = json.dumps(card.get("source_links") or {}, ensure_ascii=False)
+    existing = conn.execute("SELECT * FROM stock_snapshots WHERE id=?", (card["snapshot_id"],)).fetchone()
+    existing_review_id = clean_text(existing["human_review_id"]) if existing else ""
+    existing_trusted_id = clean_text(existing["trusted_entry_id"]) if existing else ""
+    existing_review_state = clean_text(existing["review_state"]) if existing else ""
+    if not human_review_id and existing_review_id:
+        human_review_id = existing_review_id
+    if not trusted_entry_id and existing_trusted_id:
+        trusted_entry_id = existing_trusted_id
+    if existing_review_id or existing_trusted_id:
+        review_state = existing_review_state or review_state
+    metadata = {
+        "stock_snapshot_id": card["snapshot_id"],
+        "batch_id": card["batch_id"],
+        "save_mode": save_mode,
+        "review_state": review_state,
+        "provider_timestamp": card.get("provider_timestamp") or "",
+        "market_state": card.get("market_state") or "",
+    }
+    now = now_iso()
+    row = {
+        "id": card["snapshot_id"],
+        "created_at": now,
+        "updated_at": now,
+        "batch_id": card["batch_id"],
+        "symbol": card.get("symbol") or "",
+        "company": card.get("company") or "",
+        "provider": card.get("provider") or "",
+        "fetched_at": card.get("fetched_at") or now,
+        "provider_timestamp": card.get("provider_timestamp") or "",
+        "market_state": card.get("market_state") or "",
+        "freshness_state": card.get("freshness_state") or "Needs review",
+        "review_state": review_state,
+        "save_mode": save_mode,
+        "signal_label": card.get("signal_label") or "",
+        "comparison_baseline": card.get("comparison_baseline") or "",
+        "evidence_json": evidence_json,
+        "snapshot_json": snapshot_json,
+        "source_links_json": source_links_json,
+        "human_review_id": human_review_id or "",
+        "trusted_entry_id": trusted_entry_id or "",
+        "note": note or card.get("note") or "",
+        "metadata": json.dumps(metadata, ensure_ascii=False),
+    }
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO stock_snapshots
+        (id, created_at, updated_at, batch_id, symbol, company, provider, fetched_at, provider_timestamp, market_state,
+         freshness_state, review_state, save_mode, signal_label, comparison_baseline, evidence_json, snapshot_json,
+         source_links_json, human_review_id, trusted_entry_id, note, metadata)
+        VALUES (:id, :created_at, :updated_at, :batch_id, :symbol, :company, :provider, :fetched_at, :provider_timestamp, :market_state,
+                :freshness_state, :review_state, :save_mode, :signal_label, :comparison_baseline, :evidence_json, :snapshot_json,
+                :source_links_json, :human_review_id, :trusted_entry_id, :note, :metadata)
+        """,
+        row,
+    )
+    return row
+
+
+def stock_snapshot_trusted_entry_payload(snapshot_row: dict, review_row: dict) -> dict:
+    card = json_loads(snapshot_row.get("snapshot_json"), {}).get("card") or {}
+    analysis = json_loads(snapshot_row.get("snapshot_json"), {}).get("analysis") or {}
+    company = analysis.get("company") or {}
+    symbol = company.get("symbol") or snapshot_row.get("symbol") or ""
+    company_name = company.get("name") or snapshot_row.get("company") or symbol
+    evidence = json_loads(snapshot_row.get("evidence_json"), [])
+    review_label = clean_text(review_row.get("human_verdict") or "confirm")
+    correction = clean_text(review_row.get("human_correction") or "")
+    reason = clean_text(review_row.get("human_reason") or "")
+    interpretation = correction or reason or snapshot_row.get("comparison_baseline") or ""
+    raw_input = {
+        "snapshot_id": snapshot_row.get("id"),
+        "review_id": review_row.get("id"),
+        "card": card,
+        "analysis": analysis,
+        "review_verdict": review_label,
+        "review_reason": reason,
+        "review_correction": correction,
+        "evidence": evidence,
+    }
+    title = f"{symbol}: public market snapshot reviewed"
+    payload = {
+        "id": "ENT-" + uuid.uuid5(uuid.NAMESPACE_URL, snapshot_row.get("id") or symbol).hex[:16].upper(),
+        "title": title,
+        "raw_input": json.dumps(raw_input, ensure_ascii=False),
+        "domain": "Investing",
+        "entity": company_name,
+        "source_type": "Market Snapshot",
+        "signal": f"{card.get('signal_label') or 'Needs review'} for {company_name} with source-backed evidence.",
+        "signal_role": "watch",
+        "interpretation": interpretation or f"Review verdict {review_label} recorded for {company_name}.",
+        "trackable_as": "price, provider timestamp, SEC filing, headline context, and review outcome",
+        "tracking_metric": card.get("comparison_baseline") or "Latest available quote, SEC companyfacts, and review outcome.",
+        "returned_action": "Add to thesis after review.",
+        "first_step": "Add to thesis after review by checking the latest available quote and filing against the reviewed evidence.",
+        "actionability": "watch",
+        "pull_trigger_type": "entity",
+        "pull_trigger": f"{symbol}, {company_name}, latest available market snapshot, review outcome",
+        "trigger_condition": f"Resurface when {symbol}, {company_name}, or a new public market snapshot appears.",
+        "result_to_track": "Review outcome, price change, and thesis note update.",
+        "feedback_to_capture": "Log whether the reviewed snapshot changed the thesis, the watchlist, or the next research step.",
+        "pattern": "Public market snapshot review",
+        "lesson": "A market snapshot becomes durable only after evidence and review are recorded together.",
+        "tags": ["stock-intel", "public-market-snapshot", symbol.lower(), company_name.lower()],
+        "confidence": "Medium",
+        "metadata": {
+            "stock_snapshot_id": snapshot_row.get("id"),
+            "human_review_id": review_row.get("id"),
+            "review_verdict": review_label,
+            "review_state": snapshot_row.get("review_state"),
+            "evidence": evidence,
+        },
+        "status": "validated",
+    }
+    return payload
+
+
+def stock_snapshot_history(limit: int = 10) -> dict:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM stock_snapshots
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    snapshots = [row_to_stock_snapshot(row) for row in rows]
+    return {
+        "count": len(snapshots),
+        "snapshots": snapshots,
+    }
+
+
+def stock_snapshot_action(payload: dict | None = None, *, save_mode: str) -> dict:
+    payload = payload or {}
+    card = payload.get("card") if isinstance(payload.get("card"), dict) else payload
+    if not isinstance(card, dict):
+        raise ValueError("card is required")
+    analysis = card.get("snapshot") if isinstance(card.get("snapshot"), dict) else payload.get("analysis")
+    if not isinstance(analysis, dict):
+        raise ValueError("snapshot analysis is required")
+    note = clean_text(payload.get("note") or card.get("note") or "")
+    review_state = "Unreviewed draft" if save_mode == "draft" else "Pending Human Review"
+    with connect() as conn:
+        existing = conn.execute("SELECT * FROM stock_snapshots WHERE id=?", (card["snapshot_id"],)).fetchone()
+        if existing and clean_text(existing["trusted_entry_id"]):
+            return {
+                "snapshot_id": existing["id"],
+                "review_id": clean_text(existing["human_review_id"]),
+                "saved": True,
+                "snapshot": row_to_stock_snapshot(existing),
+            }
+        if existing and save_mode == "review" and clean_text(existing["human_review_id"]):
+            return {
+                "snapshot_id": existing["id"],
+                "review_id": clean_text(existing["human_review_id"]),
+                "saved": True,
+                "snapshot": row_to_stock_snapshot(existing),
+            }
+        row = save_stock_snapshot_record(
+            conn,
+            card,
+            analysis,
+            save_mode=save_mode,
+            review_state=review_state,
+            note=note,
+        )
+        review_id = ""
+        if save_mode == "review":
+            review_id = create_human_review(
+                conn,
+                review_type="stock_snapshot",
+                subject_type="stock_snapshot",
+                subject_id=row["id"],
+                system_interpretation=card.get("decision_reason") or card.get("comparison_baseline") or "",
+                system_confidence=0.5,
+                evidence_id=row["id"],
+            )
+            conn.execute(
+                """
+                UPDATE stock_snapshots
+                SET updated_at=?, human_review_id=?, review_state=?
+                WHERE id=?
+                """,
+                (now_iso(), review_id, review_state, row["id"]),
+            )
+            conn.commit()
+            row = conn.execute("SELECT * FROM stock_snapshots WHERE id=?", (row["id"],)).fetchone()
+    return {
+        "snapshot_id": row["id"],
+        "review_id": review_id,
+        "saved": True,
+        "snapshot": row_to_stock_snapshot(row),
+    }
+
+
+def stock_market_snapshot(payload: dict | None = None) -> dict:
+    payload = payload or {}
+    batch_id = "SBATCH-" + uuid.uuid4().hex[:12].upper()
+    watchlist = stock_watchlist_from_payload(payload)
+    simulate_state = clean_text(payload.get("simulate_state") or payload.get("mode") or "").lower()
+    cards: list[dict] = []
+    action_counts: dict[str, int] = {}
+    errors: list[dict] = []
+    if not watchlist:
+        return {
+            "generated_at": now_iso(),
+            "batch_id": batch_id,
+            "snapshot_name": "Public Market Snapshot Command Center",
+            "snapshot_label": "Latest Available Market Snapshot",
+            "market_status": "Empty watchlist",
+            "watchlist": [],
+            "cards": [],
+            "count": 0,
+            "saved_count": 0,
+            "error_count": 0,
+            "action_counts": {},
+            "summary_line": "Empty watchlist",
+            "source_summary": "Yahoo Finance chart/rss and SEC companyfacts",
+            "errors": [],
+            "empty_watchlist": True,
+        }
+    for item in watchlist:
+        symbol = item["symbol"]
+        company = item["company"]
+        try:
+            if simulate_state in {"provider_error", "symbol_error", "no_data"}:
+                if simulate_state == "no_data":
+                    raise RuntimeError("No data")
+                raise RuntimeError(simulate_state.replace("_", " "))
+            result = stock_intel(symbol, company=company, save=False)
+            analysis = result.get("analysis") or {}
+            card = stock_card_payload(analysis, batch_id=batch_id, simulate_state=simulate_state)
+            cards.append(card)
+            action_counts[card["signal_label"]] = action_counts.get(card["signal_label"], 0) + 1
+        except Exception as exc:
+            err_text = str(exc)
+            errors.append({"symbol": symbol, "company": company, "error": err_text})
+            freshness = "No data" if "no data" in err_text.lower() else ("Symbol error" if "symbol" in err_text.lower() else "Provider error")
+            cards.append({
+                "snapshot_id": "SSN-" + uuid.uuid5(uuid.NAMESPACE_URL, f"{batch_id}|{symbol}").hex[:16].upper(),
+                "batch_id": batch_id,
+                "symbol": symbol,
+                "company": company,
+                "provider": "Yahoo Finance chart + Yahoo Finance RSS + SEC companyfacts",
+                "provider_timestamp": "",
+                "generated_at": now_iso(),
+                "fetched_at": now_iso(),
+                "market_state": "",
+                "freshness_state": freshness,
+                "review_state": "Needs review",
+                "signal_label": "Needs review",
+                "comparison_baseline": "No provider data available for this symbol.",
+                "evidence_bullets": [err_text],
+                "next_step": "Check the ticker symbol, then refresh the snapshot.",
+                "source_links": {},
+                "price": None,
+                "currency": "",
+                "previous_close": None,
+                "one_year_high": None,
+                "one_year_low": None,
+                "one_year_return": None,
+                "news_count": 0,
+                "memory_matches": 0,
+                "signals": [],
+                "errors": [err_text],
+                "save_mode": "",
+                "human_review_id": "",
+                "trusted_entry_id": "",
+            })
+            action_counts["Needs review"] = action_counts.get("Needs review", 0) + 1
+    return {
+        "generated_at": now_iso(),
+        "batch_id": batch_id,
+        "snapshot_name": "Public Market Snapshot Command Center",
+        "snapshot_label": "Latest Available Market Snapshot",
+        "market_status": "Latest Available Market Snapshot",
+        "watchlist": watchlist,
+        "cards": cards,
+        "count": len(cards),
+        "saved_count": sum(1 for card in cards if card.get("save_mode")),
+        "error_count": len(errors),
+        "action_counts": action_counts,
+        "summary_line": " · ".join(
+            f"{card['symbol']} {card['signal_label']}" for card in cards if card.get("symbol") and card.get("signal_label")
+        ),
+        "source_summary": "Yahoo Finance chart + RSS and SEC companyfacts",
+        "simulate_state": simulate_state,
+        "errors": errors,
+        "default_watchlist_label": "Default watchlist: AAPL, NVDA, MSFT.",
+    }
 
 
 def row_to_raw_observation(row) -> dict:
@@ -8690,7 +9256,7 @@ def deterministic_processed_signal(observation: dict, job_id: str) -> dict:
 
     if domain == "Investing":
         if weak_execution_text(draft.get("returned_action") or "") or "sales pipeline" in normalize_text(draft.get("returned_action") or ""):
-            draft["returned_action"] = f"Build or update the investment thesis for {entity} and decide whether this is buy research, watchlist evidence, avoid evidence, or a contradiction."
+            draft["returned_action"] = f"Build or update the investment thesis for {entity} and decide whether this is research, watchlist evidence, risk evidence, avoid evidence, or a contradiction."
         if weak_execution_text(draft.get("first_step") or "") or "sales pipeline" in normalize_text(draft.get("first_step") or ""):
             draft["first_step"] = f"Create a one-page investment card for {entity}: evidence, demand signal, margin/cash signal, risk, decision trigger, and next review date."
         draft["tracking_metric"] = draft.get("tracking_metric") or "Revenue, margin, cash conversion, guidance, AI demand signal, and thesis confidence change."
@@ -9580,6 +10146,21 @@ class Handler(SimpleHTTPRequestHandler):
                     company=(params.get("company") or [""])[0],
                     save=False,
                 ))
+            if path == "/api/stock/snapshot":
+                return self.send_json(stock_market_snapshot({
+                    "symbols": params.get("symbols") or params.get("tickers") or params.get("watchlist"),
+                    "watchlist": params.get("watchlist"),
+                    "simulate_state": params.get("simulate_state") or params.get("mode"),
+                }))
+            if path == "/api/stock/snapshot/history":
+                limit = int(clean_text((params.get("limit") or ["10"])[0]) or 10)
+                return self.send_json(stock_snapshot_history(limit=limit))
+            if path == "/api/stock/live":
+                return self.send_json(stock_market_snapshot({
+                    "symbols": params.get("symbols") or params.get("tickers") or params.get("watchlist"),
+                    "watchlist": params.get("watchlist"),
+                    "simulate_state": params.get("simulate_state") or params.get("mode"),
+                }))
             if path == "/api/imports":
                 limit = int(clean_text((params.get("limit") or ["25"])[0]) or 25)
                 return self.send_json(list_import_batches(limit=limit))
@@ -10023,7 +10604,38 @@ class Handler(SimpleHTTPRequestHandler):
                             confidence=float(payload.get("confidence", 0.9)),
                             reviewed_by=payload.get("reviewed_by", "analyst")
                         )
-                    return self.send_json({"recorded": success}, 201 if success else 400)
+                        review_row = conn.execute("SELECT * FROM human_reviews WHERE id=?", (review_id,)).fetchone()
+                    trusted_entry_id = ""
+                    if success and review_row and clean_text(review_row["subject_type"]).lower() == "stock_snapshot":
+                        snapshot_id = clean_text(review_row["evidence_id"] or review_row["subject_id"])
+                        with connect() as conn:
+                            snapshot_row = conn.execute("SELECT * FROM stock_snapshots WHERE id=?", (snapshot_id,)).fetchone()
+                        if snapshot_row and clean_text(payload.get("verdict") or "").lower() in {"confirm", "correct"}:
+                            created = create_entry(stock_snapshot_trusted_entry_payload(row_to_stock_snapshot(snapshot_row), dict(review_row)))
+                            trusted_entry_id = created.get("entry", {}).get("id", "")
+                            with connect() as conn:
+                                conn.execute(
+                                    """
+                                    UPDATE stock_snapshots
+                                    SET updated_at=?, review_state=?, trusted_entry_id=?
+                                    WHERE id=?
+                                    """,
+                                    (now_iso(), "Trusted after review", trusted_entry_id, snapshot_id),
+                                )
+                                conn.commit()
+                        elif success and snapshot_row:
+                            next_state = "Needs review"
+                            if clean_text(payload.get("verdict") or "").lower() == "needs_more_evidence":
+                                next_state = "Needs review"
+                            elif clean_text(payload.get("verdict") or "").lower() == "reject":
+                                next_state = "Needs review"
+                            with connect() as conn:
+                                conn.execute(
+                                    "UPDATE stock_snapshots SET updated_at=?, review_state=? WHERE id=?",
+                                    (now_iso(), next_state, snapshot_id),
+                                )
+                                conn.commit()
+                    return self.send_json({"recorded": success, "trusted_entry_id": trusted_entry_id}, 201 if success else 400)
                 except Exception as e:
                     return self.send_json({"error": str(e)}, 500)
             if path == "/api/hypotheses/create":
@@ -10107,8 +10719,27 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(stock_intel(
                     symbol=payload.get("symbol") or payload.get("ticker") or "",
                     company=payload.get("company") or "",
-                    save=bool(payload.get("save")),
+                    save=parse_bool(payload.get("save")),
                 ), 201)
+            if path == "/api/stock/snapshot":
+                return self.send_json(stock_market_snapshot({
+                    "symbols": payload.get("symbols") or payload.get("tickers") or payload.get("watchlist"),
+                    "watchlist": payload.get("watchlist"),
+                    "simulate_state": payload.get("simulate_state") or payload.get("mode"),
+                }), 201)
+            if path == "/api/stock/snapshot/draft":
+                return self.send_json(stock_snapshot_action(payload, save_mode="draft"), 201)
+            if path == "/api/stock/snapshot/review":
+                return self.send_json(stock_snapshot_action(payload, save_mode="review"), 201)
+            if path == "/api/stock/snapshot/history":
+                limit = int(clean_text(payload.get("limit") or 10) or 10)
+                return self.send_json(stock_snapshot_history(limit=limit), 201)
+            if path == "/api/stock/live":
+                return self.send_json(stock_market_snapshot({
+                    "symbols": payload.get("symbols") or payload.get("tickers") or payload.get("watchlist"),
+                    "watchlist": payload.get("watchlist"),
+                    "simulate_state": payload.get("simulate_state") or payload.get("mode"),
+                }), 201)
             if path == "/api/listening/projects":
                 return self.send_json(create_listening_project(payload), 201)
             if path == "/api/assets/projects":

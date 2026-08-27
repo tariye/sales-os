@@ -92,6 +92,15 @@ def safe_float(value):
         return None
 
 
+def epoch_to_iso(value) -> str:
+    try:
+        if value in (None, "", 0):
+            return ""
+        return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat(timespec="seconds")
+    except Exception:
+        return ""
+
+
 def http_get(url: str, *, headers=None, timeout=20) -> bytes:
     req = urllib.request.Request(url, headers=headers or {})
     try:
@@ -144,7 +153,13 @@ def resolve_symbol(symbol: str, company_hint: str = "") -> dict:
 def fetch_quote(yahoo_symbol: str) -> dict:
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(yahoo_symbol)}?range=1y&interval=1d"
     data = get_json(url, headers={"User-Agent": "Mozilla/5.0"})
-    result = (data.get("chart", {}).get("result") or [{}])[0]
+    chart = data.get("chart") or {}
+    if chart.get("error"):
+        raise ValueError(str(chart.get("error")))
+    results = chart.get("result") or []
+    if not results:
+        raise ValueError(f"No quote data returned for {yahoo_symbol}")
+    result = results[0]
     meta = result.get("meta") or {}
     quote = (result.get("indicators", {}).get("quote") or [{}])[0]
     closes = [safe_float(x) for x in quote.get("close", []) if x is not None]
@@ -156,9 +171,13 @@ def fetch_quote(yahoo_symbol: str) -> dict:
     one_year_return = ((current - closes[0]) / closes[0]) if current is not None and closes else None
     return {
         "source": "Yahoo Finance chart API",
+        "provider": "Yahoo Finance",
         "symbol": yahoo_symbol,
         "currency": meta.get("currency"),
         "exchange": meta.get("exchangeName") or meta.get("fullExchangeName"),
+        "market_state": meta.get("marketState") or "",
+        "provider_timestamp": epoch_to_iso(meta.get("regularMarketTime") or (result.get("timestamp") or [None])[-1]),
+        "provider_epoch": meta.get("regularMarketTime") or (result.get("timestamp") or [None])[-1] or "",
         "price": current,
         "previous_close": previous,
         "one_year_high": year_high,
@@ -462,22 +481,22 @@ def decision_frame(symbol_info: dict, financials: dict, signals: list[dict], new
     bullish_count = sum(1 for s in signals if s.get("direction") == "bullish")
     missing_financials = not financials.get("available")
     if missing_financials:
-        action = "research deeper"
-        reason = "No SEC companyfacts were available, so current news and market data need source validation before underwriting."
+        action = "Needs review"
+        reason = "SEC companyfacts were unavailable, so source validation is required before the snapshot can be trusted."
     elif risk_count:
-        action = "watch"
-        reason = "One or more risk signals require confirmation before capital allocation."
+        action = "Risk flag"
+        reason = "One or more risk signals require review before the thesis changes."
     elif bullish_count >= 3:
-        action = "research buy setup"
-        reason = "Demand, margin, and cash signals look strong enough to underwrite valuation and downside."
+        action = "Research candidate"
+        reason = "Multiple evidence points are aligned enough for review-first research."
     else:
-        action = "watch"
-        reason = "The signal set is incomplete or mixed; define the next confirming metric before action."
+        action = "Watch"
+        reason = "The evidence is mixed or incomplete; keep it on the watchlist until something changes."
     return {
         "action": action,
         "reason": reason,
         "not_investment_advice": True,
-        "next_step": f"Read the latest filing/news for {symbol_info['name']} and compare price to revenue growth, margin, free cash flow, and thesis risk.",
+        "next_step": f"Add to thesis after review by comparing the latest filing/news for {symbol_info['name']} with price, revenue growth, margin, free cash flow, and thesis risk.",
         "tracking_metric": "Revenue growth, gross margin, operating margin, free cash flow, net cash/debt, guidance, headline catalyst, valuation multiple.",
         "resurfacing_trigger": f"Resurface when {symbol_info['symbol']}, {symbol_info['name']}, earnings, guidance, margin, cash flow, or major headline appears.",
     }
@@ -517,6 +536,11 @@ def analyze_stock(symbol: str, company_hint: str = "", include_news: bool = True
         "memory_context": memory,
         "signals": signals,
         "decision_frame": decision,
+        "provider": {
+            "quote": quote.get("source"),
+            "news": "Yahoo Finance RSS" if include_news else "",
+            "financials": financials.get("source") or ("SEC companyfacts" if info.get("sec_available") else ""),
+        },
         "source_links": {
             "sec_companyfacts": financials.get("source_url"),
             "yahoo_chart": quote.get("source_url"),

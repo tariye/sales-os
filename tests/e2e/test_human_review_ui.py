@@ -221,7 +221,7 @@ def main() -> int:
             expect(page.locator("body")).not_to_be_empty()
 
             app_asset = next((e for e in network_events if e["url"].endswith("/app.js?v=2.0.4")), None)
-            css_asset = next((e for e in network_events if e["url"].endswith("/style.css?v=2.0.4")), None)
+            css_asset = next((e for e in network_events if e["url"].endswith("/style.css?v=2.1.0")), None)
             if not app_asset or app_asset["status"] != 200:
                 fail(f"app.js did not load successfully: {app_asset}", page)
             if not css_asset or css_asset["status"] != 200:
@@ -258,13 +258,13 @@ def main() -> int:
             expect(page.locator("#sourcesList")).to_contain_text("healthy", timeout=8000)
             capture(page, "source-pull-completed")
 
-            page.get_by_role("button", name="Evidence", exact=True).click()
+            page.get_by_role("button", name="Proof", exact=True).click()
             expect(page.locator("#evidence")).to_be_visible(timeout=5000)
             expect(page.locator("#evidenceList")).to_contain_text("SK Hynix", timeout=8000)
             expect(page.locator("#evidenceSummary")).to_contain_text("Snapshots", timeout=8000)
             capture(page, "source-evidence")
 
-            page.get_by_role("button", name="Capture", exact=True).click()
+            page.get_by_role("button", name="Inbox", exact=True).click()
             expect(page.locator("#capture")).to_be_visible(timeout=5000)
             require_text(page, "Capture Signal", "Capture page did not render")
             expect(page.locator("#captureConnection")).to_have_text("Connected", timeout=8000)
@@ -301,7 +301,7 @@ def main() -> int:
             expect(page.locator("#contextLibraryList")).to_contain_text("Explore SK Hynix this week", timeout=8000)
             capture(page, "capture-processed")
             page.reload(wait_until="networkidle")
-            page.get_by_role("button", name="Capture", exact=True).click()
+            page.get_by_role("button", name="Inbox", exact=True).click()
             expect(page.locator("#recentCaptures")).to_contain_text("Explore SK Hynix this week", timeout=8000)
             expect(page.locator("#recentCaptures")).to_contain_text("watch", timeout=8000)
             expect(page.locator("#contextLibraryList")).to_contain_text("SK Hynix", timeout=8000)
@@ -325,7 +325,7 @@ def main() -> int:
             expect(page.locator("#contextLibraryList")).to_contain_text("SK Hynix", timeout=8000)
             capture(page, "capture-after-restart")
 
-            page.get_by_role("button", name="Human Review").click()
+            page.get_by_role("button", name="Review Queue").click()
             capture(page, "test-mode-disabled")
             if not page.locator("#human-review").evaluate("el => el.classList.contains('active')"):
                 fail("Human Review tab click did not activate the Human Review panel", page)
@@ -383,7 +383,7 @@ def main() -> int:
             capture(page, "saved-history")
 
             page.reload(wait_until="networkidle")
-            page.get_by_role("button", name="Human Review").click()
+            page.get_by_role("button", name="Review Queue").click()
             expect(page.locator("#historyList")).to_contain_text("completed", timeout=8000)
             capture(page, "history-after-refresh")
 
@@ -410,7 +410,7 @@ def main() -> int:
             summary["restart_pid"] = restarted.pid
             wait_health()
             page.goto(BASE_URL + "/", wait_until="networkidle")
-            page.get_by_role("button", name="Human Review").click()
+            page.get_by_role("button", name="Review Queue").click()
             expect(page.locator("#historyList")).to_contain_text("completed", timeout=8000)
 
             page.locator("#testModeToggle").click()

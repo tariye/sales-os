@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.97-stock-live-feed - 2026-08-06
+
+### Added
+
+- Added a live Stock Intel feed that pulls AAPL, NVDA, and MSFT from Yahoo chart/news, SEC companyfacts, and local memory.
+- Added `/api/stock/live` for real-time three-asset ingestion and optional save-to-memory snapshots.
+- Rebuilt the Stock Intel tab into a cockpit with a live feed rail, action map, watchlist, and manual probe lane.
+- Live stock cards now translate the raw market data into action, next step, tracking metric, and resurfacing trigger fields.
+
+
 ## Engineering Doctrine - Loop Principle - 2026-07-11
 
 ### Added

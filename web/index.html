@@ -4,76 +4,150 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Info Analyzer OS</title>
-  <link rel="stylesheet" href="/style.css?v=2.0.4" />
+  <link rel="stylesheet" href="/style.css?v=2.1.0" />
 </head>
 <body>
   <header class="hero-band app-shell">
     <div class="brand-block">
-      <p class="eyebrow">Cutover Shell</p>
+      <p class="eyebrow">Flight Deck</p>
       <h1>Info Analyzer OS <span id="appVersion">loading</span></h1>
-      <p class="subtitle">Active data plane only. Legacy data is archived and read-only. Product navigation is reduced to truthful operational views.</p>
+      <p class="subtitle">Signals, review queue, and runtime health in one cockpit. Capture raw evidence, process it into memory, then clear what resurfaces.</p>
     </div>
-    <div class="hero-actions">
-      <a class="ghost small" href="https://github.com/tariye/sales-os" target="_blank" rel="noreferrer">Help</a>
+    <div class="hero-rail">
+      <div class="hero-card">
+        <p class="eyebrow">Command Strip</p>
+        <h2>Three primary moves</h2>
+        <div class="hero-steps">
+          <button class="hero-step" data-view="capture">
+            <strong>Capture</strong>
+            <span>Save raw evidence.</span>
+          </button>
+          <button class="hero-step" data-view="human-review">
+            <strong>Review</strong>
+            <span>Resolve surfaced items.</span>
+          </button>
+          <button class="hero-step" data-view="system-health">
+            <strong>Health</strong>
+            <span>Check runtime and storage.</span>
+          </button>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <a class="ghost small" href="https://github.com/tariye/sales-os" target="_blank" rel="noreferrer">Help</a>
+      </div>
     </div>
   </header>
 
   <nav class="tabs" aria-label="Primary">
-    <button class="tab active" data-view="overview">Overview</button>
-    <button class="tab" data-view="capture">Capture</button>
-    <button class="tab" data-view="human-review">Human Review</button>
+    <button class="tab active" data-view="overview">Flight Deck</button>
+    <button class="tab" data-view="capture">Inbox</button>
+    <button class="tab" data-view="human-review">Review Queue</button>
     <button class="tab" data-view="sources">Sources</button>
-    <button class="tab" data-view="evidence">Evidence</button>
-    <button class="tab" data-view="system-health">System Health</button>
-    <button class="tab" data-view="stock-intel">Stock Intel · Pilot</button>
-    <button class="tab" data-view="jobs-runs">Jobs &amp; Runs</button>
-    <button class="tab" data-view="build-information">Build Information</button>
-    <button class="tab" data-view="legacy-archive">Legacy Archive</button>
-    <button class="tab" data-view="help">Help</button>
+    <button class="tab" data-view="evidence">Proof</button>
+    <button class="tab" data-view="system-health">Health</button>
+    <button class="tab" data-view="stock-intel">Public Market Snapshot</button>
+    <button class="tab" data-view="jobs-runs">Jobs</button>
+    <button class="tab" data-view="build-information">Build</button>
+    <button class="tab" data-view="legacy-archive">Archive</button>
+    <button class="tab" data-view="help">Guide</button>
   </nav>
 
   <main class="app-shell">
-    <section id="overview" class="panel active">
-      <div id="runtimeStatusCard" class="card runtime-card">
-        <div class="card-head">
+    <section id="overview" class="panel active cockpit-panel">
+      <div class="cockpit-shell">
+        <div class="cockpit-header">
           <div>
-            <p class="eyebrow">Runtime Truth</p>
-            <h2>Local Connection</h2>
+            <p class="eyebrow">Flight Deck</p>
+            <h2>Operating picture</h2>
+            <p class="subtitle">Read this screen left to right: connection, telemetry, attention lanes, then fault log.</p>
+            <p id="overviewSummaryLine" class="cockpit-summary">Awaiting telemetry...</p>
           </div>
-          <button id="refreshRuntimeStatus" class="ghost small">Check Runtime</button>
-        </div>
-        <div id="runtimeStatusBanner" class="banner banner-info">
-          <div class="banner-content">
-            <p><strong>Server:</strong> <span id="runtimeConnection">Checking</span></p>
-            <p id="runtimeLastApiStatus" class="muted">Waiting for the first API response.</p>
+          <div class="cockpit-status-stack">
+            <span class="cockpit-chip cockpit-chip-good">Connected</span>
+            <button id="refreshOverview" class="cockpit-chip cockpit-chip-action">Refresh deck</button>
           </div>
         </div>
-        <div id="runtimeStatusStats" class="stats"></div>
-        <div id="runtimeStatusDetails" class="list"></div>
-      </div>
-      <div class="card overview">
-        <div class="card-head">
-          <div>
-            <p class="eyebrow">Active State</p>
-            <h2>Overview</h2>
+
+        <div class="cockpit-rail">
+          <button class="cockpit-command" data-view="capture">Open Capture</button>
+          <button class="cockpit-command" data-view="human-review">Open Queue</button>
+          <button class="cockpit-command" data-view="system-health">Open Health</button>
+          <button class="cockpit-command ghost" data-view="sources">Open Sources</button>
+          <button class="cockpit-command ghost" data-view="evidence">Open Proof</button>
+        </div>
+
+        <div class="cockpit-grid">
+          <div class="cockpit-column">
+            <div id="runtimeStatusCard" class="card runtime-card cockpit-card">
+              <div class="card-head">
+                <div>
+                  <p class="eyebrow">Runtime Truth</p>
+                  <h2>Local Connection</h2>
+                </div>
+                <button id="refreshRuntimeStatus" class="ghost small">Check Runtime</button>
+              </div>
+              <div id="runtimeStatusBanner" class="banner banner-info">
+                <div class="banner-content">
+                  <p><strong>Server:</strong> <span id="runtimeConnection">Checking</span></p>
+                  <p id="runtimeLastApiStatus" class="muted">Waiting for the first API response.</p>
+                </div>
+              </div>
+              <div id="runtimeStatusStats" class="stats"></div>
+              <div id="runtimeStatusDetails" class="list"></div>
+            </div>
+
+            <div class="card cockpit-card cockpit-guide">
+              <div class="card-head">
+                <div>
+                  <p class="eyebrow">Readout</p>
+                  <h2>How to use the deck</h2>
+                </div>
+              </div>
+              <div class="deck-guide">
+                <div>
+                  <strong>Capture</strong>
+                  <span>Save raw evidence first.</span>
+                </div>
+                <div>
+                  <strong>Review</strong>
+                  <span>Resolve surfaced actions.</span>
+                </div>
+                <div>
+                  <strong>Health</strong>
+                  <span>Verify runtime and storage.</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <button id="refreshOverview" class="ghost small">Refresh</button>
+
+          <div class="cockpit-column">
+            <div class="card overview cockpit-card">
+              <div class="card-head">
+                <div>
+                  <p class="eyebrow">Telemetry</p>
+                  <h2>Current state</h2>
+                  <p class="subtitle">Grouped for scanning instead of dumped as a list.</p>
+                </div>
+              </div>
+              <div id="overviewStats" class="cockpit-stats"></div>
+            </div>
+          </div>
+
+          <div class="cockpit-column">
+            <div class="card cockpit-card cockpit-alert-card">
+              <div class="card-head"><div><p class="eyebrow">Attention Lane</p><h2>Requires Attention</h2></div></div>
+              <div id="overviewIntervention" class="list"></div>
+            </div>
+            <div class="card cockpit-card cockpit-alert-card">
+              <div class="card-head"><div><p class="eyebrow">Dormant Lane</p><h2>Not Activated</h2></div></div>
+              <div id="overviewUnavailable" class="list"></div>
+            </div>
+            <div class="card cockpit-card cockpit-alert-card">
+              <div class="card-head"><div><p class="eyebrow">Fault Log</p><h2>Latest Failure</h2></div></div>
+              <div id="overviewLatestFailure" class="list"></div>
+            </div>
+          </div>
         </div>
-        <div id="overviewStats" class="stats"></div>
-      </div>
-      <div class="grid two">
-        <div class="card">
-          <div class="card-head"><div><p class="eyebrow">Intervention</p><h2>Requires Attention</h2></div></div>
-          <div id="overviewIntervention" class="list"></div>
-        </div>
-        <div class="card">
-          <div class="card-head"><div><p class="eyebrow">Unavailable</p><h2>Not Activated</h2></div></div>
-          <div id="overviewUnavailable" class="list"></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-head"><div><p class="eyebrow">Latest Failure</p><h2>Diagnostics</h2></div></div>
-        <div id="overviewLatestFailure" class="list"></div>
       </div>
     </section>
 
@@ -83,7 +157,7 @@
           <div>
             <p class="eyebrow">Universal Inbox</p>
             <h2>Capture Signal</h2>
-            <p class="subtitle">Save raw evidence first. Processing can happen now or later.</p>
+            <p class="subtitle">Use this when you want to save something without deciding what it means yet.</p>
           </div>
           <button id="refreshInbox" class="ghost small">Refresh</button>
         </div>
@@ -327,25 +401,124 @@
     </section>
 
     <section id="stock-intel" class="panel">
+      <div class="card stock-shell">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Market Cockpit</p>
+            <h2>Public Market Snapshot Command Center</h2>
+            <p class="subtitle">Latest available market snapshots from Yahoo Finance chart/rss and SEC companyfacts. This is not exchange-grade intraday data.</p>
+            <p class="subtitle">Default watchlist: AAPL, NVDA, MSFT.</p>
+          </div>
+          <div class="buttons compact">
+            <button id="refreshStockIntel" class="ghost small">Refresh Snapshot</button>
+            <button id="refreshStockSnapshotHistory" class="ghost small">Refresh History</button>
+          </div>
+        </div>
+        <div id="stockLiveBanner" class="banner banner-info">
+          <div class="banner-content">
+            <p><strong>Snapshot:</strong> <span id="stockLiveStatus">Ready</span></p>
+            <p id="stockLiveSummary" class="muted">Open the tab to load the latest available snapshot for the current watchlist.</p>
+          </div>
+        </div>
+        <div id="stockIntelStats" class="stats"></div>
+        <div class="grid two">
+          <div class="card stock-mini-card">
+            <div class="card-head">
+              <div>
+                <p class="eyebrow">Watchlist</p>
+                <h2>Editable watchlist</h2>
+              </div>
+            </div>
+            <div class="stock-editor">
+              <label>Add ticker
+                <input id="stockWatchlistInput" placeholder="AAPL" />
+              </label>
+              <div class="buttons compact">
+                <button id="addStockTicker" class="secondary small">Add ticker</button>
+                <button id="clearStockWatchlist" class="ghost small">Clear watchlist</button>
+                <button id="resetStockWatchlist" class="ghost small">Reset default</button>
+              </div>
+              <label>Snapshot mode
+                <select id="stockSnapshotMode">
+                  <option value="">Latest available market snapshot</option>
+                  <option value="stale">Simulate stale snapshot</option>
+                  <option value="provider_error">Simulate provider error</option>
+                  <option value="symbol_error">Simulate symbol error</option>
+                  <option value="no_data">Simulate no data</option>
+                </select>
+              </label>
+            </div>
+            <div id="stockWatchlist" class="stock-watchlist"></div>
+          </div>
+          <div class="card stock-mini-card">
+            <div class="card-head">
+              <div>
+                <p class="eyebrow">Signal Map</p>
+                <h2>Contextualized signals</h2>
+              </div>
+            </div>
+            <div id="stockActionSummary" class="list"></div>
+          </div>
+        </div>
+        <div id="stockLiveFeed" class="list"></div>
+      </div>
+
       <div class="card">
         <div class="card-head">
           <div>
-            <p class="eyebrow">Pilot Surface</p>
-            <h2>Stock Intel · Pilot</h2>
-            <p class="subtitle">Live analysis remains visible, but memory writes are disabled in this cutover shell.</p>
+            <p class="eyebrow">Review History</p>
+            <h2>Saved drafts and reviewed snapshots</h2>
           </div>
-          <button id="refreshStockIntel" class="ghost small">Refresh</button>
+          <button id="refreshStockHistory" class="ghost small">Refresh History</button>
         </div>
-        <div class="grid two">
-          <label>Ticker<input id="stockTicker" placeholder="AAPL" /></label>
-          <label>Company Hint<input id="stockCompany" placeholder="Optional company name" /></label>
+        <div id="stockSnapshotHistory" class="list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Human Review</p>
+            <h2>Pending stock reviews</h2>
+            <p class="subtitle">Confirm or correct a review from the active review queue.</p>
+          </div>
+          <button id="refreshStockReviews" class="ghost small">Refresh Review Queue</button>
         </div>
-        <div class="buttons">
-          <button id="analyzeStockBtn" class="primary">Analyze</button>
-          <button id="saveStockBtn" class="secondary" disabled title="Save to memory is disabled in the cutover shell">Save To Memory Disabled</button>
+        <div id="stockReviewQueue" class="list"></div>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">Manual Probe</p>
+              <h2>Latest available quote probe</h2>
+              <p class="subtitle">Use this for an ad hoc symbol outside the current watchlist.</p>
+            </div>
+          </div>
+          <div class="grid two">
+            <label>Ticker<input id="stockTicker" placeholder="AAPL" /></label>
+            <label>Company Hint<input id="stockCompany" placeholder="Optional company name" /></label>
+          </div>
+          <div class="buttons">
+            <button id="analyzeStockBtn" class="primary">Analyze</button>
+            <button id="saveStockBtn" class="secondary" disabled title="Manual probe saving stays disabled until review controls are wired in the shell">Save Draft Disabled</button>
+          </div>
+          <div id="stockOutput" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">Snapshot Path</p>
+              <h2>How the snapshot works</h2>
+            </div>
+          </div>
+          <div class="deck-guide">
+            <div><strong>1.</strong><span>Fetch the latest available quote, filings, and headlines.</span></div>
+            <div><strong>2.</strong><span>Show provider, fetched_at, provider timestamp, freshness, baseline, evidence, and review state.</span></div>
+            <div><strong>3.</strong><span>Save as draft or send to Human Review, then trust only after Confirm or Correct.</span></div>
+          </div>
         </div>
       </div>
-      <div id="stockOutput" class="list"></div>
     </section>
 
     <section id="jobs-runs" class="panel">
