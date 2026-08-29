@@ -45,6 +45,7 @@
     <button class="tab" data-view="sources">Sources</button>
     <button class="tab" data-view="evidence">Proof</button>
     <button class="tab" data-view="system-health">Health</button>
+    <button class="tab" data-view="alert-center">Alert Center</button>
     <button class="tab" data-view="stock-intel">Public Market Snapshot</button>
     <button class="tab" data-view="jobs-runs">Jobs</button>
     <button class="tab" data-view="build-information">Build</button>
@@ -248,6 +249,32 @@
     </section>
 
     <section id="human-review" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Alert Reviews</p>
+            <h2>Pending alert reviews</h2>
+            <p class="subtitle">Send an alert here, then Confirm or Correct before converting it to a canonical action.</p>
+          </div>
+          <button id="refreshAlertReviews" class="ghost small">Refresh Alert Reviews</button>
+        </div>
+        <div id="alertReviewSummary" class="stats"></div>
+        <div class="grid two">
+          <div>
+            <div class="card">
+              <div class="card-head"><div><p class="eyebrow">Pending</p><h2>Alert Reviews</h2></div></div>
+              <div id="alertReviewQueue" class="list"></div>
+            </div>
+          </div>
+          <div id="alertReviewDetailContainer" style="display:none;">
+            <div class="card">
+              <div class="card-head"><div><p class="eyebrow">Review</p><h2>Alert Details</h2></div></div>
+              <div id="alertReviewDetail" class="review-detail"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="testModeBanner" class="banner banner-info">
         <div class="banner-content">
           <p><strong>Test Mode:</strong> <span id="testModeStatus">Disabled</span></p>
@@ -284,6 +311,60 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="alert-center" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Alert Engine</p>
+            <h2>Alert Center</h2>
+            <p class="subtitle">Visible in-app alerts only. Alerts are re-evaluated when this page loads or when Run Alert Check is pressed.</p>
+          </div>
+          <div class="buttons compact">
+            <button id="runAlertCheck" class="primary small">Run Alert Check</button>
+            <button id="createTestAlert" class="secondary small">Create Test Alert</button>
+            <button id="refreshAlerts" class="ghost small">Refresh</button>
+          </div>
+        </div>
+        <div id="alertEngineBanner" class="banner banner-info">
+          <div class="banner-content">
+            <p><strong>Engine:</strong> <span id="alertEngineStatus">Ready</span></p>
+            <p id="alertEngineSummary" class="muted">Alert engine status will appear here.</p>
+          </div>
+        </div>
+        <div id="alertEngineStats" class="stats"></div>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">Local Source</p>
+              <h2>Previous Computer / Local Archive</h2>
+              <p class="subtitle">Read-only inventory for the configured local archive root.</p>
+            </div>
+            <button id="refreshLocalSource" class="ghost small">Refresh</button>
+          </div>
+          <div id="localSourceBanner" class="banner banner-info">
+            <div class="banner-content">
+              <p><strong>Source:</strong> <span id="localSourceState">Loading</span></p>
+              <p id="localSourceSummary" class="muted">Waiting for archive inventory.</p>
+            </div>
+          </div>
+          <div id="localSourceStats" class="stats"></div>
+          <div id="localSourceStatus" class="list"></div>
+          <div id="localSourceDetails" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">Alerts</p>
+              <h2>Visible alert cards</h2>
+            </div>
+          </div>
+          <div id="alertList" class="list"></div>
         </div>
       </div>
     </section>

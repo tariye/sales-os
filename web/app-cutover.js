@@ -17,6 +17,7 @@ const VIEWS = new Set([
   "sources",
   "evidence",
   "system-health",
+  "alert-center",
   "stock-intel",
   "jobs-runs",
   "build-information",
@@ -39,6 +40,12 @@ let stockIntelData = null;
 let stockIntelLoading = false;
 let stockIntelTimer = null;
 let stockWatchlist = [];
+let alertsData = null;
+let localSourceData = null;
+let alertCheckResult = null;
+let currentAlertReviewId = null;
+let isLoadingAlertReviews = false;
+let isSubmittingAlertVerdict = false;
 const STOCK_WATCHLIST_KEY = "info-analyzer.stock-watchlist.v1";
 const STOCK_SNAPSHOT_MODE_KEY = "info-analyzer.stock-snapshot-mode.v1";
 const DEFAULT_STOCK_WATCHLIST = ["AAPL", "NVDA", "MSFT"];
@@ -270,9 +277,14 @@ function setActiveView(view) {
     loadContextLibrary();
   }
   if (next === "human-review") loadTestModeStatus();
+  if (next === "human-review") loadAlertReviews();
   if (next === "sources") loadSources();
   if (next === "evidence") loadEvidence();
   if (next === "system-health") loadSystemHealth();
+  if (next === "alert-center") {
+    loadAlerts();
+    loadLocalSourceStatus();
+  }
   if (next === "stock-intel") {
     startStockIntelAutoRefresh();
     loadStockIntel();
@@ -1485,6 +1497,500 @@ async function loadStockIntel({ silent = false } = {}) {
   }
 }
 
+function alertSeverityClass(alert) {
+  const severity = String(alert?.severity || "watch").toLowerCase();
+  if (severity === "critical") return "critical";
+  if (severity === "important") return "important";
+  if (severity === "info") return "info";
+  return "watch";
+}
+
+function alertStateLabel(alert) {
+  const raw = String(alert?.status || "new").replaceAll("_", " ");
+  return raw.replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
+function alertEvidenceHTML(alert) {
+  const evidence = Array.isArray(alert?.evidence) ? alert.evidence.filter(Boolean) : [];
+  if (!evidence.length) return `<p class="muted">No evidence bullets available.</p>`;
+  return `<ul class="alert-evidence-list">${evidence.map(item => `<li>${esc(item)}</li>`).join("")}</ul>`;
+}
+
+function alertActionButtonText(alert) {
+  if (alert?.converted_action_id) return "Converted";
+  if (!alert?.can_convert_to_action) return "Review required";
+  return "Convert to Action";
+}
+
+function alertCardHTML(alert) {
+  const isLocal = String(alert?.source || "") === "local_archive";
+  const reviewId = alert?.human_review_id || "";
+  const convertDisabled = !alert?.can_convert_to_action && !alert?.converted_action_id;
+  const snoozeButtons = [15, 60, 240, 1440].map(minutes => `
+    <button class="ghost small" data-alert-snooze="${minutes}" data-alert-id="${esc(alert.id || "")}">${minutes >= 1440 ? "1 day" : minutes >= 240 ? "4 hours" : minutes >= 60 ? "1 hour" : "15 minutes"}</button>
+  `).join("");
+  return `<div class="item alert-card ${esc(alertSeverityClass(alert))}">
+    <div class="alert-card-head">
+      <div>
+        <h3>${esc(alert.title || "Alert")}</h3>
+        <div class="meta">
+          <span class="tag">${esc(alert.severity || "watch")}</span>
+          <span class="tag">${esc(alertStateLabel(alert))}</span>
+          <span class="tag">${esc(alert.rule?.name || alert.rule_id || "")}</span>
+          ${alert.can_convert_to_action ? `<span class="tag">Eligible</span>` : `<span class="tag">Review required</span>`}
+        </div>
+      </div>
+      <div class="alert-card-meta">
+        ${kvHTML("Source", alert.source_label || alert.source || "")}
+        ${kvHTML("Entity", alert.entity || "")}
+      </div>
+    </div>
+    <p class="muted">${esc(alert.message || "")}</p>
+    ${kvHTML("Why this fired", alert.message || "")}
+    ${kvHTML("Triggered at", fmtDate(alert.triggered_at || ""))}
+    ${kvHTML("Last checked at", fmtDate(alert.last_checked_at || ""))}
+    ${kvHTML("Next step", alert.next_step || "")}
+    ${kvHTML("Human Review", reviewId || "Not sent")}
+    ${kvHTML("Trusted Entry", alert.trusted_entry_id || "")}
+    ${kvHTML("Converted Action", alert.converted_action_id || "")}
+    ${isLocal ? kvHTML("Source label", alert.source_label || "") : ""}
+    ${isLocal ? kvHTML("Relative path", alert.relative_path || "") : ""}
+    ${isLocal ? kvHTML("Broken referenced path", alert.referenced_path || "") : ""}
+    <div class="item-sublist">
+      <b>Evidence</b>
+      ${alertEvidenceHTML(alert)}
+    </div>
+    <div class="buttons compact">
+      <button class="secondary small" data-alert-action="acknowledge" data-alert-id="${esc(alert.id || "")}">Acknowledge</button>
+      <button class="secondary small" data-alert-action="dismiss" data-alert-id="${esc(alert.id || "")}">Dismiss</button>
+      <button class="secondary small" data-alert-action="send-review" data-alert-id="${esc(alert.id || "")}">Send to Human Review</button>
+      <button class="primary small" data-alert-action="convert-action" data-alert-id="${esc(alert.id || "")}" ${convertDisabled ? "disabled" : ""}>${esc(alertActionButtonText(alert))}</button>
+    </div>
+    <div class="buttons compact alert-snooze-buttons">
+      ${snoozeButtons}
+    </div>
+  </div>`;
+}
+
+function renderAlertEngineBanner(data) {
+  if (!$("alertEngineBanner")) return;
+  const status = String(data?.engine_status || "ready");
+  let kind = "info";
+  if (status === "degraded") kind = "error";
+  else if (status === "no rules") kind = "info";
+  else if ((data?.active_alert_count || 0) > 0) kind = "warning";
+  else kind = "success";
+  $("alertEngineBanner").className = `banner banner-${kind}`;
+  if ($("alertEngineStatus")) {
+    $("alertEngineStatus").textContent = status === "ready" ? "Alert engine ready" : status === "degraded" ? "Alert engine degraded" : status === "no rules" ? "No alert rules" : "Alerts active";
+  }
+  if ($("alertEngineSummary")) {
+    const parts = [
+      `Last checked ${data.last_checked_at ? fmtDate(data.last_checked_at) : "n/a"}`,
+      `${data.active_alert_count ?? 0} active alert${(data.active_alert_count ?? 0) === 1 ? "" : "s"}`,
+      data.errors?.length ? `${data.errors.length} check error${data.errors.length === 1 ? "" : "s"}` : "No check errors",
+    ];
+    $("alertEngineSummary").textContent = parts.join(" · ");
+  }
+  if ($("alertEngineStats")) {
+    const counts = data.counts || {};
+    $("alertEngineStats").innerHTML = [
+      statHTML(data.rules?.length ?? 0, "Rules"),
+      statHTML(counts.active ?? 0, "Active"),
+      statHTML(counts.resolved ?? 0, "Resolved"),
+      statHTML(data.created ?? 0, "Created"),
+      statHTML(data.updated ?? 0, "Updated"),
+      statHTML(data.errors?.length ?? 0, "Errors"),
+    ].join("");
+  }
+}
+
+function renderLocalSourceStatus(data) {
+  if (!$("localSourceBanner")) return;
+  const accessible = !!data?.accessible;
+  const brokenCount = Number(data?.broken_reference_count || 0);
+  let kind = "info";
+  if (!accessible) kind = "error";
+  else if (brokenCount > 0) kind = "warning";
+  else kind = "success";
+  $("localSourceBanner").className = `banner banner-${kind}`;
+  if ($("localSourceState")) {
+    $("localSourceState").textContent = accessible ? "Accessible" : "Unavailable";
+  }
+  if ($("localSourceSummary")) {
+    const parts = [
+      `Root ${data?.root || "n/a"}`,
+      `${data?.file_count ?? 0} files`,
+      `${brokenCount} broken reference${brokenCount === 1 ? "" : "s"}`,
+    ];
+    $("localSourceSummary").textContent = parts.join(" · ");
+  }
+  if ($("localSourceStats")) {
+    $("localSourceStats").innerHTML = [
+      statHTML(accessible ? "accessible" : "unavailable", "Root"),
+      statHTML(data?.directory_count ?? 0, "Directories"),
+      statHTML(data?.file_count ?? 0, "Files"),
+      statHTML(brokenCount, "Broken refs"),
+    ].join("");
+  }
+  if ($("localSourceStatus")) {
+    $("localSourceStatus").innerHTML = [
+      `<div class="item"><h3>Source root</h3>${kvHTML("Source label", data?.source_label || "")}${kvHTML("Configured root", data?.root || "")}${kvHTML("Accessible", accessible ? "Yes" : "No")}${kvHTML("Approx size", data?.approx_size_bytes ? `${Math.round(Number(data.approx_size_bytes) / (1024 * 1024))} MB` : "n/a")}</div>`,
+      `<div class="item"><h3>Read-only inventory</h3>${kvHTML("Directories", data?.directory_count ?? 0)}${kvHTML("Files", data?.file_count ?? 0)}${kvHTML("Inaccessible entries", (data?.inaccessible || []).length)}${kvHTML("Database candidates", (data?.database_candidates || []).length)}</div>`,
+      `<div class="item"><h3>Operational truth</h3><p class="muted">This inventory is read-only. Discovered paths are not content-ingested in v0.99.1.</p></div>`,
+    ].join("");
+  }
+  if ($("localSourceDetails")) {
+    const broken = data?.broken_reference_samples || [];
+    const dbCandidates = (data?.database_candidates || []).slice(0, 5);
+    const repoRoots = (data?.repo_roots || []).slice(0, 5);
+    $("localSourceDetails").innerHTML = [
+      `<div class="item"><h3>Repo roots</h3>${repoRoots.length ? repoRoots.map(item => `<div class="kv"><b>Root</b><span>${esc(item)}</span></div>`).join("") : `<p class="muted">No repository roots discovered.</p>`}</div>`,
+      `<div class="item"><h3>Likely databases</h3>${dbCandidates.length ? dbCandidates.map(item => `<div class="kv"><b>${esc(item.relative_path || "")}</b><span>${esc(item.size || 0)} bytes · ${esc(item.modified_at || "")}</span></div>`).join("") : `<p class="muted">No database candidates found.</p>`}</div>`,
+      `<div class="item"><h3>Broken references</h3>${broken.length ? broken.map(item => `
+        <div class="item mini-item">
+          <h3>${esc(item.source_label || "Archive")}</h3>
+          ${kvHTML("Relative path", item.relative_path || "")}
+          ${kvHTML("Referenced path", item.referenced_path || "")}
+          ${kvHTML("Reason", item.reason || "")}
+          ${kvHTML("Next step", item.next_step || "")}
+        </div>
+      `).join("") : `<p class="muted">No broken local references discovered in the configured archive root.</p>`}</div>`,
+    ].join("");
+  }
+}
+
+function renderAlertList(data) {
+  if (!$("alertList")) return;
+  const alerts = data?.alerts || [];
+  if (!alerts.length) {
+    $("alertList").innerHTML = `<div class="item empty-state"><h3>No alerts</h3><p class="muted">Run Alert Check or Create Test Alert to generate the first visible alert.</p></div>`;
+    return;
+  }
+  $("alertList").innerHTML = alerts.map(alertCardHTML).join("");
+}
+
+async function loadLocalSourceStatus({ silent = false } = {}) {
+  if (!$("localSourceBanner")) return null;
+  try {
+    const data = await api("/local-source/status");
+    localSourceData = data;
+    renderLocalSourceStatus(data);
+    if (!silent) return data;
+    return data;
+  } catch (err) {
+    localSourceData = null;
+    if ($("localSourceBanner")) {
+      $("localSourceBanner").className = "banner banner-error";
+      if ($("localSourceState")) $("localSourceState").textContent = "Unavailable";
+      if ($("localSourceSummary")) $("localSourceSummary").textContent = err.message;
+    }
+    if ($("localSourceStatus")) {
+      $("localSourceStatus").innerHTML = `<div class="item error"><h3>Archive inventory failed</h3><p class="muted">${esc(err.message)}</p></div>`;
+    }
+    if ($("localSourceDetails")) {
+      $("localSourceDetails").innerHTML = "";
+    }
+    return null;
+  }
+}
+
+async function loadAlerts({ silent = false } = {}) {
+  if (!$("alertList")) return null;
+  try {
+    const data = await api("/alerts");
+    alertsData = data;
+    alertCheckResult = null;
+    renderAlertEngineBanner(data);
+    renderAlertList(data);
+    if (!silent) {
+      await loadLocalSourceStatus({ silent: true });
+    }
+    return data;
+  } catch (err) {
+    alertsData = null;
+    renderAlertEngineBanner({
+      engine_status: "degraded",
+      last_checked_at: "",
+      active_alert_count: 0,
+      errors: [{ error: err.message }],
+      counts: {},
+      rules: [],
+      created: 0,
+      updated: 0,
+      resolved: 0,
+    });
+    $("alertList").innerHTML = `<div class="item error"><h3>Alert engine unavailable</h3><p class="muted">${esc(err.message)}</p></div>`;
+    return null;
+  }
+}
+
+async function runAlertCheck() {
+  const button = $("runAlertCheck");
+  try {
+    if (button) button.disabled = true;
+    if ($("alertEngineBanner")) {
+      $("alertEngineBanner").className = "banner banner-loading";
+      if ($("alertEngineStatus")) $("alertEngineStatus").textContent = "Running alert check...";
+      if ($("alertEngineSummary")) $("alertEngineSummary").textContent = "Re-evaluating seeded alert rules.";
+    }
+    await visibleFeedbackDelay();
+    const data = await api("/alerts/check", { method: "POST", body: "{}" });
+    alertCheckResult = data;
+    alertsData = data;
+    renderAlertEngineBanner(data);
+    renderAlertList(data);
+    await loadLocalSourceStatus({ silent: true });
+    await loadAlertReviews();
+    toast(`Alert check: ${data.created ?? 0} created, ${data.updated ?? 0} updated, ${data.resolved ?? 0} resolved`);
+    return data;
+  } catch (err) {
+    if ($("alertEngineBanner")) {
+      $("alertEngineBanner").className = "banner banner-error";
+      if ($("alertEngineStatus")) $("alertEngineStatus").textContent = "Alert check failed";
+      if ($("alertEngineSummary")) $("alertEngineSummary").textContent = err.message;
+    }
+    toast(`Alert check failed: ${err.message}`);
+    return null;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function createTestAlert() {
+  const button = $("createTestAlert");
+  try {
+    if (button) button.disabled = true;
+    await visibleFeedbackDelay();
+    const data = await api("/alerts/test", { method: "POST", body: JSON.stringify({ note: "TEST ALERT created from the Alert Center." }) });
+    await loadAlerts({ silent: true });
+    await loadAlertReviews();
+    toast(`Created ${data?.event?.title || "TEST ALERT"}`);
+    return data;
+  } catch (err) {
+    toast(`Create test alert failed: ${err.message}`);
+    return null;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function refreshAlertCenter() {
+  await Promise.all([
+    loadAlerts(),
+    loadLocalSourceStatus(),
+  ]);
+}
+
+async function performAlertAction(alertId, action, payload = {}) {
+  const result = await api(`/alerts/${encodeURIComponent(alertId)}/${action}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  await loadAlerts({ silent: true });
+  await loadAlertReviews();
+  return result;
+}
+
+function alertReviewCardHTML(review) {
+  const alert = review.alert_event || {};
+  return `<button class="item review-item" data-alert-review-id="${esc(review.id || review.review_id || "")}">
+    <h3>${esc(review.alert_title || review.system_interpretation || review.id || "Alert Review")}</h3>
+    <div class="meta">
+      <span class="tag">pending</span>
+      <span class="tag">${esc(review.subject_type || "")}</span>
+      <span class="tag">${esc(review.review_type || "")}</span>
+    </div>
+    <p class="muted">${esc(review.alert_message || review.system_interpretation || "")}</p>
+    ${review.alert_source_label ? kvHTML("Source", review.alert_source_label) : ""}
+    ${review.alert_relative_path ? kvHTML("Relative path", review.alert_relative_path) : ""}
+    ${alert.id ? kvHTML("Alert ID", alert.id) : ""}
+  </button>`;
+}
+
+function renderAlertReviewDetail(review) {
+  if (!$("alertReviewDetailContainer")) return;
+  $("alertReviewDetailContainer").style.display = "block";
+  const alert = review.alert_event || {};
+  $("alertReviewDetail").innerHTML = `
+    <div class="review-evidence section">
+      <h3>Alert Evidence</h3>
+      ${kvHTML("Review", review.id || "")}
+      ${kvHTML("Subject", review.subject_id || "")}
+      ${kvHTML("Type", review.subject_type || "")}
+      ${kvHTML("Alert title", review.alert_title || "")}
+      ${kvHTML("Alert message", review.alert_message || "")}
+      ${kvHTML("Source", review.alert_source_label || review.alert_source || "")}
+      ${kvHTML("Relative path", review.alert_relative_path || "")}
+      ${kvHTML("Broken referenced path", review.alert_referenced_path || "")}
+      <div class="item-sublist">
+        <b>Evidence bullets</b>
+        ${alertEvidenceHTML(alert)}
+      </div>
+    </div>
+    <div class="review-proposal section">
+      <h3>System Proposal</h3>
+      <p class="muted">${esc(review.system_interpretation || review.alert_message || "(system proposal unavailable)")}</p>
+      ${kvHTML("System Confidence", Number(review.system_confidence || 0).toFixed(2))}
+    </div>
+    <div class="review-judgment section">
+      <h3>Your Judgment</h3>
+      <form id="alertVerdictForm" novalidate>
+        <div class="form-group">
+          <label>Verdict</label>
+          <div id="alertVerdictError" class="field-error"></div>
+          <div class="button-group">
+            <button type="button" class="verdict-btn" data-alert-verdict="confirm">Confirm</button>
+            <button type="button" class="verdict-btn" data-alert-verdict="correct">Correct</button>
+            <button type="button" class="verdict-btn" data-alert-verdict="reject">Reject</button>
+            <button type="button" class="verdict-btn" data-alert-verdict="needs_more_evidence">Needs More Evidence</button>
+          </div>
+          <input type="hidden" id="alertVerdictInput" />
+        </div>
+        <div class="form-group">
+          <label>Correction <span id="alertCorrectionRequired" class="required" style="display:none">*</span></label>
+          <div id="alertCorrectionError" class="field-error"></div>
+          <input id="alertCorrectionInput" placeholder="Enter corrected interpretation" />
+        </div>
+        <div class="form-group">
+          <label>Human Confidence</label>
+          <div id="alertConfidenceError" class="field-error"></div>
+          <input id="alertConfidenceInput" type="number" min="0" max="1" step="0.01" placeholder="0.75" />
+        </div>
+        <div class="form-group">
+          <label>Reason <span id="alertReasonRequired" class="required" style="display:none">*</span></label>
+          <div id="alertReasonError" class="field-error"></div>
+          <textarea id="alertReasonInput" placeholder="Required for Reject and Needs More Evidence"></textarea>
+        </div>
+        <div class="buttons"><button id="alertSubmitBtn" class="primary" type="submit">Save Verdict</button></div>
+      </form>
+    </div>
+  `;
+  document.querySelectorAll("[data-alert-verdict]").forEach(button => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll("[data-alert-verdict]").forEach(item => item.classList.remove("selected"));
+      button.classList.add("selected");
+      $("alertVerdictInput").value = button.dataset.alertVerdict;
+      $("alertCorrectionRequired").style.display = button.dataset.alertVerdict === "correct" ? "inline" : "none";
+      $("alertReasonRequired").style.display = ["reject", "needs_more_evidence"].includes(button.dataset.alertVerdict) ? "inline" : "none";
+    });
+  });
+  $("alertVerdictForm")?.addEventListener("submit", submitAlertReviewVerdict);
+}
+
+async function loadAlertReviews() {
+  if (!$("alertReviewQueue")) return null;
+  if (isLoadingAlertReviews) return null;
+  isLoadingAlertReviews = true;
+  $("alertReviewQueue").innerHTML = `<div class="item"><p class="muted">Loading alert reviews...</p></div>`;
+  try {
+    const data = await api("/human-review/pending");
+    const reviews = (data.reviews || []).filter(review => String(review.subject_type || "").toLowerCase() === "alert_event");
+    if ($("alertReviewSummary")) {
+      $("alertReviewSummary").innerHTML = [
+        statHTML(reviews.length, "Pending alert reviews"),
+        statHTML(data.count ?? reviews.length, "Total pending"),
+      ].join("");
+    }
+    if (!reviews.length) {
+      $("alertReviewQueue").innerHTML = `<div class="item empty-state"><h3>No pending alert reviews</h3><p class="muted">Send an alert to Human Review to create one here.</p></div>`;
+      $("alertReviewDetailContainer").style.display = "none";
+      return data;
+    }
+    $("alertReviewQueue").innerHTML = reviews.map(alertReviewCardHTML).join("");
+    document.querySelectorAll("[data-alert-review-id]").forEach(button => {
+      button.addEventListener("click", () => selectAlertReview(button.dataset.alertReviewId));
+    });
+    if (currentAlertReviewId && !reviews.some(review => review.id === currentAlertReviewId || review.review_id === currentAlertReviewId)) {
+      currentAlertReviewId = null;
+      $("alertReviewDetailContainer").style.display = "none";
+    }
+    return data;
+  } catch (err) {
+    $("alertReviewQueue").innerHTML = `<div class="item error"><h3>Alert reviews unavailable</h3><p class="muted">${esc(err.message)}</p></div>`;
+    $("alertReviewSummary").innerHTML = "";
+    $("alertReviewDetailContainer").style.display = "none";
+    return null;
+  } finally {
+    isLoadingAlertReviews = false;
+  }
+}
+
+async function selectAlertReview(reviewId) {
+  currentAlertReviewId = reviewId;
+  document.querySelectorAll("[data-alert-review-id]").forEach(item => item.classList.toggle("selected", item.dataset.alertReviewId === reviewId));
+  try {
+    const data = await api("/human-review/pending");
+    const review = (data.reviews || []).find(item => item.id === reviewId || item.review_id === reviewId);
+    if (!review) throw new Error("Alert review not found");
+    renderAlertReviewDetail(review);
+  } catch (err) {
+    toast(`ERROR: Failed to load alert review — ${err.message}`);
+  }
+}
+
+async function submitAlertReviewVerdict(event) {
+  event.preventDefault();
+  if (isSubmittingAlertVerdict) {
+    toast("Submission already in progress");
+    return;
+  }
+  const verdict = ($("alertVerdictInput").value || "").trim();
+  const correction = ($("alertCorrectionInput").value || "").trim();
+  const confidenceRaw = ($("alertConfidenceInput").value || "").trim();
+  const reason = ($("alertReasonInput").value || "").trim();
+  const confidence = confidenceRaw ? Number(confidenceRaw) : null;
+  const errors = {
+    alertVerdictError: "",
+    alertCorrectionError: "",
+    alertConfidenceError: "",
+    alertReasonError: "",
+  };
+  if (!verdict) errors.alertVerdictError = "Please select a verdict";
+  if (verdict === "correct" && !correction) errors.alertCorrectionError = "Correction is required for Correct verdict";
+  if (["reject", "needs_more_evidence"].includes(verdict) && !reason) errors.alertReasonError = "Reason is required for this verdict";
+  if (confidence !== null && (!Number.isFinite(confidence) || confidence < 0 || confidence > 1)) {
+    errors.alertConfidenceError = "Confidence must be a number between 0 and 1";
+  }
+  Object.entries(errors).forEach(([id, value]) => { $(id).textContent = value; });
+  if (Object.values(errors).some(Boolean)) {
+    toast("Please fix validation errors before submitting");
+    return;
+  }
+  const button = $("alertSubmitBtn");
+  const originalText = button.textContent;
+  isSubmittingAlertVerdict = true;
+  button.disabled = true;
+  button.textContent = "Saving...";
+  await visibleFeedbackDelay();
+  try {
+    const data = await api(`/human-review/${encodeURIComponent(currentAlertReviewId)}/verdict`, {
+      method: "POST",
+      body: JSON.stringify({
+        verdict,
+        correction: correction || null,
+        confidence: confidence ?? undefined,
+        reason: reason || null,
+        reviewed_by: "analyst",
+      }),
+    });
+    if (data.status !== "completed") throw new Error("Server did not confirm verdict completion");
+    toast("Alert review saved successfully");
+    currentAlertReviewId = null;
+    $("alertReviewDetailContainer").style.display = "none";
+    await loadAlertReviews();
+    await loadAlerts({ silent: true });
+  } catch (err) {
+    toast(`ERROR: Failed to save alert review — ${err.message}`);
+    button.textContent = "Failed — Retry";
+    return;
+  } finally {
+    isSubmittingAlertVerdict = false;
+    button.disabled = false;
+    if (button.textContent !== "Failed — Retry") button.textContent = originalText;
+  }
+}
+
 function stockManualEvidenceBullets(analysis = {}) {
   const quote = analysis.quote || {};
   const financials = analysis.financials || {};
@@ -1940,6 +2446,11 @@ function bindRefreshButtons() {
   $("refreshSources")?.addEventListener("click", loadSources);
   $("refreshEvidence")?.addEventListener("click", loadEvidence);
   $("refreshSystemHealth")?.addEventListener("click", loadSystemHealth);
+  $("refreshAlerts")?.addEventListener("click", refreshAlertCenter);
+  $("runAlertCheck")?.addEventListener("click", runAlertCheck);
+  $("createTestAlert")?.addEventListener("click", createTestAlert);
+  $("refreshLocalSource")?.addEventListener("click", loadLocalSourceStatus);
+  $("refreshAlertReviews")?.addEventListener("click", loadAlertReviews);
   $("refreshStockIntel")?.addEventListener("click", () => loadStockIntel());
   $("refreshStockSnapshotHistory")?.addEventListener("click", loadStockSnapshotHistory);
   $("refreshStockHistory")?.addEventListener("click", loadStockSnapshotHistory);
@@ -1981,6 +2492,37 @@ document.addEventListener("click", event => {
   const button = event.target.closest("[data-select-evidence]");
   if (button) {
     selectEvidence(Number(button.dataset.selectEvidence));
+  }
+  const alertButton = event.target.closest("[data-alert-action]");
+  if (alertButton) {
+    const alertId = alertButton.dataset.alertId || "";
+    const action = alertButton.dataset.alertAction || "";
+    if (!alertId || !action) return;
+    if (action === "acknowledge" || action === "dismiss" || action === "send-review" || action === "convert-action") {
+      const promise = action === "send-review"
+        ? performAlertAction(alertId, action)
+        : performAlertAction(alertId, action);
+      promise.then(result => {
+        if (action === "send-review" && result?.review_id) {
+          toast("Alert sent to Human Review");
+        } else if (action === "convert-action" && result?.action?.id) {
+          toast("Alert converted to canonical action");
+        } else {
+          toast(`Alert ${action}`);
+        }
+      }).catch(err => toast(`Alert action failed: ${err.message}`));
+      return;
+    }
+  }
+  const snoozeButton = event.target.closest("[data-alert-snooze]");
+  if (snoozeButton) {
+    const alertId = snoozeButton.dataset.alertId || "";
+    const minutes = Number(snoozeButton.dataset.alertSnooze || 0);
+    if (!alertId || !minutes) return;
+    performAlertAction(alertId, "snooze", { minutes })
+      .then(() => toast(`Alert snoozed for ${minutes >= 1440 ? "1 day" : minutes >= 240 ? "4 hours" : minutes >= 60 ? "1 hour" : "15 minutes"}`))
+      .catch(err => toast(`Alert snooze failed: ${err.message}`));
+    return;
   }
   const processButton = event.target.closest("[data-process-observation]");
   if (processButton) {

@@ -154,11 +154,27 @@ if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
 TEST_DB_PATH_RAW = os.environ.get("INFO_ANALYZER_TEST_DB_PATH", "").strip()
 
-APP_VERSION = "v0.98-public-market-snapshot-command-center"
+ALERT_APP_VERSION = "v0.99.1-alert-command-center-slice"
+APP_VERSION = ALERT_APP_VERSION
 SCHEMA_VERSION = 2
 DATA_PLANE_LEASE_SECONDS = 30
 SCHEDULER_LEASE_SECONDS = 8
 RECOVERY_RETRY_DELAY_SECONDS = 2
+ALERT_STATUSES = {"new", "acknowledged", "snoozed", "dismissed", "converted_to_action", "resolved"}
+ALERT_ACTIVE_STATUSES = {"new", "acknowledged", "snoozed", "dismissed"}
+ALERT_SNOOZE_MINUTES = (15, 60, 240, 1440)
+LOCAL_SOURCE_ROOT_RAW = os.environ.get("INFO_ANALYZER_LOCAL_SOURCE_ROOT", "").strip()
+DEFAULT_LOCAL_SOURCE_ROOT = Path("/Users/admin/Library/Mobile Documents/com~apple~CloudDocs/Downloads")
+LOCAL_SOURCE_ROOT = Path(LOCAL_SOURCE_ROOT_RAW).expanduser() if LOCAL_SOURCE_ROOT_RAW else DEFAULT_LOCAL_SOURCE_ROOT
+if not LOCAL_SOURCE_ROOT.is_absolute():
+    LOCAL_SOURCE_ROOT = Path(__file__).resolve().parent / LOCAL_SOURCE_ROOT
+LOCAL_SOURCE_LABEL = "Previous Computer / Local Archive"
+ALERT_RULE_IDS = {
+    "test_fixture": "ALERT-RULE-TEST-FIXTURE",
+    "stock_provider_error": "ALERT-RULE-STOCK-PROVIDER-ERROR",
+    "stock_stale": "ALERT-RULE-STOCK-STALE",
+    "broken_local_reference": "ALERT-RULE-BROKEN-LOCAL-REFERENCE",
+}
 
 FEATURE_REGISTRY = [
     {
@@ -215,6 +231,17 @@ FEATURE_REGISTRY = [
         "replacement_feature": "",
         "deprecated_at": "",
         "notes": "Review-first stock snapshot cockpit with honest freshness and human approval gates.",
+    },
+    {
+        "feature_key": "alerts",
+        "display_name": "Alert Center",
+        "lifecycle_status": "active",
+        "architecture": "rule-to-alert cockpit slice",
+        "data_source": "alert_rules and alert_events",
+        "user_visible": True,
+        "replacement_feature": "",
+        "deprecated_at": "",
+        "notes": "Visible in-app alert loop with review-first promotion gates.",
     },
     {
         "feature_key": "jobs_runs",
@@ -2266,6 +2293,7 @@ def init_db() -> None:
             human_analyst_schema_init(conn)
         except Exception:
             pass  # Workbench not available
+        ensure_alert_schema(conn)
         conn.commit()
 
 
@@ -2298,6 +2326,20 @@ def row_to_stock_snapshot(row) -> dict:
 
 def row_to_action(row) -> dict:
     d = dict(row)
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_alert_rule(row) -> dict:
+    d = dict(row)
+    d["condition"] = json_loads(d.get("condition_json"), {})
+    d["metadata"] = json_loads(d.get("metadata"), {})
+    return d
+
+
+def row_to_alert_event(row) -> dict:
+    d = dict(row)
+    d["evidence"] = json_loads(d.get("evidence_json"), [])
     d["metadata"] = json_loads(d.get("metadata"), {})
     return d
 
@@ -3846,6 +3888,19 @@ def upsert_action_for_entry(conn, entry: dict) -> dict | None:
             "card_type": entry.get("card_type"),
             "trigger_condition": entry.get("trigger_condition"),
             "result_to_track": entry.get("result_to_track"),
+            **{
+                key: value
+                for key, value in (entry.get("metadata") or {}).items()
+                if key in {
+                    "alert_event_id",
+                    "alert_rule_id",
+                    "alert_review_id",
+                    "alert_source",
+                    "alert_source_label",
+                    "stock_snapshot_id",
+                    "human_review_id",
+                }
+            },
         }, ensure_ascii=False),
     }
     conn.execute(
@@ -5635,6 +5690,9 @@ def runtime_status() -> dict:
         "git_branch": git_branch_name(),
         "repository_root": str(BASE_DIR),
         "environment": os.environ.get("INFO_ANALYZER_ENV", "local"),
+        "local_source_root": str(local_source_root()),
+        "local_source_label": LOCAL_SOURCE_LABEL,
+        "local_source_accessible": bool(local_source_root().exists() and local_source_root().is_dir()),
         "active_db_path": str(DB_PATH),
         "active_db_path_category": db_path_category(),
         "active_db_configured": bool(DB_PATH_RAW),
@@ -8708,7 +8766,7 @@ def stock_freshness_state(analysis: dict, simulate_state: str = "") -> str:
     if provider_timestamp:
         try:
             age_seconds = (datetime.now(timezone.utc) - datetime.fromisoformat(provider_timestamp.replace("Z", "+00:00"))).total_seconds()
-            if age_seconds > 900:
+            if age_seconds > 5400:
                 return "Stale snapshot"
         except Exception:
             pass
@@ -9196,6 +9254,970 @@ def stock_market_snapshot(payload: dict | None = None) -> dict:
         "simulate_state": simulate_state,
         "errors": errors,
         "default_watchlist_label": "Default watchlist: AAPL, NVDA, MSFT.",
+    }
+
+
+def ensure_alert_schema(conn) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS alert_rules (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            name TEXT NOT NULL,
+            domain TEXT NOT NULL DEFAULT 'Other',
+            condition_type TEXT NOT NULL,
+            condition_json TEXT NOT NULL DEFAULT '{}',
+            severity TEXT NOT NULL DEFAULT 'watch',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            source TEXT NOT NULL DEFAULT 'system',
+            metadata TEXT DEFAULT '{}'
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS alert_events (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            rule_id TEXT NOT NULL,
+            dedupe_key TEXT NOT NULL,
+            occurrence_key TEXT NOT NULL,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            severity TEXT NOT NULL DEFAULT 'watch',
+            source TEXT NOT NULL,
+            source_label TEXT NOT NULL DEFAULT '',
+            source_signal_id TEXT,
+            source_path TEXT,
+            relative_path TEXT,
+            referenced_path TEXT,
+            entity TEXT,
+            status TEXT NOT NULL DEFAULT 'new',
+            triggered_at TEXT NOT NULL,
+            last_checked_at TEXT NOT NULL,
+            acknowledged_at TEXT,
+            snoozed_until TEXT,
+            dismissed_at TEXT,
+            resolved_at TEXT,
+            human_review_id TEXT,
+            trusted_entry_id TEXT,
+            converted_action_id TEXT,
+            next_step TEXT,
+            evidence_json TEXT DEFAULT '[]',
+            condition_json TEXT DEFAULT '{}',
+            metadata TEXT DEFAULT '{}',
+            FOREIGN KEY(rule_id) REFERENCES alert_rules(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_alert_rules_enabled ON alert_rules(enabled, severity, updated_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_alert_rules_condition_type ON alert_rules(condition_type, enabled)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_alert_events_rule ON alert_events(rule_id, updated_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_alert_events_status ON alert_events(status, last_checked_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_alert_events_dedupe ON alert_events(dedupe_key, status)")
+    seed_alert_rules(conn)
+
+
+def seed_alert_rules(conn) -> None:
+    now = now_iso()
+    rules = [
+        {
+            "id": ALERT_RULE_IDS["test_fixture"],
+            "name": "Test fixture alert",
+            "domain": "Testing",
+            "condition_type": "manual_test",
+            "condition_json": {"kind": "manual_test"},
+            "severity": "info",
+            "enabled": 1,
+            "source": "test_fixture",
+            "metadata": {"fixture": True},
+        },
+        {
+            "id": ALERT_RULE_IDS["stock_provider_error"],
+            "name": "Stock snapshot provider error",
+            "domain": "Investing",
+            "condition_type": "stock_snapshot_provider_error",
+            "condition_json": {"error_states": ["Provider error", "Symbol error", "No data"]},
+            "severity": "important",
+            "enabled": 1,
+            "source": "stock_snapshot",
+            "metadata": {"requires_persisted_snapshot": True},
+        },
+        {
+            "id": ALERT_RULE_IDS["stock_stale"],
+            "name": "Stock snapshot stale data",
+            "domain": "Investing",
+            "condition_type": "stock_snapshot_stale",
+            "condition_json": {"threshold_minutes": 90, "market_states": ["REGULAR", "OPEN"]},
+            "severity": "watch",
+            "enabled": 1,
+            "source": "stock_snapshot",
+            "metadata": {"market_open_required": True},
+        },
+        {
+            "id": ALERT_RULE_IDS["broken_local_reference"],
+            "name": "Broken local reference",
+            "domain": "Archive",
+            "condition_type": "broken_local_reference",
+            "condition_json": {"source_root_env": "INFO_ANALYZER_LOCAL_SOURCE_ROOT"},
+            "severity": "watch",
+            "enabled": 1,
+            "source": "local_archive",
+            "metadata": {"source_label": LOCAL_SOURCE_LABEL, "read_only": True},
+        },
+    ]
+    for rule in rules:
+        conn.execute(
+            """
+            INSERT INTO alert_rules (id, created_at, updated_at, name, domain, condition_type, condition_json,
+                                     severity, enabled, source, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                updated_at=excluded.updated_at,
+                name=excluded.name,
+                domain=excluded.domain,
+                condition_type=excluded.condition_type,
+                condition_json=excluded.condition_json,
+                severity=excluded.severity,
+                enabled=excluded.enabled,
+                source=excluded.source,
+                metadata=excluded.metadata
+            """,
+            (
+                rule["id"],
+                now,
+                now,
+                rule["name"],
+                rule["domain"],
+                rule["condition_type"],
+                json.dumps(rule["condition_json"], ensure_ascii=False),
+                rule["severity"],
+                int(rule["enabled"]),
+                rule["source"],
+                json.dumps(rule["metadata"], ensure_ascii=False),
+            ),
+        )
+
+
+def local_source_root() -> Path:
+    return LOCAL_SOURCE_ROOT
+
+
+def local_source_inventory(root: Path | None = None) -> dict:
+    root_path = Path(root or local_source_root()).expanduser()
+    inventory = {
+        "source_label": LOCAL_SOURCE_LABEL,
+        "root": str(root_path),
+        "accessible": root_path.exists() and root_path.is_dir(),
+        "directory_count": 0,
+        "file_count": 0,
+        "approx_size_bytes": 0,
+        "inaccessible": [],
+        "repo_roots": [],
+        "database_candidates": [],
+    }
+    if not inventory["accessible"]:
+        return inventory
+    repo_roots = set()
+    db_candidates = []
+    inaccessible: list[str] = []
+    total_size = 0
+    directory_count = 0
+    file_count = 0
+    for current, dirs, files in os.walk(root_path):
+        directory_count += len(dirs)
+        for name in files:
+            file_count += 1
+            path = Path(current) / name
+            try:
+                stat = path.stat()
+                total_size += stat.st_size
+                if path.suffix.lower() == ".db":
+                    db_candidates.append({
+                        "relative_path": str(path.relative_to(root_path)),
+                        "size": stat.st_size,
+                        "modified_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(timespec="seconds"),
+                    })
+            except Exception:
+                if len(inaccessible) < 20:
+                    inaccessible.append(str(path.relative_to(root_path)))
+        git_marker = Path(current) / ".git"
+        if git_marker.exists():
+            repo_roots.add(str(Path(current).relative_to(root_path)))
+    inventory.update({
+        "directory_count": directory_count,
+        "file_count": file_count,
+        "approx_size_bytes": total_size,
+        "inaccessible": inaccessible,
+        "repo_roots": sorted(repo_roots)[:50],
+        "database_candidates": db_candidates[:50],
+    })
+    return inventory
+
+
+def broken_local_reference_matches(root: Path | None = None) -> list[dict]:
+    root_path = Path(root or local_source_root()).expanduser()
+    matches: list[dict] = []
+    if not root_path.exists():
+        return matches
+    repo_roots: list[Path] = []
+    for current, dirs, files in os.walk(root_path):
+        git_marker = Path(current) / ".git"
+        if git_marker.exists():
+            repo_roots.append(Path(current))
+    for repo_root in repo_roots:
+        git_marker = repo_root / ".git"
+        rel_repo = str(repo_root.relative_to(root_path))
+        try:
+            if git_marker.is_file():
+                line = git_marker.read_text(encoding="utf-8", errors="replace").splitlines()[0].strip()
+                if line.lower().startswith("gitdir:"):
+                    ref = clean_text(line.split(":", 1)[1].strip())
+                    resolved = Path(ref).expanduser()
+                    if not resolved.is_absolute():
+                        resolved = (git_marker.parent / resolved).resolve()
+                    if not resolved.exists():
+                        matches.append({
+                            "source_label": LOCAL_SOURCE_LABEL,
+                            "relative_path": f"{rel_repo}/.git",
+                            "referenced_path": ref,
+                            "reason": "referenced local path does not exist",
+                            "severity": "watch",
+                            "next_step": "Inspect or recover the broken worktree reference.",
+                        })
+            elif git_marker.is_dir():
+                worktrees_dir = git_marker / "worktrees"
+                if worktrees_dir.exists():
+                    for worktree_dir in worktrees_dir.iterdir():
+                        gitdir_file = worktree_dir / "gitdir"
+                        if not gitdir_file.exists():
+                            continue
+                        ref = clean_text(gitdir_file.read_text(encoding="utf-8", errors="replace").strip())
+                        if not ref:
+                            continue
+                        resolved = Path(ref).expanduser()
+                        if not resolved.is_absolute():
+                            resolved = (gitdir_file.parent / resolved).resolve()
+                        if not resolved.exists():
+                            matches.append({
+                                "source_label": LOCAL_SOURCE_LABEL,
+                                "relative_path": str(gitdir_file.relative_to(root_path)),
+                                "referenced_path": ref,
+                                "reason": "referenced local path does not exist",
+                                "severity": "watch",
+                                "next_step": "Inspect or recover the broken worktree reference.",
+                            })
+        except Exception:
+            continue
+    return matches[:20]
+
+
+def parse_iso_timestamp(value: str) -> datetime | None:
+    cleaned = clean_text(value)
+    if not cleaned:
+        return None
+    try:
+        return datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def stock_snapshot_current_rows(conn) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT * FROM stock_snapshots
+        ORDER BY updated_at DESC, created_at DESC
+        """
+    ).fetchall()
+    latest: dict[str, dict] = {}
+    for row in rows:
+        snapshot = row_to_stock_snapshot(row)
+        symbol = clean_text(snapshot.get("symbol")).upper()
+        if symbol and symbol not in latest:
+            latest[symbol] = snapshot
+    return list(latest.values())
+
+
+def stock_snapshot_error_match(snapshot: dict) -> dict | None:
+    freshness = clean_text(snapshot.get("freshness_state"))
+    if freshness not in {"Provider error", "Symbol error", "No data"}:
+        return None
+    symbol = clean_text(snapshot.get("symbol")).upper() or "UNKNOWN"
+    evidence = list(snapshot.get("evidence") or [])
+    if snapshot.get("comparison_baseline"):
+        evidence.append(snapshot["comparison_baseline"])
+    return {
+        "dedupe_key": f"stock-provider-error:{symbol}:{freshness}",
+        "title": f"{symbol} snapshot {freshness.lower()}",
+        "message": f"Latest persisted snapshot for {symbol} indicates {freshness.lower()}.",
+        "severity": "important",
+        "source": "stock_snapshot",
+        "source_label": "Public Market Snapshot Command Center",
+        "source_signal_id": snapshot.get("snapshot_id") or snapshot.get("id") or "",
+        "entity": symbol,
+        "next_step": "Inspect the latest snapshot, provider state, and symbol mapping before deciding on any action.",
+        "evidence": evidence[:6],
+        "condition_json": {
+            "kind": "stock_snapshot_provider_error",
+            "freshness_state": freshness,
+            "provider_timestamp": snapshot.get("provider_timestamp") or "",
+        },
+    }
+
+
+def stock_snapshot_stale_match(snapshot: dict) -> dict | None:
+    market_state = clean_text(snapshot.get("market_state")).upper()
+    if market_state not in {"REGULAR", "OPEN"}:
+        return None
+    provider_timestamp = parse_iso_timestamp(snapshot.get("provider_timestamp") or "")
+    fallback_used = False
+    if not provider_timestamp:
+        provider_timestamp = parse_iso_timestamp(snapshot.get("fetched_at") or "")
+        fallback_used = True
+    if not provider_timestamp:
+        return None
+    age_minutes = (datetime.now(timezone.utc) - provider_timestamp).total_seconds() / 60.0
+    if age_minutes <= 90:
+        return None
+    symbol = clean_text(snapshot.get("symbol")).upper() or "UNKNOWN"
+    evidence = list(snapshot.get("evidence") or [])
+    evidence.append(f"Age {age_minutes:.1f} minutes based on {'fetched_at' if fallback_used else 'provider_timestamp'}")
+    return {
+        "dedupe_key": f"stock-stale:{symbol}",
+        "title": f"{symbol} stale snapshot",
+        "message": f"Persisted snapshot for {symbol} is older than 90 minutes while market-open truth is proven.",
+        "severity": "watch",
+        "source": "stock_snapshot",
+        "source_label": "Public Market Snapshot Command Center",
+        "source_signal_id": snapshot.get("snapshot_id") or snapshot.get("id") or "",
+        "entity": symbol,
+        "next_step": "Refresh the snapshot or inspect the provider feed before using it for decisions.",
+        "evidence": evidence[:6],
+        "condition_json": {
+            "kind": "stock_snapshot_stale",
+            "market_state": market_state,
+            "provider_timestamp": snapshot.get("provider_timestamp") or "",
+            "fetched_at": snapshot.get("fetched_at") or "",
+            "age_minutes": round(age_minutes, 1),
+            "used_fallback": fallback_used,
+        },
+    }
+
+
+def build_alert_event_payload(rule: dict, match: dict, now: str) -> dict:
+    return {
+        "rule_id": rule["id"],
+        "dedupe_key": match["dedupe_key"],
+        "occurrence_key": match["dedupe_key"],
+        "title": match["title"],
+        "message": match["message"],
+        "severity": match["severity"] or rule.get("severity") or "watch",
+        "source": match["source"] or rule.get("source") or "system",
+        "source_label": match.get("source_label") or (LOCAL_SOURCE_LABEL if match.get("source") == "local_archive" else ""),
+        "source_signal_id": match.get("source_signal_id") or "",
+        "source_path": match.get("source_path") or "",
+        "relative_path": match.get("relative_path") or "",
+        "referenced_path": match.get("referenced_path") or "",
+        "entity": match.get("entity") or "",
+        "status": "new",
+        "triggered_at": now,
+        "last_checked_at": now,
+        "next_step": match.get("next_step") or "",
+        "evidence_json": json.dumps(match.get("evidence") or [], ensure_ascii=False),
+        "condition_json": json.dumps(match.get("condition_json") or rule.get("condition") or {}, ensure_ascii=False),
+        "metadata": json.dumps({
+            "rule_name": rule.get("name"),
+            "source_label": match.get("source_label") or "",
+            "local_source_root": str(local_source_root()),
+        }, ensure_ascii=False),
+    }
+
+
+def row_to_alert_event_public(row, rule: dict | None = None, review: dict | None = None, action: dict | None = None) -> dict:
+    event = row_to_alert_event(row)
+    if rule:
+        event["rule"] = rule
+    if review:
+        event["review"] = review
+    if action:
+        event["action"] = action
+    event["can_convert_to_action"] = bool(event.get("trusted_entry_id")) and clean_text(event.get("status")) != "converted_to_action"
+    event["is_active"] = clean_text(event.get("status")) in ALERT_ACTIVE_STATUSES
+    return event
+
+
+def alert_state_counts(conn) -> dict:
+    rows = conn.execute(
+        """
+        SELECT status, COUNT(*) AS count
+        FROM alert_events
+        GROUP BY status
+        """
+    ).fetchall()
+    counts = {row["status"]: int(row["count"]) for row in rows}
+    counts["active"] = sum(counts.get(status, 0) for status in ALERT_ACTIVE_STATUSES)
+    counts["resolved"] = counts.get("resolved", 0)
+    return counts
+
+
+def latest_alert_checked_at(conn) -> str:
+    row = conn.execute("SELECT MAX(last_checked_at) AS last_checked_at FROM alert_events").fetchone()
+    return clean_text(row["last_checked_at"]) if row and row["last_checked_at"] else ""
+
+
+def alert_engine_status(conn, *, alert_count: int | None = None, errors: list[dict] | None = None) -> str:
+    rules = conn.execute("SELECT COUNT(*) AS count FROM alert_rules WHERE enabled=1").fetchone()["count"]
+    if not int(rules or 0):
+        return "no rules"
+    if errors:
+        return "degraded"
+    if alert_count:
+        return "active"
+    return "ready"
+
+
+def alert_event_joined(conn, row) -> dict:
+    event = row_to_alert_event(row)
+    rule_row = conn.execute("SELECT * FROM alert_rules WHERE id=?", (event["rule_id"],)).fetchone()
+    if rule_row:
+        event["rule"] = row_to_alert_rule(rule_row)
+    if event.get("human_review_id"):
+        review_row = conn.execute("SELECT * FROM human_reviews WHERE id=?", (event["human_review_id"],)).fetchone()
+        if review_row:
+            event["human_review"] = dict(review_row)
+    if event.get("trusted_entry_id"):
+        entry_row = conn.execute("SELECT * FROM entries WHERE id=?", (event["trusted_entry_id"],)).fetchone()
+        if entry_row:
+            event["trusted_entry"] = row_to_entry(entry_row)
+    if event.get("converted_action_id"):
+        action_row = conn.execute("SELECT * FROM actions WHERE id=?", (event["converted_action_id"],)).fetchone()
+        if action_row:
+            event["converted_action"] = row_to_action(action_row)
+    event["can_convert_to_action"] = bool(event.get("trusted_entry_id")) and clean_text(event.get("status")) != "converted_to_action"
+    event["is_active"] = clean_text(event.get("status")) in ALERT_ACTIVE_STATUSES
+    return event
+
+
+def alert_events_visible(conn, *, limit: int = 100) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT * FROM alert_events
+        ORDER BY updated_at DESC, triggered_at DESC
+        LIMIT ?
+        """,
+        (max(1, min(500, limit)),),
+    ).fetchall()
+    return [alert_event_joined(conn, row) for row in rows]
+
+
+def alert_rule_records(conn) -> list[dict]:
+    rows = conn.execute("SELECT * FROM alert_rules ORDER BY updated_at DESC, created_at DESC").fetchall()
+    return [row_to_alert_rule(row) for row in rows]
+
+
+def alert_active_event_row(conn, dedupe_key: str):
+    return conn.execute(
+        f"""
+        SELECT * FROM alert_events
+        WHERE dedupe_key=? AND status IN ({', '.join(['?'] * len(ALERT_ACTIVE_STATUSES))})
+        ORDER BY updated_at DESC, triggered_at DESC
+        LIMIT 1
+        """,
+        (dedupe_key, *sorted(ALERT_ACTIVE_STATUSES)),
+    ).fetchone()
+
+
+def alert_latest_event_row(conn, dedupe_key: str):
+    return conn.execute(
+        "SELECT * FROM alert_events WHERE dedupe_key=? ORDER BY updated_at DESC, triggered_at DESC LIMIT 1",
+        (dedupe_key,),
+    ).fetchone()
+
+
+def alert_join_rule_and_event(conn, event_row) -> dict:
+    return alert_event_joined(conn, event_row)
+
+
+def alert_list_payload(conn, *, checked_at: str = "", result: dict | None = None) -> dict:
+    rules = alert_rule_records(conn)
+    alerts = [alert_join_rule_and_event(conn, row) for row in conn.execute(
+        "SELECT * FROM alert_events ORDER BY updated_at DESC, triggered_at DESC"
+    ).fetchall()]
+    counts = alert_state_counts(conn)
+    local_source = {
+        "source_label": LOCAL_SOURCE_LABEL,
+        "root": str(local_source_root()),
+        "inventory": local_source_inventory(),
+    }
+    return {
+        "engine_status": alert_engine_status(conn, alert_count=counts.get("active", 0), errors=(result or {}).get("errors") or []),
+        "last_checked_at": checked_at or latest_alert_checked_at(conn),
+        "active_alert_count": counts.get("active", 0),
+        "counts": counts,
+        "rules": rules,
+        "alerts": alerts,
+        "local_source": local_source,
+        "result": result or {},
+    }
+
+
+def alert_condition_for_test_fixture(note: str = "") -> dict:
+    unique = uuid.uuid4().hex[:8].upper()
+    now = now_iso()
+    return {
+        "rule_id": ALERT_RULE_IDS["test_fixture"],
+        "dedupe_key": f"test-fixture:{unique}",
+        "occurrence_key": f"test-fixture:{unique}",
+        "title": "TEST ALERT",
+        "message": clean_text(note) or "TEST ALERT fixture created explicitly through POST /api/alerts/test.",
+        "severity": "info",
+        "source": "test_fixture",
+        "source_label": "TEST ALERT",
+        "source_signal_id": "",
+        "source_path": "",
+        "relative_path": "",
+        "referenced_path": "",
+        "entity": "TEST ALERT",
+        "status": "new",
+        "triggered_at": now,
+        "last_checked_at": now,
+        "next_step": "Acknowledge, snooze, dismiss, or send the test fixture to Human Review.",
+        "evidence_json": json.dumps(["This is a clearly labeled test fixture alert."], ensure_ascii=False),
+        "condition_json": json.dumps({"kind": "manual_test"}, ensure_ascii=False),
+        "metadata": json.dumps({"fixture": True, "manual": True}, ensure_ascii=False),
+    }
+
+
+def alert_create_event(conn, payload: dict) -> dict:
+    now = now_iso()
+    event_id = "ALT-" + uuid.uuid4().hex[:16].upper()
+    row = {
+        "id": event_id,
+        "created_at": now,
+        "updated_at": now,
+        "acknowledged_at": "",
+        "snoozed_until": "",
+        "dismissed_at": "",
+        "resolved_at": "",
+        "human_review_id": "",
+        "trusted_entry_id": "",
+        "converted_action_id": "",
+        **payload,
+    }
+    conn.execute(
+        """
+        INSERT INTO alert_events (
+            id, created_at, updated_at, rule_id, dedupe_key, occurrence_key, title, message, severity, source,
+            source_label, source_signal_id, source_path, relative_path, referenced_path, entity, status,
+            triggered_at, last_checked_at, acknowledged_at, snoozed_until, dismissed_at, resolved_at,
+            human_review_id, trusted_entry_id, converted_action_id, next_step, evidence_json, condition_json,
+            metadata
+        ) VALUES (
+            :id, :created_at, :updated_at, :rule_id, :dedupe_key, :occurrence_key, :title, :message, :severity,
+            :source, :source_label, :source_signal_id, :source_path, :relative_path, :referenced_path, :entity,
+            :status, :triggered_at, :last_checked_at, :acknowledged_at, :snoozed_until, :dismissed_at,
+            :resolved_at, :human_review_id, :trusted_entry_id, :converted_action_id, :next_step, :evidence_json,
+            :condition_json, :metadata
+        )
+        """,
+        row,
+    )
+    return alert_event_joined(conn, conn.execute("SELECT * FROM alert_events WHERE id=?", (event_id,)).fetchone())
+
+
+def alert_update_event(conn, event_id: str, updates: dict) -> dict:
+    updates = dict(updates)
+    updates["updated_at"] = now_iso()
+    set_sql = ", ".join([f"{key}=?" for key in updates])
+    conn.execute(f"UPDATE alert_events SET {set_sql} WHERE id=?", tuple(updates.values()) + (event_id,))
+    return alert_event_joined(conn, conn.execute("SELECT * FROM alert_events WHERE id=?", (event_id,)).fetchone())
+
+
+def alert_resolve_missing(conn, rule_id: str, current_keys: set[str], checked_at: str) -> int:
+    resolved = 0
+    rows = conn.execute(
+        "SELECT * FROM alert_events WHERE rule_id=? AND status IN ('new','acknowledged','snoozed','dismissed')",
+        (rule_id,),
+    ).fetchall()
+    for row in rows:
+        if clean_text(row["dedupe_key"]) in current_keys:
+            continue
+        if clean_text(row["status"]) == "resolved":
+            continue
+        alert_update_event(conn, row["id"], {
+            "status": "resolved",
+            "resolved_at": checked_at,
+            "last_checked_at": checked_at,
+        })
+        resolved += 1
+    return resolved
+
+
+def alert_refresh_existing(conn, rule: dict, match: dict, checked_at: str) -> tuple[dict, str]:
+    existing = alert_active_event_row(conn, match["dedupe_key"])
+    if not existing:
+        return {}, "create"
+    event = row_to_alert_event(existing)
+    status = clean_text(event.get("status"))
+    snoozed_until = parse_iso_timestamp(event.get("snoozed_until") or "")
+    if status == "snoozed" and snoozed_until and snoozed_until <= datetime.now(timezone.utc):
+        status = "new"
+    updates = {
+        "updated_at": checked_at,
+        "last_checked_at": checked_at,
+        "title": match["title"],
+        "message": match["message"],
+        "severity": match["severity"] or rule.get("severity") or "watch",
+        "source": match["source"] or rule.get("source") or "system",
+        "source_label": match.get("source_label") or event.get("source_label") or "",
+        "source_signal_id": match.get("source_signal_id") or "",
+        "source_path": match.get("source_path") or "",
+        "relative_path": match.get("relative_path") or "",
+        "referenced_path": match.get("referenced_path") or "",
+        "entity": match.get("entity") or "",
+        "next_step": match.get("next_step") or "",
+        "evidence_json": json.dumps(match.get("evidence") or [], ensure_ascii=False),
+        "condition_json": json.dumps(match.get("condition_json") or rule.get("condition") or {}, ensure_ascii=False),
+        "metadata": json.dumps({
+            **(event.get("metadata") or {}),
+            "rule_name": rule.get("name"),
+            "source_label": match.get("source_label") or event.get("source_label") or "",
+            "local_source_root": str(local_source_root()),
+        }, ensure_ascii=False),
+    }
+    if status == "new" and clean_text(event.get("status")) == "snoozed":
+        updates["status"] = "new"
+        updates["snoozed_until"] = ""
+    elif status == "new":
+        updates["status"] = "new"
+    else:
+        updates["status"] = event.get("status") or "new"
+    if clean_text(event.get("status")) == "acknowledged":
+        updates["status"] = "acknowledged"
+    if clean_text(event.get("status")) == "dismissed":
+        updates["status"] = "dismissed"
+    if clean_text(event.get("status")) == "snoozed" and snoozed_until and snoozed_until > datetime.now(timezone.utc):
+        updates["status"] = "snoozed"
+    return alert_update_event(conn, event["id"], updates), "update"
+
+
+def alert_create_or_refresh(conn, rule: dict, match: dict, checked_at: str) -> tuple[dict, str]:
+    existing = alert_active_event_row(conn, match["dedupe_key"])
+    if existing:
+        event, op = alert_refresh_existing(conn, rule, match, checked_at)
+        return event, op
+    return alert_create_event(conn, {
+        "rule_id": rule["id"],
+        "dedupe_key": match["dedupe_key"],
+        "occurrence_key": match.get("occurrence_key") or match["dedupe_key"],
+        "title": match["title"],
+        "message": match["message"],
+        "severity": match["severity"] or rule.get("severity") or "watch",
+        "source": match["source"] or rule.get("source") or "system",
+        "source_label": match.get("source_label") or "",
+        "source_signal_id": match.get("source_signal_id") or "",
+        "source_path": match.get("source_path") or "",
+        "relative_path": match.get("relative_path") or "",
+        "referenced_path": match.get("referenced_path") or "",
+        "entity": match.get("entity") or "",
+        "status": "new",
+        "triggered_at": checked_at,
+        "last_checked_at": checked_at,
+        "acknowledged_at": "",
+        "snoozed_until": "",
+        "dismissed_at": "",
+        "resolved_at": "",
+        "human_review_id": "",
+        "trusted_entry_id": "",
+        "converted_action_id": "",
+        "next_step": match.get("next_step") or "",
+        "evidence_json": json.dumps(match.get("evidence") or [], ensure_ascii=False),
+        "condition_json": json.dumps(match.get("condition_json") or rule.get("condition") or {}, ensure_ascii=False),
+        "metadata": json.dumps({
+            "rule_name": rule.get("name"),
+            "source_label": match.get("source_label") or "",
+            "local_source_root": str(local_source_root()),
+        }, ensure_ascii=False),
+    }), "create"
+
+
+def evaluate_stock_alert_rules(conn, rule: dict, checked_at: str) -> tuple[int, int, int]:
+    created = updated = resolved = 0
+    current_keys: set[str] = set()
+    if rule["condition_type"] == "stock_snapshot_provider_error":
+        for snapshot in stock_snapshot_current_rows(conn):
+            match = stock_snapshot_error_match(snapshot)
+            if not match:
+                continue
+            current_keys.add(match["dedupe_key"])
+            _, op = alert_create_or_refresh(conn, rule, match, checked_at)
+            created += int(op == "create")
+            updated += int(op == "update")
+    elif rule["condition_type"] == "stock_snapshot_stale":
+        for snapshot in stock_snapshot_current_rows(conn):
+            match = stock_snapshot_stale_match(snapshot)
+            if not match:
+                continue
+            current_keys.add(match["dedupe_key"])
+            _, op = alert_create_or_refresh(conn, rule, match, checked_at)
+            created += int(op == "create")
+            updated += int(op == "update")
+    resolved += alert_resolve_missing(conn, rule["id"], current_keys, checked_at)
+    return created, updated, resolved
+
+
+def evaluate_local_archive_alert_rules(conn, rule: dict, checked_at: str) -> tuple[int, int, int]:
+    created = updated = resolved = 0
+    current_keys: set[str] = set()
+    if rule["condition_type"] != "broken_local_reference":
+        return 0, 0, 0
+    for match in broken_local_reference_matches(local_source_root()):
+        match = {
+            **match,
+            "rule_id": rule["id"],
+            "dedupe_key": f"local-ref:{match['relative_path']}::{match['referenced_path']}",
+            "occurrence_key": f"local-ref:{match['relative_path']}::{match['referenced_path']}",
+            "title": "BROKEN LOCAL REFERENCE",
+            "message": f"{match['relative_path']} references {match['referenced_path']} but it cannot be resolved.",
+            "source": "local_archive",
+            "source_label": match.get("source_label") or LOCAL_SOURCE_LABEL,
+            "source_path": match["relative_path"],
+            "relative_path": match["relative_path"],
+            "referenced_path": match["referenced_path"],
+            "entity": LOCAL_SOURCE_LABEL,
+            "next_step": match.get("next_step") or "Inspect, recover, or ignore the broken previous-machine reference.",
+            "evidence": [
+                f"Source label: {LOCAL_SOURCE_LABEL}",
+                f"Relative path: {match['relative_path']}",
+                f"Referenced path: {match['referenced_path']}",
+                match["reason"],
+            ],
+            "condition_json": {
+                "kind": "broken_local_reference",
+                "source_root": str(local_source_root()),
+            },
+        }
+        current_keys.add(match["dedupe_key"])
+        _, op = alert_create_or_refresh(conn, rule, match, checked_at)
+        created += int(op == "create")
+        updated += int(op == "update")
+    resolved += alert_resolve_missing(conn, rule["id"], current_keys, checked_at)
+    return created, updated, resolved
+
+
+def alert_manual_test_event(conn, payload: dict | None = None) -> dict:
+    payload = payload or {}
+    rule = conn.execute("SELECT * FROM alert_rules WHERE id=?", (ALERT_RULE_IDS["test_fixture"],)).fetchone()
+    if not rule:
+        raise KeyError("test fixture rule missing")
+    note = clean_text(payload.get("note") or payload.get("message") or "")
+    event = alert_create_event(conn, alert_condition_for_test_fixture(note))
+    return event
+
+
+def alert_check_engine(conn, payload: dict | None = None) -> dict:
+    payload = payload or {}
+    checked_at = now_iso()
+    seed_alert_rules(conn)
+    created = updated = resolved = 0
+    errors: list[dict] = []
+    for rule_row in conn.execute("SELECT * FROM alert_rules WHERE enabled=1 ORDER BY created_at ASC").fetchall():
+        rule = row_to_alert_rule(rule_row)
+        try:
+            if rule["condition_type"] in {"stock_snapshot_provider_error", "stock_snapshot_stale"}:
+                c, u, r = evaluate_stock_alert_rules(conn, rule, checked_at)
+            elif rule["condition_type"] == "broken_local_reference":
+                c, u, r = evaluate_local_archive_alert_rules(conn, rule, checked_at)
+            else:
+                c = u = r = 0
+            created += c
+            updated += u
+            resolved += r
+        except Exception as exc:
+            errors.append({"rule_id": rule["id"], "error": str(exc)})
+    conn.commit()
+    payload = alert_list_payload(conn, checked_at=checked_at, result={"created": created, "updated": updated, "resolved": resolved, "errors": errors})
+    payload["checked_at"] = checked_at
+    payload["created"] = created
+    payload["updated"] = updated
+    payload["resolved"] = resolved
+    payload["errors"] = errors
+    return payload
+
+
+def alert_set_status(conn, alert_id: str, status: str, *, minutes: int | None = None) -> dict:
+    row = conn.execute("SELECT * FROM alert_events WHERE id=?", (alert_id,)).fetchone()
+    if not row:
+        raise KeyError("alert not found")
+    event = row_to_alert_event(row)
+    now = now_iso()
+    status = clean_text(status).lower()
+    if status not in ALERT_STATUSES:
+        raise ValueError("invalid alert status")
+    updates = {"updated_at": now, "last_checked_at": now}
+    if status == "acknowledged":
+        if event.get("status") == "acknowledged":
+            return alert_event_joined(conn, row)
+        updates["status"] = "acknowledged"
+        updates["acknowledged_at"] = event.get("acknowledged_at") or now
+    elif status == "snoozed":
+        if minutes not in ALERT_SNOOZE_MINUTES:
+            raise ValueError("invalid snooze duration")
+        updates["status"] = "snoozed"
+        updates["snoozed_until"] = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
+        updates["acknowledged_at"] = event.get("acknowledged_at") or now
+    elif status == "dismissed":
+        if event.get("status") == "dismissed":
+            return alert_event_joined(conn, row)
+        updates["status"] = "dismissed"
+        updates["dismissed_at"] = event.get("dismissed_at") or now
+    else:
+        raise ValueError("unsupported manual status transition")
+    return alert_update_event(conn, alert_id, updates)
+
+
+def alert_send_to_review(conn, alert_id: str) -> dict:
+    row = conn.execute("SELECT * FROM alert_events WHERE id=?", (alert_id,)).fetchone()
+    if not row:
+        raise KeyError("alert not found")
+    event = alert_event_joined(conn, row)
+    existing_review_id = clean_text(event.get("human_review_id"))
+    if existing_review_id:
+        review_row = conn.execute("SELECT * FROM human_reviews WHERE id=?", (existing_review_id,)).fetchone()
+        return {
+            "alert_event": event,
+            "review": dict(review_row) if review_row else None,
+            "review_id": existing_review_id,
+            "created": False,
+        }
+    review_id = create_human_review(
+        conn,
+        review_type="alert_event",
+        subject_type="alert_event",
+        subject_id=event["id"],
+        system_interpretation=event.get("message") or event.get("title") or "",
+        system_confidence=0.5,
+        evidence_id=None,
+    )
+    conn.execute("UPDATE alert_events SET updated_at=?, human_review_id=? WHERE id=?", (now_iso(), review_id, event["id"]))
+    conn.commit()
+    review_row = conn.execute("SELECT * FROM human_reviews WHERE id=?", (review_id,)).fetchone()
+    return {
+        "alert_event": alert_event_joined(conn, conn.execute("SELECT * FROM alert_events WHERE id=?", (alert_id,)).fetchone()),
+        "review": dict(review_row) if review_row else None,
+        "review_id": review_id,
+        "created": True,
+    }
+
+
+def alert_alert_event_trusted_entry_payload(alert_event: dict, review_row: dict) -> dict:
+    event = alert_event
+    review_verdict = clean_text(review_row.get("human_verdict") or "")
+    correction = clean_text(review_row.get("human_correction") or "")
+    reason = clean_text(review_row.get("human_reason") or "")
+    domain = clean_text(event.get("rule", {}).get("domain") or "Other") or "Other"
+    entity = clean_text(event.get("entity") or event.get("source_label") or event.get("title") or domain)
+    title = f"{event.get('title') or 'Alert'} reviewed"
+    raw_input = {
+        "alert_event_id": event.get("id"),
+        "alert_rule_id": event.get("rule_id"),
+        "human_review_id": review_row.get("id"),
+        "title": event.get("title"),
+        "message": event.get("message"),
+        "evidence": event.get("evidence") or [],
+        "review_verdict": review_verdict,
+        "review_correction": correction,
+        "review_reason": reason,
+    }
+    interpretation = correction or reason or event.get("message") or "Reviewed alert evidence."
+    next_step = "Convert to Action after human review if it still deserves attention."
+    return {
+        "id": "ENT-" + uuid.uuid5(uuid.NAMESPACE_URL, event.get("id") or title).hex[:16].upper(),
+        "title": title[:240],
+        "raw_input": json.dumps(raw_input, ensure_ascii=False),
+        "domain": domain,
+        "entity": entity,
+        "source_type": "Alert Event",
+        "signal": event.get("message") or event.get("title") or "Alert evidence reviewed.",
+        "interpretation": interpretation,
+        "signal_role": "watch",
+        "actionability": "watch",
+        "pull_trigger_type": "alert",
+        "pull_trigger": f"Resurface when alert {event.get('id')} or matching evidence returns.",
+        "relationship_type": "connects",
+        "card_type": "Watch Card",
+        "result_to_track": "Review outcome and whether the alert should become an action.",
+        "first_step": next_step,
+        "impact_metric": "",
+        "feedback_to_capture": "Record whether the alert should be converted to an action later.",
+        "related_memory_query": f"{domain} {entity} alert review",
+        "trackable_as": "reviewed alert evidence",
+        "tracking_metric": "Alert recurrence, review verdict, and action conversion outcome.",
+        "baseline": "",
+        "target_threshold": "",
+        "trigger_condition": f"Reviewed alert {event.get('id')} with verdict {review_verdict or 'confirm'}.",
+        "review_date": "",
+        "pattern": "Alert review",
+        "returned_action": "Review required before action.",
+        "action_status": "open",
+        "result": "",
+        "lesson": "Alerts only become actions after human review and an explicit conversion step.",
+        "next_step": next_step,
+        "confidence": "Medium",
+        "status": "validated",
+        "tags": ["alert-center", "human-review", clean_text(domain).lower(), clean_text(entity).lower()],
+        "proof_artifact": "",
+        "parent_entry_id": "",
+        "supersedes_entry_id": "",
+        "metadata": {
+            "alert_event_id": event.get("id"),
+            "alert_rule_id": event.get("rule_id"),
+            "alert_review_id": review_row.get("id"),
+            "alert_source": event.get("source"),
+            "alert_source_label": event.get("source_label") or "",
+        },
+        "qa_scores": {},
+        "date": today_iso(),
+    }
+
+
+def alert_convert_to_action(conn, alert_id: str) -> dict:
+    row = conn.execute("SELECT * FROM alert_events WHERE id=?", (alert_id,)).fetchone()
+    if not row:
+        raise KeyError("alert not found")
+    event = alert_event_joined(conn, row)
+    review_id = clean_text(event.get("human_review_id"))
+    if not review_id:
+        raise ValueError("Review required")
+    review_row = conn.execute("SELECT * FROM human_reviews WHERE id=?", (review_id,)).fetchone()
+    if not review_row:
+        raise ValueError("Review required")
+    verdict = clean_text(review_row["human_verdict"] or "")
+    if verdict not in {"confirm", "correct"}:
+        raise ValueError("Review required")
+    trusted_entry_id = clean_text(event.get("trusted_entry_id"))
+    if not trusted_entry_id:
+        trusted_entry = create_entry(alert_alert_event_trusted_entry_payload(event, dict(review_row)))
+        trusted_entry_id = trusted_entry["entry"]["id"]
+        conn.execute("UPDATE alert_events SET updated_at=?, trusted_entry_id=? WHERE id=?", (now_iso(), trusted_entry_id, alert_id))
+    entry_row = conn.execute("SELECT * FROM entries WHERE id=?", (trusted_entry_id,)).fetchone()
+    if not entry_row:
+        raise ValueError("Trusted entry required")
+    entry = row_to_entry(entry_row)
+    if entry.get("actionability") not in {"now", "next", "review"}:
+        entry = update_entry(trusted_entry_id, {"actionability": "review", "action_status": "open"})
+    action_row = conn.execute("SELECT * FROM actions WHERE entry_id=?", (trusted_entry_id,)).fetchone()
+    if not action_row:
+        action = upsert_action_for_entry(conn, entry if isinstance(entry, dict) else row_to_entry(conn.execute("SELECT * FROM entries WHERE id=?", (trusted_entry_id,)).fetchone()))
+    else:
+        action = row_to_action(action_row)
+    conn.execute(
+        "UPDATE alert_events SET updated_at=?, status='converted_to_action', converted_action_id=? WHERE id=?",
+        (now_iso(), action["id"], alert_id),
+    )
+    conn.commit()
+    return {
+        "alert_event": alert_event_joined(conn, conn.execute("SELECT * FROM alert_events WHERE id=?", (alert_id,)).fetchone()),
+        "trusted_entry": row_to_entry(conn.execute("SELECT * FROM entries WHERE id=?", (trusted_entry_id,)).fetchone()),
+        "action": row_to_action(conn.execute("SELECT * FROM actions WHERE id=?", (action["id"],)).fetchone()),
     }
 
 
@@ -9976,6 +10998,16 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(recent_inbox_observations(limit=limit))
             if path == "/api/context-library":
                 return self.send_json(context_library(params))
+            if path == "/api/local-source/status":
+                inventory = local_source_inventory()
+                broken = broken_local_reference_matches(local_source_root())
+                inventory["broken_reference_count"] = len(broken)
+                inventory["broken_reference_samples"] = broken[:20]
+                return self.send_json(inventory)
+            if path == "/api/alerts":
+                with connect() as conn:
+                    seed_alert_rules(conn)
+                    return self.send_json(alert_list_payload(conn))
             # Human Analyst Workbench GET endpoints - MINIMAL SLICE
             if path == "/api/workbench/reviews":
                 try:
@@ -10055,7 +11087,32 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/human-review/pending":
                 try:
                     with connect() as conn:
-                        reviews = get_pending_reviews(conn)
+                        rows = conn.execute(
+                            """
+                            SELECT *
+                            FROM human_reviews
+                            WHERE status='pending'
+                            ORDER BY created_at ASC
+                            """
+                        ).fetchall()
+                        reviews = []
+                        for row in rows:
+                            review = dict(row)
+                            if clean_text(review.get("subject_type")) == "alert_event":
+                                event_row = conn.execute("SELECT * FROM alert_events WHERE id=?", (review.get("subject_id"),)).fetchone()
+                                if event_row:
+                                    event = alert_event_joined(conn, event_row)
+                                    review.update({
+                                        "alert_event": event,
+                                        "alert_title": event.get("title") or "",
+                                        "alert_message": event.get("message") or "",
+                                        "alert_evidence": event.get("evidence") or [],
+                                        "alert_source": event.get("source") or "",
+                                        "alert_source_label": event.get("source_label") or "",
+                                        "alert_relative_path": event.get("relative_path") or "",
+                                        "alert_referenced_path": event.get("referenced_path") or "",
+                                    })
+                            reviews.append(review)
                     return self.send_json({"reviews": reviews, "count": len(reviews)})
                 except Exception as e:
                     return self.send_json({"error": str(e)}, 500)
@@ -10431,19 +11488,19 @@ class Handler(SimpleHTTPRequestHandler):
                         ))
 
                         # Create ingest_runs entry for this fixture batch
-                        now_iso = datetime.now(timezone.utc).isoformat()
+                        fixture_now_iso = datetime.now(timezone.utc).isoformat()
                         cursor.execute("""
                             INSERT OR IGNORE INTO ingest_runs
                             (id, created_at, updated_at, source_id, status, started_at, finished_at, created_snapshots)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         """, (
                             run_id,
-                            now_iso,
-                            now_iso,
+                            fixture_now_iso,
+                            fixture_now_iso,
                             source_id,
                             "completed",
-                            now_iso,
-                            now_iso,
+                            fixture_now_iso,
+                            fixture_now_iso,
                             1
                         ))
 
@@ -10606,35 +11663,51 @@ class Handler(SimpleHTTPRequestHandler):
                         )
                         review_row = conn.execute("SELECT * FROM human_reviews WHERE id=?", (review_id,)).fetchone()
                     trusted_entry_id = ""
-                    if success and review_row and clean_text(review_row["subject_type"]).lower() == "stock_snapshot":
-                        snapshot_id = clean_text(review_row["evidence_id"] or review_row["subject_id"])
-                        with connect() as conn:
-                            snapshot_row = conn.execute("SELECT * FROM stock_snapshots WHERE id=?", (snapshot_id,)).fetchone()
-                        if snapshot_row and clean_text(payload.get("verdict") or "").lower() in {"confirm", "correct"}:
-                            created = create_entry(stock_snapshot_trusted_entry_payload(row_to_stock_snapshot(snapshot_row), dict(review_row)))
-                            trusted_entry_id = created.get("entry", {}).get("id", "")
+                    if success and review_row:
+                        subject_type = clean_text(review_row["subject_type"]).lower()
+                        verdict = clean_text(payload.get("verdict") or "").lower()
+                        if subject_type == "stock_snapshot":
+                            snapshot_id = clean_text(review_row["evidence_id"] or review_row["subject_id"])
                             with connect() as conn:
-                                conn.execute(
-                                    """
-                                    UPDATE stock_snapshots
-                                    SET updated_at=?, review_state=?, trusted_entry_id=?
-                                    WHERE id=?
-                                    """,
-                                    (now_iso(), "Trusted after review", trusted_entry_id, snapshot_id),
-                                )
-                                conn.commit()
-                        elif success and snapshot_row:
-                            next_state = "Needs review"
-                            if clean_text(payload.get("verdict") or "").lower() == "needs_more_evidence":
+                                snapshot_row = conn.execute("SELECT * FROM stock_snapshots WHERE id=?", (snapshot_id,)).fetchone()
+                            if snapshot_row and verdict in {"confirm", "correct"}:
+                                created = create_entry(stock_snapshot_trusted_entry_payload(row_to_stock_snapshot(snapshot_row), dict(review_row)))
+                                trusted_entry_id = created.get("entry", {}).get("id", "")
+                                with connect() as conn:
+                                    conn.execute(
+                                        """
+                                        UPDATE stock_snapshots
+                                        SET updated_at=?, review_state=?, trusted_entry_id=?
+                                        WHERE id=?
+                                        """,
+                                        (now_iso(), "Trusted after review", trusted_entry_id, snapshot_id),
+                                    )
+                                    conn.commit()
+                            elif snapshot_row:
                                 next_state = "Needs review"
-                            elif clean_text(payload.get("verdict") or "").lower() == "reject":
-                                next_state = "Needs review"
+                                with connect() as conn:
+                                    conn.execute(
+                                        "UPDATE stock_snapshots SET updated_at=?, review_state=? WHERE id=?",
+                                        (now_iso(), next_state, snapshot_id),
+                                    )
+                                    conn.commit()
+                        elif subject_type == "alert_event" and verdict in {"confirm", "correct"}:
+                            alert_event_id = clean_text(review_row["subject_id"])
                             with connect() as conn:
-                                conn.execute(
-                                    "UPDATE stock_snapshots SET updated_at=?, review_state=? WHERE id=?",
-                                    (now_iso(), next_state, snapshot_id),
-                                )
-                                conn.commit()
+                                alert_row = conn.execute("SELECT * FROM alert_events WHERE id=?", (alert_event_id,)).fetchone()
+                                if alert_row:
+                                    alert_event = alert_event_joined(conn, alert_row)
+                                    trusted_row = conn.execute("SELECT * FROM entries WHERE json_extract(metadata, '$.alert_event_id')=?", (alert_event_id,)).fetchone()
+                                    if not trusted_row:
+                                        created = create_entry(alert_alert_event_trusted_entry_payload(alert_event, dict(review_row)))
+                                        trusted_entry_id = created.get("entry", {}).get("id", "")
+                                    else:
+                                        trusted_entry_id = clean_text(trusted_row["id"])
+                                    conn.execute(
+                                        "UPDATE alert_events SET updated_at=?, trusted_entry_id=? WHERE id=?",
+                                        (now_iso(), trusted_entry_id, alert_event_id),
+                                    )
+                                    conn.commit()
                     return self.send_json({"recorded": success, "trusted_entry_id": trusted_entry_id}, 201 if success else 400)
                 except Exception as e:
                     return self.send_json({"error": str(e)}, 500)
@@ -10740,6 +11813,37 @@ class Handler(SimpleHTTPRequestHandler):
                     "watchlist": payload.get("watchlist"),
                     "simulate_state": payload.get("simulate_state") or payload.get("mode"),
                 }), 201)
+            if path == "/api/alerts/check":
+                with connect() as conn:
+                    return self.send_json(alert_check_engine(conn, payload), 201)
+            if path == "/api/alerts/test":
+                with connect() as conn:
+                    seed_alert_rules(conn)
+                    event = alert_manual_test_event(conn, payload)
+                    return self.send_json({"event": event, "created": True, "checked_at": now_iso()}, 201)
+            if path.startswith("/api/alerts/") and path.endswith("/acknowledge"):
+                alert_id = unquote(path.split("/api/alerts/", 1)[1].rsplit("/acknowledge", 1)[0])
+                with connect() as conn:
+                    return self.send_json({"success": True, "alert": alert_set_status(conn, alert_id, "acknowledged")}, 201)
+            if path.startswith("/api/alerts/") and path.endswith("/snooze"):
+                alert_id = unquote(path.split("/api/alerts/", 1)[1].rsplit("/snooze", 1)[0])
+                minutes = payload.get("minutes") or payload.get("duration_minutes") or 15
+                with connect() as conn:
+                    return self.send_json({"success": True, "alert": alert_set_status(conn, alert_id, "snoozed", minutes=int(minutes))}, 201)
+            if path.startswith("/api/alerts/") and path.endswith("/dismiss"):
+                alert_id = unquote(path.split("/api/alerts/", 1)[1].rsplit("/dismiss", 1)[0])
+                with connect() as conn:
+                    return self.send_json({"success": True, "alert": alert_set_status(conn, alert_id, "dismissed")}, 201)
+            if path.startswith("/api/alerts/") and path.endswith("/send-review"):
+                alert_id = unquote(path.split("/api/alerts/", 1)[1].rsplit("/send-review", 1)[0])
+                with connect() as conn:
+                    result = alert_send_to_review(conn, alert_id)
+                return self.send_json({"success": True, **result}, 201)
+            if path.startswith("/api/alerts/") and path.endswith("/convert-action"):
+                alert_id = unquote(path.split("/api/alerts/", 1)[1].rsplit("/convert-action", 1)[0])
+                with connect() as conn:
+                    result = alert_convert_to_action(conn, alert_id)
+                return self.send_json({"success": True, **result}, 201)
             if path == "/api/listening/projects":
                 return self.send_json(create_listening_project(payload), 201)
             if path == "/api/assets/projects":
