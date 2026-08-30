@@ -9,9 +9,17 @@ STATE_FILE="$RUNTIME_DIR/local_server.json"
 
 PORT="${INFO_ANALYZER_PORT:-8100}"
 HOST="${INFO_ANALYZER_HOST:-127.0.0.1}"
-ACTIVE_DB="${INFO_ANALYZER_DB_PATH:-$HOME/Library/Application Support/InfoAnalyzer/active/info_analyzer.db}"
+ACTIVE_DB="${INFO_ANALYZER_DB_PATH:-$HOME/Library/Application Support/InfoAnalyzer/pilot/info_analyzer.db}"
 TEST_DB="${INFO_ANALYZER_TEST_DB_PATH:-$HOME/Library/Application Support/InfoAnalyzer/test/info_analyzer_test.db}"
 API_KEY="${INFO_ANALYZER_API_KEY:-local-dev-key}"
+
+if [[ -x "$ROOT/.venv-live/bin/python3" ]]; then
+  PYTHON_BIN="$ROOT/.venv-live/bin/python3"
+elif [[ -x "$ROOT/.venv/bin/python3" ]]; then
+  PYTHON_BIN="$ROOT/.venv/bin/python3"
+else
+  PYTHON_BIN="python3"
+fi
 
 mkdir -p "$RUNTIME_DIR" "$(dirname "$ACTIVE_DB")" "$(dirname "$TEST_DB")"
 
@@ -25,7 +33,7 @@ if [[ -f "$PID_FILE" ]]; then
   fi
 fi
 
-if python3 - "$HOST" "$PORT" <<'PY'
+if "$PYTHON_BIN" - "$HOST" "$PORT" <<'PY'
 import socket
 import sys
 host, port = sys.argv[1], int(sys.argv[2])
@@ -74,7 +82,7 @@ JSON
     INFO_ANALYZER_API_KEY="$API_KEY" \
     INFO_ANALYZER_ENV=local \
     INFO_ANALYZER_DISABLE_DATA_PLANE_THREADS="${INFO_ANALYZER_DISABLE_DATA_PLANE_THREADS:-1}" \
-    python3 server.py --host "$HOST" --port "$PORT"
+    "$PYTHON_BIN" server.py --host "$HOST" --port "$PORT"
 fi
 
 pushd "$ROOT" >/dev/null
@@ -84,13 +92,13 @@ nohup env \
   INFO_ANALYZER_API_KEY="$API_KEY" \
   INFO_ANALYZER_ENV=local \
   INFO_ANALYZER_DISABLE_DATA_PLANE_THREADS="${INFO_ANALYZER_DISABLE_DATA_PLANE_THREADS:-1}" \
-  python3 server.py --host "$HOST" --port "$PORT" >"$LOG_FILE" 2>&1 &
+  "$PYTHON_BIN" server.py --host "$HOST" --port "$PORT" >"$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 popd >/dev/null
 
 echo "$SERVER_PID" > "$PID_FILE"
 
-python3 - "$HOST" "$PORT" "$ACTIVE_DB" "$TEST_DB" "$SHA" <<'PY'
+"$PYTHON_BIN" - "$HOST" "$PORT" "$ACTIVE_DB" "$TEST_DB" "$SHA" <<'PY'
 import json
 import sys
 import time

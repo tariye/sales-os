@@ -321,7 +321,7 @@
           <div>
             <p class="eyebrow">Alert Engine</p>
             <h2>Alert Center</h2>
-            <p class="subtitle">Visible in-app alerts only. Alerts are re-evaluated when this page loads or when Run Alert Check is pressed.</p>
+            <p class="subtitle">Visible in-app alerts only. The Inbox monitor updates automatically when the browser stream is connected; alerts are re-evaluated when this page loads or when Run Alert Check is pressed.</p>
           </div>
           <div class="buttons compact">
             <button id="runAlertCheck" class="primary small">Run Alert Check</button>
@@ -336,6 +336,27 @@
           </div>
         </div>
         <div id="alertEngineStats" class="stats"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Live Monitor</p>
+            <h2>Inbox Watcher</h2>
+            <p class="subtitle">The browser stream is only connected when the EventSource and heartbeat are both live.</p>
+          </div>
+          <button id="refreshLiveInbox" class="ghost small">Refresh</button>
+        </div>
+        <div id="liveMonitorBanner" class="banner banner-info">
+          <div class="banner-content">
+            <p><strong>LIVE MONITOR</strong></p>
+            <p><strong>Watcher:</strong> <span id="liveMonitorWatcherStatus">Stopped</span></p>
+            <p><strong>Browser stream:</strong> <span id="liveMonitorBrowserState">Disconnected</span></p>
+            <p><strong>Watching:</strong> <span id="liveMonitorWatching">n/a</span></p>
+            <p id="liveMonitorLastEvent" class="muted">Last event: n/a</p>
+          </div>
+        </div>
+        <div id="liveMonitorStats" class="stats"></div>
+        <div id="liveMonitorEvents" class="list"></div>
       </div>
       <div class="grid two">
         <div class="card">

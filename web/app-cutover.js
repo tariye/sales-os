@@ -46,6 +46,11 @@ let alertCheckResult = null;
 let currentAlertReviewId = null;
 let isLoadingAlertReviews = false;
 let isSubmittingAlertVerdict = false;
+let liveInboxData = null;
+let liveInboxEventSource = null;
+let liveInboxBrowserState = "Disconnected";
+let liveInboxLastHeartbeatAt = 0;
+let liveInboxHeartbeatTimer = null;
 const STOCK_WATCHLIST_KEY = "info-analyzer.stock-watchlist.v1";
 const STOCK_SNAPSHOT_MODE_KEY = "info-analyzer.stock-snapshot-mode.v1";
 const DEFAULT_STOCK_WATCHLIST = ["AAPL", "NVDA", "MSFT"];
@@ -263,6 +268,7 @@ function persistView(view) {
 function setActiveView(view) {
   const next = normalizeView(view);
   if (next !== "stock-intel") stopStockIntelAutoRefresh();
+  if (next !== "alert-center") stopLiveInboxStream();
   persistView(next);
   document.querySelectorAll(".tab").forEach(btn => btn.classList.toggle("active", btn.dataset.view === next));
   document.querySelectorAll(".panel").forEach(panel => panel.classList.toggle("active", panel.id === next));
@@ -282,8 +288,10 @@ function setActiveView(view) {
   if (next === "evidence") loadEvidence();
   if (next === "system-health") loadSystemHealth();
   if (next === "alert-center") {
+    loadLiveInboxStatus({ silent: true });
     loadAlerts();
     loadLocalSourceStatus();
+    startLiveInboxStream();
   }
   if (next === "stock-intel") {
     startStockIntelAutoRefresh();
@@ -1524,6 +1532,7 @@ function alertActionButtonText(alert) {
 
 function alertCardHTML(alert) {
   const isLocal = String(alert?.source || "") === "local_archive";
+  const isInbox = String(alert?.source || "") === "live_inbox";
   const reviewId = alert?.human_review_id || "";
   const convertDisabled = !alert?.can_convert_to_action && !alert?.converted_action_id;
   const snoozeButtons = [15, 60, 240, 1440].map(minutes => `
@@ -1547,6 +1556,15 @@ function alertCardHTML(alert) {
     </div>
     <p class="muted">${esc(alert.message || "")}</p>
     ${kvHTML("Why this fired", alert.message || "")}
+    ${isInbox ? kvHTML("Event type", alert.event_type || "") : ""}
+    ${isInbox ? kvHTML("Observed at", fmtDate(alert.observed_at || "")) : ""}
+    ${isInbox ? kvHTML("Filesystem modified at", fmtDate(alert.filesystem_modified_at || "")) : ""}
+    ${isInbox ? kvHTML("Filename", alert.filename || "") : ""}
+    ${isInbox ? kvHTML("Extension/type", alert.file_extension || "") : ""}
+    ${isInbox ? kvHTML("Size", alert.size_bytes !== undefined && alert.size_bytes !== null ? `${alert.size_bytes} bytes` : "") : ""}
+    ${isInbox ? kvHTML("Prior state", inboxStateSummary(alert.prior_state_json || alert.prior_state)) : ""}
+    ${isInbox ? kvHTML("Current state", inboxStateSummary(alert.current_state_json || alert.current_state)) : ""}
+    ${isInbox ? kvHTML("Ingestion state", alert.ingestion_state || "METADATA_ONLY") : ""}
     ${kvHTML("Triggered at", fmtDate(alert.triggered_at || ""))}
     ${kvHTML("Last checked at", fmtDate(alert.last_checked_at || ""))}
     ${kvHTML("Next step", alert.next_step || "")}
@@ -1556,6 +1574,8 @@ function alertCardHTML(alert) {
     ${isLocal ? kvHTML("Source label", alert.source_label || "") : ""}
     ${isLocal ? kvHTML("Relative path", alert.relative_path || "") : ""}
     ${isLocal ? kvHTML("Broken referenced path", alert.referenced_path || "") : ""}
+    ${isInbox ? kvHTML("Source root", alert.source_root || "") : ""}
+    ${isInbox ? kvHTML("Relative path", alert.relative_path || "") : ""}
     <div class="item-sublist">
       <b>Evidence</b>
       ${alertEvidenceHTML(alert)}
@@ -1779,6 +1799,7 @@ async function refreshAlertCenter() {
   await Promise.all([
     loadAlerts(),
     loadLocalSourceStatus(),
+    loadLiveInboxStatus({ silent: true }),
   ]);
 }
 
@@ -1790,6 +1811,227 @@ async function performAlertAction(alertId, action, payload = {}) {
   await loadAlerts({ silent: true });
   await loadAlertReviews();
   return result;
+}
+
+function inboxStateSummary(value) {
+  const state = typeof value === "string" ? safeJsonParse(value) : (value || {});
+  if (!state || typeof state !== "object") return "n/a";
+  const parts = [];
+  if ("present" in state) parts.push(state.present ? "present" : "missing");
+  if ("readable" in state) parts.push(state.readable ? "readable" : "unreadable");
+  if (state.size_bytes !== undefined && state.size_bytes !== null && state.size_bytes !== "") parts.push(`${state.size_bytes} bytes`);
+  if (state.filesystem_modified_at) parts.push(`modified ${fmtDate(state.filesystem_modified_at)}`);
+  return parts.length ? parts.join(" · ") : "n/a";
+}
+
+function safeJsonParse(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch (err) {
+    return null;
+  }
+}
+
+function liveInboxBrowserStateLabel() {
+  const heartbeatFresh = liveInboxLastHeartbeatAt ? (Date.now() - liveInboxLastHeartbeatAt) <= 12000 : false;
+  if (liveInboxEventSource && liveInboxEventSource.readyState === EventSource.OPEN && heartbeatFresh) {
+    return "Connected";
+  }
+  if (liveInboxEventSource && liveInboxEventSource.readyState === EventSource.CONNECTING) {
+    return "Reconnecting";
+  }
+  if (liveInboxEventSource) {
+    return heartbeatFresh ? "Connected" : "Reconnecting";
+  }
+  return liveInboxBrowserState || "Disconnected";
+}
+
+function renderLiveMonitorBanner(data) {
+  if (!$("liveMonitorBanner")) return;
+  liveInboxData = data || liveInboxData;
+  const watcherStatus = String(data?.watcher_status || "stopped").toLowerCase();
+  const browserState = liveInboxBrowserStateLabel();
+  let kind = "info";
+  if (watcherStatus === "degraded") kind = "warning";
+  else if (watcherStatus === "stopped") kind = "error";
+  else if (browserState === "Connected") kind = "success";
+  else if (browserState === "Reconnecting") kind = "warning";
+  $("liveMonitorBanner").className = `banner banner-${kind}`;
+  if ($("liveMonitorWatcherStatus")) {
+    $("liveMonitorWatcherStatus").textContent = watcherStatus === "running" ? "Running" : watcherStatus === "degraded" ? "Degraded" : "Stopped";
+  }
+  if ($("liveMonitorBrowserState")) {
+    $("liveMonitorBrowserState").textContent = browserState;
+  }
+  if ($("liveMonitorWatching")) {
+    const label = data?.source_label || "Info Analyzer Inbox";
+    $("liveMonitorWatching").textContent = data?.root ? `${label} · ${data.root}` : label;
+  }
+  if ($("liveMonitorLastEvent")) {
+    $("liveMonitorLastEvent").textContent = `Last event: ${data?.last_event_at ? fmtDate(data.last_event_at) : "n/a"} · Last reconciliation: ${data?.last_reconciliation_at ? fmtDate(data.last_reconciliation_at) : "n/a"}`;
+  }
+  if ($("liveMonitorStats")) {
+    const counts = data?.inventory_counts || {};
+    $("liveMonitorStats").innerHTML = [
+      statHTML(watcherStatus, "Watcher"),
+      statHTML(browserState, "Browser"),
+      statHTML(data?.event_count ?? 0, "Events"),
+      statHTML(counts.present ?? 0, "Present"),
+      statHTML(counts.unreadable ?? 0, "Unreadable"),
+      statHTML(data?.event_counts?.NEW_FILE ?? 0, "New files"),
+    ].join("");
+  }
+}
+
+function liveInboxEventCardHTML(event) {
+  if (!event) return "";
+  const alert = event.alert_event || {};
+  const prior = inboxStateSummary(event.prior_state);
+  const current = inboxStateSummary(event.current_state);
+  const severity = String(event.event_type || "").toUpperCase() === "NEW_FILE" ? "info" : (String(event.event_type || "").toUpperCase() === "FILE_CHANGED" ? "watch" : "important");
+  const lines = [
+    kvHTML("Event type", event.event_type || ""),
+    kvHTML("Source", event.source_label || ""),
+    kvHTML("Relative path", event.relative_path || ""),
+    kvHTML("Filename", event.filename || ""),
+    kvHTML("Extension/type", event.file_extension || ""),
+    kvHTML("Size", event.size_bytes !== undefined && event.size_bytes !== null ? `${event.size_bytes} bytes` : "n/a"),
+    kvHTML("Observed at", fmtDate(event.observed_at || "")),
+    kvHTML("Filesystem modified at", fmtDate(event.filesystem_modified_at || "")),
+    kvHTML("Prior state", prior),
+    kvHTML("Current state", current),
+    kvHTML("Ingestion state", event.ingestion_state || "METADATA_ONLY"),
+    kvHTML("Alert ID", alert.id || event.alert_event_id || ""),
+  ].filter(Boolean).join("");
+  return `<div class="item alert-card ${esc(alertSeverityClass({ severity }))}">
+    <div class="alert-card-head">
+      <div>
+        <h3>${esc(event.event_type || "Inbox Event")}</h3>
+        <div class="meta">
+          <span class="tag">${esc(event.source_label || "Info Analyzer Inbox")}</span>
+          <span class="tag">${esc(event.alert_event ? alertStateLabel(alert) : "Pending alert")}</span>
+          <span class="tag">${esc(event.seq || "")}</span>
+        </div>
+      </div>
+    </div>
+    ${lines}
+    ${event.evidence?.length ? `<div class="item-sublist"><b>Evidence</b>${alertEvidenceHTML(event)}</div>` : ""}
+  </div>`;
+}
+
+function renderLiveInboxEvents(data) {
+  if (!$("liveMonitorEvents")) return;
+  const events = data?.events || [];
+  if (!events.length) {
+    $("liveMonitorEvents").innerHTML = `<div class="item empty-state"><h3>No live inbox events</h3><p class="muted">Place a file into the configured Inbox to start the stream.</p></div>`;
+    return;
+  }
+  $("liveMonitorEvents").innerHTML = events.map(liveInboxEventCardHTML).join("");
+}
+
+async function loadLiveInboxStatus({ silent = false } = {}) {
+  if (!$("liveMonitorBanner")) return null;
+  try {
+    const data = await api("/live-inbox?limit=50");
+    liveInboxData = data;
+    renderLiveMonitorBanner(data);
+    renderLiveInboxEvents(data);
+    if (!silent && $("alertList")) {
+      await loadAlerts({ silent: true });
+    }
+    return data;
+  } catch (err) {
+    liveInboxData = null;
+    if ($("liveMonitorBanner")) {
+      $("liveMonitorBanner").className = "banner banner-error";
+    }
+    if ($("liveMonitorWatcherStatus")) $("liveMonitorWatcherStatus").textContent = "Stopped";
+    if ($("liveMonitorBrowserState")) $("liveMonitorBrowserState").textContent = "Disconnected";
+    if ($("liveMonitorWatching")) $("liveMonitorWatching").textContent = "n/a";
+    if ($("liveMonitorLastEvent")) $("liveMonitorLastEvent").textContent = err.message;
+    if ($("liveMonitorEvents")) {
+      $("liveMonitorEvents").innerHTML = `<div class="item error"><h3>Live monitor unavailable</h3><p class="muted">${esc(err.message)}</p></div>`;
+    }
+    return null;
+  }
+}
+
+function updateLiveInboxBrowserState(next) {
+  liveInboxBrowserState = next;
+  renderLiveMonitorBanner(liveInboxData || {});
+}
+
+function stopLiveInboxStream() {
+  if (liveInboxHeartbeatTimer) {
+    clearInterval(liveInboxHeartbeatTimer);
+    liveInboxHeartbeatTimer = null;
+  }
+  if (liveInboxEventSource) {
+    try {
+      liveInboxEventSource.close();
+    } catch (err) {}
+  }
+  liveInboxEventSource = null;
+  liveInboxLastHeartbeatAt = 0;
+  updateLiveInboxBrowserState("Disconnected");
+}
+
+function startLiveInboxStream() {
+  if (!$("liveMonitorBanner")) return;
+  if (liveInboxEventSource) return;
+  const source = new EventSource("/api/live-inbox/stream");
+  liveInboxEventSource = source;
+  updateLiveInboxBrowserState("Reconnecting");
+  source.onopen = () => {
+    updateLiveInboxBrowserState("Connected");
+  };
+  source.addEventListener("heartbeat", event => {
+    liveInboxLastHeartbeatAt = Date.now();
+    updateLiveInboxBrowserState("Connected");
+    try {
+      const payload = JSON.parse(event.data || "{}");
+      if (payload?.last_event_at || payload?.watcher_status) {
+        liveInboxData = {
+          ...(liveInboxData || {}),
+          ...payload,
+        };
+        renderLiveMonitorBanner(liveInboxData);
+      }
+    } catch (err) {}
+  });
+  source.addEventListener("observation", async event => {
+    liveInboxLastHeartbeatAt = Date.now();
+    try {
+      const payload = JSON.parse(event.data || "{}");
+      if (payload?.seq) {
+        liveInboxData = {
+          ...(liveInboxData || {}),
+          last_event_seq: payload.seq,
+          last_event_at: payload.observed_at || liveInboxData?.last_event_at || "",
+        };
+      }
+    } catch (err) {}
+    await loadLiveInboxStatus({ silent: true });
+    await loadAlerts({ silent: true });
+    await loadAlertReviews();
+  });
+  source.onerror = () => {
+    const state = source.readyState === EventSource.CLOSED ? "Disconnected" : "Reconnecting";
+    updateLiveInboxBrowserState(state);
+  };
+  liveInboxHeartbeatTimer = window.setInterval(() => {
+    if (!liveInboxEventSource) return;
+    if (!liveInboxLastHeartbeatAt) {
+      updateLiveInboxBrowserState(liveInboxEventSource.readyState === EventSource.OPEN ? "Connected" : "Reconnecting");
+      return;
+    }
+    const stale = Date.now() - liveInboxLastHeartbeatAt > 12000;
+    if (stale) {
+      updateLiveInboxBrowserState("Reconnecting");
+    }
+  }, 2500);
 }
 
 function alertReviewCardHTML(review) {
@@ -2447,6 +2689,7 @@ function bindRefreshButtons() {
   $("refreshEvidence")?.addEventListener("click", loadEvidence);
   $("refreshSystemHealth")?.addEventListener("click", loadSystemHealth);
   $("refreshAlerts")?.addEventListener("click", refreshAlertCenter);
+  $("refreshLiveInbox")?.addEventListener("click", () => loadLiveInboxStatus({ silent: true }));
   $("runAlertCheck")?.addEventListener("click", runAlertCheck);
   $("createTestAlert")?.addEventListener("click", createTestAlert);
   $("refreshLocalSource")?.addEventListener("click", loadLocalSourceStatus);
@@ -2575,3 +2818,4 @@ async function boot() {
 }
 
 window.addEventListener("load", boot);
+window.addEventListener("beforeunload", () => stopLiveInboxStream());

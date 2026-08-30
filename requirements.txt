@@ -1,3 +1,5 @@
 # Info Analyzer OS uses the Python standard library for the production API.
 # certifi supplies a stable CA bundle for HTTPS RSS/URL ingestion on local Python installs.
 certifi>=2026.6.20
+# watchdog provides the macOS FSEvents-backed Inbox watcher for the live monitor slice.
+watchdog==6.0.0

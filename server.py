@@ -85,6 +85,13 @@ try:
 except Exception:
     _analyze_stock = None  # type: ignore
 
+try:
+    from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer
+except Exception:
+    FileSystemEventHandler = None  # type: ignore
+    Observer = None  # type: ignore
+
 
 DEFAULT_STOCK_WATCHLIST = [
     {"symbol": "AAPL", "company": "Apple Inc."},
@@ -154,9 +161,9 @@ if not DB_PATH.is_absolute():
     DB_PATH = BASE_DIR / DB_PATH
 TEST_DB_PATH_RAW = os.environ.get("INFO_ANALYZER_TEST_DB_PATH", "").strip()
 
-ALERT_APP_VERSION = "v0.99.1-alert-command-center-slice"
+ALERT_APP_VERSION = "v0.99.2-live-inbox-monitor"
 APP_VERSION = ALERT_APP_VERSION
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 DATA_PLANE_LEASE_SECONDS = 30
 SCHEDULER_LEASE_SECONDS = 8
 RECOVERY_RETRY_DELAY_SECONDS = 2
@@ -169,11 +176,28 @@ LOCAL_SOURCE_ROOT = Path(LOCAL_SOURCE_ROOT_RAW).expanduser() if LOCAL_SOURCE_ROO
 if not LOCAL_SOURCE_ROOT.is_absolute():
     LOCAL_SOURCE_ROOT = Path(__file__).resolve().parent / LOCAL_SOURCE_ROOT
 LOCAL_SOURCE_LABEL = "Previous Computer / Local Archive"
+INBOX_ROOT_RAW = os.environ.get("INFO_ANALYZER_INBOX_ROOT", "").strip()
+DEFAULT_INBOX_ROOT = DEFAULT_LOCAL_SOURCE_ROOT / "Info Analyzer Inbox"
+INBOX_ROOT = Path(INBOX_ROOT_RAW).expanduser() if INBOX_ROOT_RAW else DEFAULT_INBOX_ROOT
+if not INBOX_ROOT.is_absolute():
+    INBOX_ROOT = Path(__file__).resolve().parent / INBOX_ROOT
+LIVE_INBOX_LABEL = "Info Analyzer Inbox"
+LIVE_INBOX_HEARTBEAT_SECONDS = 5
+LIVE_INBOX_DEBOUNCE_SECONDS = 0.75
+LIVE_INBOX_MAX_HASH_BYTES = 5 * 1024 * 1024
+LIVE_INBOX_WATCHER_STATUS = "stopped"
+LIVE_INBOX_STREAM_STATUS = "disconnected"
+LIVE_INBOX_RUNTIME_LOCK = threading.RLock()
+LIVE_INBOX_RUNTIME = None
 ALERT_RULE_IDS = {
     "test_fixture": "ALERT-RULE-TEST-FIXTURE",
     "stock_provider_error": "ALERT-RULE-STOCK-PROVIDER-ERROR",
     "stock_stale": "ALERT-RULE-STOCK-STALE",
     "broken_local_reference": "ALERT-RULE-BROKEN-LOCAL-REFERENCE",
+    "live_new_file": "ALERT-RULE-LIVE-INBOX-NEW-FILE",
+    "live_file_changed": "ALERT-RULE-LIVE-INBOX-FILE-CHANGED",
+    "live_file_removed": "ALERT-RULE-LIVE-INBOX-FILE-REMOVED",
+    "live_file_unreadable": "ALERT-RULE-LIVE-INBOX-FILE-UNREADABLE",
 }
 
 FEATURE_REGISTRY = [
@@ -399,6 +423,15 @@ FEATURE_REGISTRY = [
     },
 ]
 APP_VERSIONS = [
+    {
+        "version": "v0.99.2",
+        "name": "Live Inbox Monitor",
+        "features": [
+            "Dedicated Info Analyzer Inbox watcher uses watchdog/FSEvents on macOS",
+            "Normalized live file observations are persisted and replayed over SSE",
+            "Alert Center shows live connection truth, replayed events, and review-first alert cards",
+        ],
+    },
     {
         "version": "v0.98",
         "name": "Public Market Snapshot Command Center",
@@ -5681,6 +5714,28 @@ def runtime_status() -> dict:
     test_db_path = resolve_test_db_path()
     sqlite_status = sqlite_runtime_status()
     data_plane = data_plane_status()
+    try:
+        live_inbox = live_inbox_runtime().live_status()
+    except Exception:
+        live_inbox = {
+            "source_label": LIVE_INBOX_LABEL,
+            "root": str(live_inbox_root()),
+            "accessible": bool(live_inbox_root().exists() and live_inbox_root().is_dir()),
+            "watcher_status": "stopped",
+            "watcher_message": "",
+            "last_event_seq": 0,
+            "last_event_at": "",
+            "last_reconciliation_at": "",
+            "last_reconciliation_created": 0,
+            "last_reconciliation_updated": 0,
+            "last_reconciliation_resolved": 0,
+            "heartbeat_at": "",
+            "events": [],
+            "event_count": 0,
+            "event_counts": {},
+            "inventory_counts": {},
+            "state": {},
+        }
     return {
         "ok": True,
         "server": "connected",
@@ -5700,6 +5755,9 @@ def runtime_status() -> dict:
         "test_db_id": test_db_identifier(test_db_path),
         "test_db_configured": bool(TEST_DB_PATH_RAW),
         "test_db_exists": test_db_path.exists(),
+        "live_inbox_root": str(live_inbox_root()),
+        "live_inbox_root_accessible": bool(live_inbox_root().exists() and live_inbox_root().is_dir()),
+        "live_inbox": live_inbox,
         "last_api_status": "ok",
         "generated_at": now_iso(),
         "sqlite": sqlite_status,
@@ -9308,11 +9366,90 @@ def ensure_alert_schema(conn) -> None:
             FOREIGN KEY(rule_id) REFERENCES alert_rules(id)
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS live_inbox_state (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            source_label TEXT NOT NULL,
+            source_root TEXT NOT NULL,
+            watcher_status TEXT NOT NULL DEFAULT 'stopped',
+            watcher_message TEXT NOT NULL DEFAULT '',
+            last_event_seq INTEGER DEFAULT 0,
+            last_event_at TEXT,
+            last_reconciliation_at TEXT,
+            last_reconciliation_created INTEGER DEFAULT 0,
+            last_reconciliation_updated INTEGER DEFAULT 0,
+            last_reconciliation_resolved INTEGER DEFAULT 0,
+            heartbeat_at TEXT,
+            metadata TEXT DEFAULT '{}'
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS live_inbox_inventory (
+            relative_path TEXT PRIMARY KEY,
+            source_label TEXT NOT NULL,
+            source_root TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            file_extension TEXT,
+            size_bytes INTEGER,
+            filesystem_modified_at TEXT,
+            content_signature TEXT,
+            is_present INTEGER NOT NULL DEFAULT 1,
+            readable INTEGER NOT NULL DEFAULT 1,
+            unreadable_reason TEXT,
+            last_observed_at TEXT NOT NULL,
+            last_event_type TEXT,
+            last_event_seq INTEGER,
+            state_json TEXT DEFAULT '{}',
+            metadata TEXT DEFAULT '{}'
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS live_inbox_events (
+            seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            id TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            source_label TEXT NOT NULL,
+            source_root TEXT NOT NULL,
+            relative_path TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            file_extension TEXT,
+            size_bytes INTEGER,
+            filesystem_modified_at TEXT,
+            event_type TEXT NOT NULL,
+            prior_state_json TEXT DEFAULT '{}',
+            current_state_json TEXT DEFAULT '{}',
+            evidence_json TEXT DEFAULT '[]',
+            ingestion_state TEXT DEFAULT 'METADATA_ONLY',
+            alert_event_id TEXT,
+            metadata TEXT DEFAULT '{}'
+        )
+    """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_alert_rules_enabled ON alert_rules(enabled, severity, updated_at DESC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_alert_rules_condition_type ON alert_rules(condition_type, enabled)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_alert_events_rule ON alert_events(rule_id, updated_at DESC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_alert_events_status ON alert_events(status, last_checked_at DESC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_alert_events_dedupe ON alert_events(dedupe_key, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_live_inbox_state_updated ON live_inbox_state(updated_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_live_inbox_inventory_present ON live_inbox_inventory(is_present, last_observed_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_live_inbox_inventory_path ON live_inbox_inventory(relative_path)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_live_inbox_events_seq ON live_inbox_events(seq DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_live_inbox_events_path ON live_inbox_events(relative_path, event_type, created_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_live_inbox_events_alert ON live_inbox_events(alert_event_id)")
+    ensure_column(conn, "alert_events", "event_type", "TEXT")
+    ensure_column(conn, "alert_events", "source_root", "TEXT")
+    ensure_column(conn, "alert_events", "filename", "TEXT")
+    ensure_column(conn, "alert_events", "file_extension", "TEXT")
+    ensure_column(conn, "alert_events", "size_bytes", "INTEGER")
+    ensure_column(conn, "alert_events", "observed_at", "TEXT")
+    ensure_column(conn, "alert_events", "filesystem_modified_at", "TEXT")
+    ensure_column(conn, "alert_events", "prior_state_json", "TEXT DEFAULT '{}' ")
+    ensure_column(conn, "alert_events", "current_state_json", "TEXT DEFAULT '{}' ")
+    ensure_column(conn, "alert_events", "ingestion_state", "TEXT DEFAULT 'METADATA_ONLY'")
+    ensure_column(conn, "alert_events", "live_event_id", "TEXT")
+    ensure_column(conn, "alert_events", "live_event_seq", "INTEGER")
     seed_alert_rules(conn)
 
 
@@ -9362,6 +9499,50 @@ def seed_alert_rules(conn) -> None:
             "enabled": 1,
             "source": "local_archive",
             "metadata": {"source_label": LOCAL_SOURCE_LABEL, "read_only": True},
+        },
+        {
+            "id": ALERT_RULE_IDS["live_new_file"],
+            "name": "Inbox new file",
+            "domain": "Inbox",
+            "condition_type": "live_inbox_new_file",
+            "condition_json": {"event_type": "NEW_FILE", "source_root_env": "INFO_ANALYZER_INBOX_ROOT"},
+            "severity": "info",
+            "enabled": 1,
+            "source": "live_inbox",
+            "metadata": {"source_label": LIVE_INBOX_LABEL, "source_root_env": "INFO_ANALYZER_INBOX_ROOT"},
+        },
+        {
+            "id": ALERT_RULE_IDS["live_file_changed"],
+            "name": "Inbox file changed",
+            "domain": "Inbox",
+            "condition_type": "live_inbox_file_changed",
+            "condition_json": {"event_type": "FILE_CHANGED", "source_root_env": "INFO_ANALYZER_INBOX_ROOT"},
+            "severity": "watch",
+            "enabled": 1,
+            "source": "live_inbox",
+            "metadata": {"source_label": LIVE_INBOX_LABEL, "source_root_env": "INFO_ANALYZER_INBOX_ROOT"},
+        },
+        {
+            "id": ALERT_RULE_IDS["live_file_removed"],
+            "name": "Inbox file removed",
+            "domain": "Inbox",
+            "condition_type": "live_inbox_file_removed",
+            "condition_json": {"event_type": "FILE_REMOVED", "source_root_env": "INFO_ANALYZER_INBOX_ROOT"},
+            "severity": "important",
+            "enabled": 1,
+            "source": "live_inbox",
+            "metadata": {"source_label": LIVE_INBOX_LABEL, "source_root_env": "INFO_ANALYZER_INBOX_ROOT"},
+        },
+        {
+            "id": ALERT_RULE_IDS["live_file_unreadable"],
+            "name": "Inbox file unreadable",
+            "domain": "Inbox",
+            "condition_type": "live_inbox_file_unreadable",
+            "condition_json": {"event_type": "FILE_UNREADABLE", "source_root_env": "INFO_ANALYZER_INBOX_ROOT"},
+            "severity": "important",
+            "enabled": 1,
+            "source": "live_inbox",
+            "metadata": {"source_label": LIVE_INBOX_LABEL, "source_root_env": "INFO_ANALYZER_INBOX_ROOT"},
         },
     ]
     for rule in rules:
@@ -10221,6 +10402,959 @@ def alert_convert_to_action(conn, alert_id: str) -> dict:
     }
 
 
+def live_inbox_root() -> Path:
+    return INBOX_ROOT
+
+
+def ensure_live_inbox_root() -> Path:
+    root = live_inbox_root()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def live_inbox_path_ignored(path: Path, root: Path | None = None) -> bool:
+    root = Path(root or live_inbox_root()).expanduser()
+    try:
+        rel = path.relative_to(root)
+    except Exception:
+        return True
+    if not rel.parts:
+        return False
+    name = path.name
+    if name in {".DS_Store", "Thumbs.db"}:
+        return True
+    if name.startswith("._") or name.startswith("~$") or name.startswith(".~"):
+        return True
+    if name.endswith(("~", ".tmp", ".temp", ".swp", ".swx", ".part", ".download")):
+        return True
+    if any(part.startswith(".") for part in rel.parts):
+        return True
+    return False
+
+
+def live_inbox_row_to_state(row) -> dict:
+    state = dict(row)
+    state["metadata"] = json_loads(state.get("metadata"), {})
+    state["state"] = json_loads(state.get("state_json"), {})
+    return state
+
+
+def live_inbox_row_to_event(row) -> dict:
+    event = dict(row)
+    event["prior_state"] = json_loads(event.get("prior_state_json"), {})
+    event["current_state"] = json_loads(event.get("current_state_json"), {})
+    event["evidence"] = json_loads(event.get("evidence_json"), [])
+    event["metadata"] = json_loads(event.get("metadata"), {})
+    return event
+
+
+def live_inbox_state_signature(state: dict) -> str:
+    if not state or not state.get("present"):
+        return "missing"
+    if not state.get("readable", True):
+        return f"unreadable:{state.get('unreadable_reason') or 'unknown'}"
+    return ":".join([
+        str(state.get("size_bytes") or 0),
+        str(state.get("filesystem_modified_at") or ""),
+        str(state.get("content_signature") or ""),
+    ])
+
+
+def live_inbox_state_for_path(path: Path, root: Path | None = None, observed_at: str | None = None) -> dict:
+    root = Path(root or live_inbox_root()).expanduser()
+    observed_at = observed_at or now_iso()
+    rel = str(path.relative_to(root))
+    filename = path.name
+    extension = path.suffix.lstrip(".").lower()
+    state = {
+        "source_label": LIVE_INBOX_LABEL,
+        "source_root": str(root),
+        "relative_path": rel,
+        "filename": filename,
+        "extension": extension,
+        "size_bytes": None,
+        "filesystem_modified_at": "",
+        "content_signature": "",
+        "present": False,
+        "readable": False,
+        "unreadable_reason": "",
+        "observed_at": observed_at,
+    }
+    try:
+        if not path.exists():
+            return state
+        if path.is_dir():
+            state["present"] = False
+            return state
+        stat_result = path.stat()
+        state["present"] = True
+        state["readable"] = True
+        state["size_bytes"] = int(stat_result.st_size)
+        state["filesystem_modified_at"] = datetime.fromtimestamp(stat_result.st_mtime, tz=timezone.utc).isoformat(timespec="seconds")
+        state["content_signature"] = f"{stat_result.st_size}:{getattr(stat_result, 'st_mtime_ns', int(stat_result.st_mtime * 1_000_000_000))}"
+        return state
+    except Exception as exc:
+        state["present"] = True
+        state["readable"] = False
+        state["unreadable_reason"] = str(exc)
+        return state
+
+
+def live_inbox_detect_transition(previous: dict | None, current: dict) -> str:
+    if not current.get("present"):
+        if previous and previous.get("is_present"):
+            return "FILE_REMOVED"
+        return ""
+    if not current.get("readable", True):
+        if not previous or previous.get("readable", 1):
+            return "FILE_UNREADABLE"
+        return ""
+    if not previous or not previous.get("is_present"):
+        return "NEW_FILE"
+    previous_signature = previous.get("content_signature") or ""
+    current_signature = current.get("content_signature") or ""
+    if previous.get("readable", 1) and previous_signature != current_signature:
+        return "FILE_CHANGED"
+    if not previous.get("readable", 1) and current.get("readable", True):
+        return "FILE_CHANGED"
+    return ""
+
+
+def live_inbox_event_evidence(previous: dict | None, current: dict, event_type: str) -> list[str]:
+    evidence = [
+        f"Source label: {LIVE_INBOX_LABEL}",
+        f"Relative path: {current.get('relative_path') or ''}",
+        f"Filename: {current.get('filename') or ''}",
+        f"Event type: {event_type}",
+        f"Observed at: {current.get('observed_at') or now_iso()}",
+    ]
+    if current.get("filesystem_modified_at"):
+        evidence.append(f"Filesystem modified at: {current.get('filesystem_modified_at')}")
+    if current.get("size_bytes") is not None:
+        evidence.append(f"Size: {current.get('size_bytes')} bytes")
+    if previous:
+        evidence.append(f"Prior state: {'present' if previous.get('is_present') else 'missing'} / {'readable' if previous.get('readable', 0) else 'unreadable'}")
+    evidence.append(f"Current state: {'present' if current.get('present') else 'missing'} / {'readable' if current.get('readable') else 'unreadable'}")
+    evidence.append(f"Ingestion state: {current.get('ingestion_state') or 'METADATA_ONLY'}")
+    if current.get("unreadable_reason"):
+        evidence.append(f"Unreadable reason: {current.get('unreadable_reason')}")
+    return evidence
+
+
+def live_inbox_match_for_event(live_event: dict) -> dict:
+    event_type = clean_text(live_event.get("event_type") or "NEW_FILE").upper()
+    rule_map = {
+        "NEW_FILE": ALERT_RULE_IDS["live_new_file"],
+        "FILE_CHANGED": ALERT_RULE_IDS["live_file_changed"],
+        "FILE_REMOVED": ALERT_RULE_IDS["live_file_removed"],
+        "FILE_UNREADABLE": ALERT_RULE_IDS["live_file_unreadable"],
+    }
+    rule_id = rule_map.get(event_type, ALERT_RULE_IDS["live_new_file"])
+    title_map = {
+        "NEW_FILE": "NEW FILE",
+        "FILE_CHANGED": "FILE_CHANGED",
+        "FILE_REMOVED": "FILE_REMOVED",
+        "FILE_UNREADABLE": "FILE_UNREADABLE",
+    }
+    message_map = {
+        "NEW_FILE": "A new file appeared in the Info Analyzer Inbox.",
+        "FILE_CHANGED": "An existing Inbox file changed on disk.",
+        "FILE_REMOVED": "A previously known Inbox file was removed.",
+        "FILE_UNREADABLE": "A discovered Inbox file could not be read.",
+    }
+    severity_map = {
+        "NEW_FILE": "info",
+        "FILE_CHANGED": "watch",
+        "FILE_REMOVED": "important",
+        "FILE_UNREADABLE": "important",
+    }
+    next_step_map = {
+        "NEW_FILE": "Open the file event, acknowledge it, or send it to Human Review.",
+        "FILE_CHANGED": "Inspect the change, then acknowledge, snooze, dismiss, or send it to Human Review.",
+        "FILE_REMOVED": "Check whether the file was intentionally removed before acting.",
+        "FILE_UNREADABLE": "Inspect the file accessibility before treating it as usable evidence.",
+    }
+    current_state = live_event.get("current_state") or {}
+    prior_state = live_event.get("prior_state") or {}
+    dedupe_key = f"live-inbox:{live_event.get('id')}"
+    return {
+        "rule_id": rule_id,
+        "dedupe_key": dedupe_key,
+        "occurrence_key": dedupe_key,
+        "title": title_map.get(event_type, event_type),
+        "message": f"{live_event.get('filename') or live_event.get('relative_path') or 'Inbox file'} {message_map.get(event_type, 'changed in the Inbox.')}".strip(),
+        "severity": severity_map.get(event_type, "watch"),
+        "source": "live_inbox",
+        "source_label": LIVE_INBOX_LABEL,
+        "source_signal_id": live_event.get("id") or "",
+        "source_path": live_event.get("relative_path") or "",
+        "relative_path": live_event.get("relative_path") or "",
+        "referenced_path": "",
+        "entity": live_event.get("filename") or LIVE_INBOX_LABEL,
+        "event_type": event_type,
+        "source_root": live_event.get("source_root") or str(live_inbox_root()),
+        "filename": live_event.get("filename") or "",
+        "file_extension": live_event.get("file_extension") or "",
+        "size_bytes": live_event.get("size_bytes"),
+        "observed_at": live_event.get("observed_at") or now_iso(),
+        "filesystem_modified_at": live_event.get("filesystem_modified_at") or "",
+        "prior_state_json": json.dumps(prior_state, ensure_ascii=False),
+        "current_state_json": json.dumps(current_state, ensure_ascii=False),
+        "ingestion_state": live_event.get("ingestion_state") or "METADATA_ONLY",
+        "next_step": next_step_map.get(event_type, "Acknowledge, snooze, dismiss, or send it to Human Review."),
+        "evidence": live_event.get("evidence") or live_inbox_event_evidence(prior_state, current_state, event_type),
+        "condition_json": {
+            "kind": event_type.lower(),
+            "source_root_env": "INFO_ANALYZER_INBOX_ROOT",
+            "source_label": LIVE_INBOX_LABEL,
+            "relative_path": live_event.get("relative_path") or "",
+            "filename": live_event.get("filename") or "",
+            "file_extension": live_event.get("file_extension") or "",
+        },
+        "metadata": {
+            "live_inbox_event_id": live_event.get("id") or "",
+            "live_inbox_event_seq": live_event.get("seq") or 0,
+            "source_label": LIVE_INBOX_LABEL,
+            "source_root": live_event.get("source_root") or str(live_inbox_root()),
+            "event_type": event_type,
+        },
+    }
+
+
+def alert_sync_live_inbox_event(conn, live_event: dict, checked_at: str | None = None) -> dict:
+    checked_at = checked_at or now_iso()
+    match = live_inbox_match_for_event(live_event)
+    rule_row = conn.execute("SELECT * FROM alert_rules WHERE id=?", (match["rule_id"],)).fetchone()
+    if not rule_row:
+        raise KeyError(f"live inbox alert rule missing: {match['rule_id']}")
+    rule = row_to_alert_rule(rule_row)
+    existing = conn.execute(
+        "SELECT * FROM alert_events WHERE source_signal_id=? AND rule_id=? ORDER BY updated_at DESC LIMIT 1",
+        (match["source_signal_id"], match["rule_id"]),
+    ).fetchone()
+    if existing:
+        existing_event = alert_event_joined(conn, existing)
+        updates = {
+            "updated_at": checked_at,
+            "last_checked_at": checked_at,
+            "title": match["title"],
+            "message": match["message"],
+            "severity": match["severity"],
+            "source": match["source"],
+            "source_label": match["source_label"],
+            "source_signal_id": match["source_signal_id"],
+            "source_path": match["source_path"],
+            "relative_path": match["relative_path"],
+            "referenced_path": match["referenced_path"],
+            "entity": match["entity"],
+            "event_type": match["event_type"],
+            "source_root": match["source_root"],
+            "filename": match["filename"],
+            "file_extension": match["file_extension"],
+            "size_bytes": match["size_bytes"],
+            "observed_at": match["observed_at"],
+            "filesystem_modified_at": match["filesystem_modified_at"],
+            "prior_state_json": match["prior_state_json"],
+            "current_state_json": match["current_state_json"],
+            "ingestion_state": match["ingestion_state"],
+            "next_step": match["next_step"],
+            "evidence_json": json.dumps(match["evidence"], ensure_ascii=False),
+            "condition_json": json.dumps(match["condition_json"], ensure_ascii=False),
+            "metadata": json.dumps({
+                **(existing_event.get("metadata") or {}),
+                **(match.get("metadata") or {}),
+                "last_live_inbox_check_at": checked_at,
+            }, ensure_ascii=False),
+        }
+        existing_status = clean_text(existing_event.get("status"))
+        if existing_status in {"new", "acknowledged", "snoozed", "dismissed", "resolved"}:
+            updates["status"] = existing_status
+        elif existing_status == "converted_to_action":
+            updates["status"] = "converted_to_action"
+        updated = alert_update_event(conn, existing_event["id"], updates)
+        conn.execute("UPDATE live_inbox_events SET alert_event_id=? WHERE id=?", (updated["id"], live_event["id"]))
+        return updated
+    alert = alert_create_or_refresh(conn, rule, match, checked_at)[0]
+    conn.execute("UPDATE live_inbox_events SET alert_event_id=? WHERE id=?", (alert["id"], live_event["id"]))
+    return alert
+
+
+def row_to_live_inbox_state_summary() -> dict:
+    return {
+        "source_label": LIVE_INBOX_LABEL,
+        "root": str(live_inbox_root()),
+        "accessible": live_inbox_root().exists() and live_inbox_root().is_dir(),
+    }
+
+
+def live_inbox_state_row_defaults() -> dict:
+    now = now_iso()
+    return {
+        "id": "default",
+        "created_at": now,
+        "updated_at": now,
+        "source_label": LIVE_INBOX_LABEL,
+        "source_root": str(live_inbox_root()),
+        "watcher_status": "stopped",
+        "watcher_message": "Not started",
+        "last_event_seq": 0,
+        "last_event_at": "",
+        "last_reconciliation_at": "",
+        "last_reconciliation_created": 0,
+        "last_reconciliation_updated": 0,
+        "last_reconciliation_resolved": 0,
+        "heartbeat_at": "",
+        "metadata": json.dumps({"source_label": LIVE_INBOX_LABEL, "source_root": str(live_inbox_root())}, ensure_ascii=False),
+    }
+
+
+def live_inbox_state_upsert(conn, updates: dict) -> dict:
+    now = now_iso()
+    defaults = live_inbox_state_row_defaults()
+    existing = conn.execute("SELECT * FROM live_inbox_state WHERE id='default'").fetchone()
+    if existing:
+        current = live_inbox_row_to_state(existing)
+        current_metadata = current.get("metadata") if isinstance(current.get("metadata"), dict) else json_loads(current.get("metadata"), {})
+        merged_metadata = updates.get("metadata") if isinstance(updates.get("metadata"), dict) else {}
+        if not merged_metadata:
+            merged_metadata = current_metadata or {}
+        merged = {**current, **updates, "updated_at": now}
+        conn.execute(
+            """
+            UPDATE live_inbox_state
+            SET updated_at=?, source_label=?, source_root=?, watcher_status=?, watcher_message=?,
+                last_event_seq=?, last_event_at=?, last_reconciliation_at=?, last_reconciliation_created=?,
+                last_reconciliation_updated=?, last_reconciliation_resolved=?, heartbeat_at=?, metadata=?
+            WHERE id='default'
+            """,
+            (
+                merged.get("updated_at", now),
+                merged.get("source_label") or LIVE_INBOX_LABEL,
+                merged.get("source_root") or str(live_inbox_root()),
+                merged.get("watcher_status") or "stopped",
+                merged.get("watcher_message") or "",
+                int(merged.get("last_event_seq") or 0),
+                merged.get("last_event_at") or "",
+                merged.get("last_reconciliation_at") or "",
+                int(merged.get("last_reconciliation_created") or 0),
+                int(merged.get("last_reconciliation_updated") or 0),
+                int(merged.get("last_reconciliation_resolved") or 0),
+                merged.get("heartbeat_at") or "",
+                json.dumps(merged_metadata, ensure_ascii=False),
+            ),
+        )
+    else:
+        merged = {**defaults, **updates, "updated_at": now}
+        metadata_value = merged.get("metadata")
+        if not isinstance(metadata_value, dict):
+            metadata_value = json.loads(defaults["metadata"])
+        conn.execute(
+            """
+            INSERT INTO live_inbox_state (
+                id, created_at, updated_at, source_label, source_root, watcher_status, watcher_message,
+                last_event_seq, last_event_at, last_reconciliation_at, last_reconciliation_created,
+                last_reconciliation_updated, last_reconciliation_resolved, heartbeat_at, metadata
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                merged["id"], merged["created_at"], merged["updated_at"], merged.get("source_label") or LIVE_INBOX_LABEL,
+                merged.get("source_root") or str(live_inbox_root()), merged.get("watcher_status") or "stopped",
+                merged.get("watcher_message") or "", int(merged.get("last_event_seq") or 0),
+                merged.get("last_event_at") or "", merged.get("last_reconciliation_at") or "",
+                int(merged.get("last_reconciliation_created") or 0), int(merged.get("last_reconciliation_updated") or 0),
+                int(merged.get("last_reconciliation_resolved") or 0), merged.get("heartbeat_at") or "",
+                json.dumps(metadata_value, ensure_ascii=False),
+            ),
+        )
+    conn.commit()
+    row = conn.execute("SELECT * FROM live_inbox_state WHERE id='default'").fetchone()
+    return live_inbox_row_to_state(row)
+
+
+def live_inbox_state_load(conn) -> dict:
+    row = conn.execute("SELECT * FROM live_inbox_state WHERE id='default'").fetchone()
+    if row:
+        return live_inbox_row_to_state(row)
+    return live_inbox_state_upsert(conn, {})
+
+
+def live_inbox_inventory_lookup(conn) -> dict[str, dict]:
+    rows = conn.execute("SELECT * FROM live_inbox_inventory").fetchall()
+    return {clean_text(row["relative_path"]): live_inbox_row_to_state(row) for row in rows}
+
+
+def live_inbox_store_inventory(conn, state: dict, event_type: str, event_seq: int, observed_at: str) -> None:
+    relative_path = clean_text(state.get("relative_path"))
+    if not relative_path:
+        return
+    now = observed_at or now_iso()
+    existing = conn.execute("SELECT * FROM live_inbox_inventory WHERE relative_path=?", (relative_path,)).fetchone()
+    current_row = {
+        "source_label": state.get("source_label") or LIVE_INBOX_LABEL,
+        "source_root": state.get("source_root") or str(live_inbox_root()),
+        "filename": state.get("filename") or Path(relative_path).name,
+        "file_extension": state.get("extension") or Path(relative_path).suffix.lstrip(".").lower(),
+        "size_bytes": state.get("size_bytes"),
+        "filesystem_modified_at": state.get("filesystem_modified_at") or "",
+        "content_signature": state.get("content_signature") or "",
+        "is_present": 1 if state.get("present") else 0,
+        "readable": 1 if state.get("readable", False) else 0,
+        "unreadable_reason": state.get("unreadable_reason") or "",
+        "last_observed_at": now,
+        "last_event_type": event_type or "",
+        "last_event_seq": int(event_seq or 0),
+        "state_json": json.dumps({
+            "present": bool(state.get("present")),
+            "readable": bool(state.get("readable", False)),
+            "size_bytes": state.get("size_bytes"),
+            "filesystem_modified_at": state.get("filesystem_modified_at") or "",
+            "content_signature": state.get("content_signature") or "",
+            "observed_at": now,
+        }, ensure_ascii=False),
+        "metadata": json.dumps({
+            "source_label": state.get("source_label") or LIVE_INBOX_LABEL,
+            "observed_at": now,
+            "event_type": event_type,
+        }, ensure_ascii=False),
+    }
+    if existing:
+        conn.execute(
+            """
+            UPDATE live_inbox_inventory
+            SET source_label=?, source_root=?, filename=?, file_extension=?, size_bytes=?, filesystem_modified_at=?,
+                content_signature=?, is_present=?, readable=?, unreadable_reason=?, last_observed_at=?,
+                last_event_type=?, last_event_seq=?, state_json=?, metadata=?
+            WHERE relative_path=?
+            """,
+            (
+                current_row["source_label"], current_row["source_root"], current_row["filename"], current_row["file_extension"],
+                current_row["size_bytes"], current_row["filesystem_modified_at"], current_row["content_signature"],
+                current_row["is_present"], current_row["readable"], current_row["unreadable_reason"], current_row["last_observed_at"],
+                current_row["last_event_type"], current_row["last_event_seq"], current_row["state_json"], current_row["metadata"],
+                relative_path,
+            ),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO live_inbox_inventory (
+                relative_path, source_label, source_root, filename, file_extension, size_bytes, filesystem_modified_at,
+                content_signature, is_present, readable, unreadable_reason, last_observed_at, last_event_type,
+                last_event_seq, state_json, metadata
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                relative_path, current_row["source_label"], current_row["source_root"], current_row["filename"],
+                current_row["file_extension"], current_row["size_bytes"], current_row["filesystem_modified_at"],
+                current_row["content_signature"], current_row["is_present"], current_row["readable"], current_row["unreadable_reason"],
+                current_row["last_observed_at"], current_row["last_event_type"], current_row["last_event_seq"],
+                current_row["state_json"], current_row["metadata"],
+            ),
+        )
+
+
+def live_inbox_persist_transition(conn, previous: dict | None, current: dict) -> dict | None:
+    event_type = live_inbox_detect_transition(previous, current)
+    if not event_type:
+        if current.get("present"):
+            live_inbox_store_inventory(conn, current, "", 0, current.get("observed_at") or now_iso())
+        return None
+    observed_at = current.get("observed_at") or now_iso()
+    live_event_id = "LIN-" + uuid.uuid4().hex[:16].upper()
+    event_row = {
+        "id": live_event_id,
+        "created_at": observed_at,
+        "observed_at": observed_at,
+        "source_label": LIVE_INBOX_LABEL,
+        "source_root": str(live_inbox_root()),
+        "relative_path": current.get("relative_path") or "",
+        "filename": current.get("filename") or "",
+        "file_extension": current.get("extension") or "",
+        "size_bytes": current.get("size_bytes"),
+        "filesystem_modified_at": current.get("filesystem_modified_at") or "",
+        "event_type": event_type,
+        "prior_state_json": json.dumps(previous or {}, ensure_ascii=False),
+        "current_state_json": json.dumps(current or {}, ensure_ascii=False),
+        "evidence_json": json.dumps(live_inbox_event_evidence(previous, current, event_type), ensure_ascii=False),
+        "ingestion_state": "METADATA_ONLY",
+        "metadata": json.dumps({
+            "source_root": str(live_inbox_root()),
+            "source_label": LIVE_INBOX_LABEL,
+            "normalized_event_type": event_type,
+        }, ensure_ascii=False),
+    }
+    conn.execute(
+        """
+        INSERT INTO live_inbox_events (
+            id, created_at, observed_at, source_label, source_root, relative_path, filename, file_extension,
+            size_bytes, filesystem_modified_at, event_type, prior_state_json, current_state_json, evidence_json,
+            ingestion_state, metadata
+        ) VALUES (
+            :id, :created_at, :observed_at, :source_label, :source_root, :relative_path, :filename, :file_extension,
+            :size_bytes, :filesystem_modified_at, :event_type, :prior_state_json, :current_state_json, :evidence_json,
+            :ingestion_state, :metadata
+        )
+        """,
+        event_row,
+    )
+    event_db_row = conn.execute("SELECT * FROM live_inbox_events WHERE id=?", (live_event_id,)).fetchone()
+    live_event = live_inbox_row_to_event(event_db_row)
+    alert = alert_sync_live_inbox_event(conn, live_event, checked_at=observed_at)
+    conn.execute(
+        "UPDATE live_inbox_events SET alert_event_id=? WHERE id=?",
+        (alert["id"], live_event_id),
+    )
+    live_inbox_store_inventory(conn, current, event_type, int(live_event["seq"]), observed_at)
+    conn.execute(
+        "UPDATE live_inbox_state SET updated_at=?, last_event_seq=?, last_event_at=?, heartbeat_at=? WHERE id='default'",
+        (now_iso(), int(live_event["seq"]), observed_at, now_iso()),
+    )
+    conn.commit()
+    runtime = LIVE_INBOX_RUNTIME
+    if runtime is not None:
+        with runtime.condition:
+            runtime.latest_seq = max(runtime.latest_seq, int(live_event["seq"]))
+            runtime.last_event_at = observed_at
+            runtime.condition.notify_all()
+    return alert_event_joined(conn, conn.execute("SELECT * FROM alert_events WHERE id=?", (alert["id"],)).fetchone())
+
+
+def live_inbox_recent_events(conn, limit: int = 50) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM live_inbox_events ORDER BY seq DESC LIMIT ?",
+        (max(1, min(200, limit)),),
+    ).fetchall()
+    events = []
+    for row in rows:
+        event = live_inbox_row_to_event(row)
+        if event.get("alert_event_id"):
+            alert_row = conn.execute("SELECT * FROM alert_events WHERE id=?", (event["alert_event_id"],)).fetchone()
+            if alert_row:
+                event["alert_event"] = alert_event_joined(conn, alert_row)
+        events.append(event)
+    return events
+
+
+def live_inbox_status_payload(conn) -> dict:
+    state = live_inbox_state_load(conn)
+    inventory_rows = conn.execute("SELECT * FROM live_inbox_inventory ORDER BY last_observed_at DESC, relative_path ASC").fetchall()
+    events = live_inbox_recent_events(conn, limit=50)
+    counts_rows = conn.execute(
+        "SELECT event_type, COUNT(*) AS count FROM live_inbox_events GROUP BY event_type"
+    ).fetchall()
+    counts = {row["event_type"]: int(row["count"]) for row in counts_rows}
+    inventory_counts = {
+        "tracked": len(inventory_rows),
+        "present": sum(int(row["is_present"] or 0) for row in inventory_rows),
+        "missing": sum(1 for row in inventory_rows if not int(row["is_present"] or 0)),
+        "unreadable": sum(1 for row in inventory_rows if not int(row["readable"] or 0) and int(row["is_present"] or 0)),
+    }
+    return {
+        "source_label": LIVE_INBOX_LABEL,
+        "root": str(live_inbox_root()),
+        "accessible": live_inbox_root().exists() and live_inbox_root().is_dir(),
+        "watcher_status": state.get("watcher_status") or "stopped",
+        "watcher_message": state.get("watcher_message") or "",
+        "last_event_seq": int(state.get("last_event_seq") or 0),
+        "last_event_at": state.get("last_event_at") or "",
+        "last_reconciliation_at": state.get("last_reconciliation_at") or "",
+        "last_reconciliation_created": int(state.get("last_reconciliation_created") or 0),
+        "last_reconciliation_updated": int(state.get("last_reconciliation_updated") or 0),
+        "last_reconciliation_resolved": int(state.get("last_reconciliation_resolved") or 0),
+        "heartbeat_at": state.get("heartbeat_at") or "",
+        "events": events,
+        "event_count": len(events),
+        "event_counts": counts,
+        "inventory_counts": inventory_counts,
+        "state": state,
+    }
+
+
+def live_inbox_reconcile(conn, *, reason: str = "startup_reconciliation", observed_at: str | None = None) -> dict:
+    observed_at = observed_at or now_iso()
+    root = ensure_live_inbox_root()
+    previous_inventory = live_inbox_inventory_lookup(conn)
+    current_paths: dict[str, dict] = {}
+    for current_root, dirs, files in os.walk(root):
+        current_path_root = Path(current_root)
+        dirs[:] = [name for name in dirs if not name.startswith(".")]
+        for name in files:
+            path = current_path_root / name
+            if live_inbox_path_ignored(path, root):
+                continue
+            try:
+                current_paths[str(path.relative_to(root))] = live_inbox_state_for_path(path, root, observed_at)
+            except Exception:
+                continue
+    created = updated = resolved = 0
+    for relative_path, previous in previous_inventory.items():
+        if relative_path not in current_paths:
+            missing_state = {
+                "source_label": LIVE_INBOX_LABEL,
+                "source_root": str(root),
+                "relative_path": relative_path,
+                "filename": previous.get("filename") or Path(relative_path).name,
+                "extension": previous.get("file_extension") or Path(relative_path).suffix.lstrip(".").lower(),
+                "size_bytes": None,
+                "filesystem_modified_at": "",
+                "content_signature": "",
+                "present": False,
+                "readable": False,
+                "observed_at": observed_at,
+                "ingestion_state": "METADATA_ONLY",
+            }
+            alert = live_inbox_persist_transition(conn, previous, missing_state)
+            if alert:
+                created += 1
+            resolved += 0
+    for relative_path, current in current_paths.items():
+        previous = previous_inventory.get(relative_path)
+        alert = live_inbox_persist_transition(conn, previous, current)
+        if alert:
+            if previous and previous.get("last_event_type"):
+                updated += 1
+            else:
+                created += 1
+    state = live_inbox_state_upsert(conn, {
+        "watcher_status": "running" if Observer else "degraded",
+        "watcher_message": "Startup reconciliation completed" if Observer else "Watchdog unavailable; live monitoring degraded",
+        "last_reconciliation_at": observed_at,
+        "last_reconciliation_created": created,
+        "last_reconciliation_updated": updated,
+        "last_reconciliation_resolved": resolved,
+        "heartbeat_at": observed_at,
+        "metadata": {
+            "reason": reason,
+            "source_root": str(root),
+            "source_label": LIVE_INBOX_LABEL,
+        },
+    })
+    return {
+        "created": created,
+        "updated": updated,
+        "resolved": resolved,
+        "source_root": str(root),
+        "state": state,
+    }
+
+
+class LiveInboxRuntime:
+    def __init__(self) -> None:
+        self.root = live_inbox_root()
+        self.stop_event = threading.Event()
+        self.pending_paths: set[str] = set()
+        self.pending_lock = threading.Lock()
+        self.flush_timer: threading.Timer | None = None
+        self.observer = None
+        self.condition = threading.Condition()
+        self.latest_seq = 0
+        self.last_event_at = ""
+        self.watcher_status = "stopped"
+        self.watcher_message = "Not started"
+        self.last_heartbeat_at = ""
+        self.last_reconciliation = {"created": 0, "updated": 0, "resolved": 0}
+        self.ready = False
+
+    def _ensure_root(self) -> Path:
+        return ensure_live_inbox_root()
+
+    def _set_state(self, conn, **updates) -> dict:
+        state = live_inbox_state_upsert(conn, updates)
+        self.watcher_status = state.get("watcher_status") or self.watcher_status
+        self.watcher_message = state.get("watcher_message") or self.watcher_message
+        self.latest_seq = int(state.get("last_event_seq") or self.latest_seq or 0)
+        self.last_event_at = state.get("last_event_at") or self.last_event_at
+        self.last_heartbeat_at = state.get("heartbeat_at") or self.last_heartbeat_at
+        return state
+
+    def _handler(self):
+        runtime = self
+
+        class Handler(FileSystemEventHandler):  # type: ignore[misc]
+            def on_created(self, event):
+                if event.is_directory:
+                    return
+                runtime.mark_dirty(Path(event.src_path))
+
+            def on_modified(self, event):
+                if event.is_directory:
+                    return
+                runtime.mark_dirty(Path(event.src_path))
+
+            def on_moved(self, event):
+                if getattr(event, "dest_path", ""):
+                    runtime.mark_dirty(Path(event.dest_path))
+
+            def on_deleted(self, event):
+                if event.is_directory:
+                    return
+                runtime.mark_dirty(Path(event.src_path))
+
+        return Handler()
+
+    def mark_dirty(self, path: Path) -> None:
+        root = self.root
+        try:
+            path = Path(path).expanduser()
+            if not path.is_absolute():
+                path = (root / path).resolve()
+            rel = path.relative_to(root)
+        except Exception:
+            return
+        if live_inbox_path_ignored(path, root):
+            return
+        with self.pending_lock:
+            self.pending_paths.add(str(rel))
+            if self.flush_timer and self.flush_timer.is_alive():
+                return
+            self.flush_timer = threading.Timer(LIVE_INBOX_DEBOUNCE_SECONDS, self.flush_pending)
+            self.flush_timer.daemon = True
+            self.flush_timer.start()
+
+    def flush_pending(self) -> None:
+        with self.pending_lock:
+            rel_paths = sorted(self.pending_paths)
+            self.pending_paths.clear()
+            self.flush_timer = None
+        if not rel_paths:
+            return
+        try:
+            with connect() as conn:
+                seed_alert_rules(conn)
+                state = live_inbox_state_load(conn)
+                created = updated = resolved = 0
+                for rel_path in rel_paths:
+                    path = self.root / rel_path
+                    observed_at = now_iso()
+                    current = live_inbox_state_for_path(path, self.root, observed_at)
+                    previous_row = conn.execute("SELECT * FROM live_inbox_inventory WHERE relative_path=?", (rel_path,)).fetchone()
+                    previous = live_inbox_row_to_state(previous_row) if previous_row else None
+                    if not current.get("present") and not previous_row:
+                        continue
+                    alert = live_inbox_persist_transition(conn, previous, current)
+                    if alert:
+                        created += 1
+                        self.latest_seq = max(self.latest_seq, int(conn.execute("SELECT MAX(seq) AS seq FROM live_inbox_events").fetchone()["seq"] or 0))
+                        self.last_event_at = observed_at
+                state = live_inbox_state_load(conn)
+                self.watcher_status = state.get("watcher_status") or self.watcher_status
+                self.watcher_message = state.get("watcher_message") or self.watcher_message
+                self.last_heartbeat_at = state.get("heartbeat_at") or self.last_heartbeat_at
+                self.last_reconciliation = {"created": created, "updated": updated, "resolved": resolved}
+        except Exception as exc:
+            self.watcher_status = "degraded"
+            self.watcher_message = str(exc)
+            with connect() as conn:
+                live_inbox_state_upsert(conn, {
+                    "watcher_status": "degraded",
+                    "watcher_message": str(exc),
+                    "heartbeat_at": now_iso(),
+                })
+
+    def start(self) -> dict:
+        root = self._ensure_root()
+        try:
+            with connect() as conn:
+                seed_alert_rules(conn)
+                status = live_inbox_reconcile(conn, reason="startup", observed_at=now_iso())
+                self.latest_seq = int(status.get("state", {}).get("last_event_seq") or 0)
+                self.last_event_at = status.get("state", {}).get("last_event_at") or ""
+                self.watcher_status = status.get("state", {}).get("watcher_status") or "stopped"
+                self.watcher_message = status.get("state", {}).get("watcher_message") or ""
+                self.last_heartbeat_at = status.get("state", {}).get("heartbeat_at") or now_iso()
+        except Exception as exc:
+            self.watcher_status = "degraded"
+            self.watcher_message = str(exc)
+            with connect() as conn:
+                live_inbox_state_upsert(conn, {
+                    "watcher_status": "degraded",
+                    "watcher_message": str(exc),
+                    "heartbeat_at": now_iso(),
+                })
+            return {"watcher_status": self.watcher_status, "watcher_message": self.watcher_message}
+        if Observer is None or FileSystemEventHandler is None:
+            self.watcher_status = "degraded"
+            self.watcher_message = "watchdog is not installed"
+            with connect() as conn:
+                live_inbox_state_upsert(conn, {
+                    "watcher_status": self.watcher_status,
+                    "watcher_message": self.watcher_message,
+                    "heartbeat_at": now_iso(),
+                })
+            return {"watcher_status": self.watcher_status, "watcher_message": self.watcher_message}
+        try:
+            observer = Observer()
+            observer.schedule(self._handler(), str(root), recursive=True)
+            observer.start()
+            self.observer = observer
+            self.watcher_status = "running"
+            self.watcher_message = f"Watching {root}"
+            self.ready = True
+            with connect() as conn:
+                live_inbox_state_upsert(conn, {
+                    "watcher_status": self.watcher_status,
+                    "watcher_message": self.watcher_message,
+                    "heartbeat_at": now_iso(),
+                })
+            return {"watcher_status": self.watcher_status, "watcher_message": self.watcher_message}
+        except Exception as exc:
+            self.watcher_status = "degraded"
+            self.watcher_message = str(exc)
+            with connect() as conn:
+                live_inbox_state_upsert(conn, {
+                    "watcher_status": self.watcher_status,
+                    "watcher_message": self.watcher_message,
+                    "heartbeat_at": now_iso(),
+                })
+            return {"watcher_status": self.watcher_status, "watcher_message": self.watcher_message}
+
+    def stop(self) -> None:
+        self.stop_event.set()
+        if self.flush_timer and self.flush_timer.is_alive():
+            self.flush_timer.cancel()
+        if self.observer:
+            try:
+                self.observer.stop()
+                self.observer.join(timeout=5)
+            except Exception:
+                pass
+        self.watcher_status = "stopped"
+        self.watcher_message = "Stopped"
+        try:
+            with connect() as conn:
+                live_inbox_state_upsert(conn, {
+                    "watcher_status": self.watcher_status,
+                    "watcher_message": self.watcher_message,
+                    "heartbeat_at": now_iso(),
+                })
+        except Exception:
+            pass
+
+    def replay_since(self, last_seq: int = 0, limit: int = 200) -> list[dict]:
+        with connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM live_inbox_events WHERE seq > ? ORDER BY seq ASC LIMIT ?",
+                (int(last_seq or 0), max(1, min(500, limit))),
+            ).fetchall()
+            out = []
+            for row in rows:
+                event = live_inbox_row_to_event(row)
+                if event.get("alert_event_id"):
+                    alert_row = conn.execute("SELECT * FROM alert_events WHERE id=?", (event["alert_event_id"],)).fetchone()
+                    if alert_row:
+                        event["alert_event"] = alert_event_joined(conn, alert_row)
+                out.append(event)
+            return out
+
+    def live_status(self) -> dict:
+        with connect() as conn:
+            return live_inbox_status_payload(conn)
+
+    def publish_from_path(self, path: Path) -> dict | None:
+        root = self.root
+        if live_inbox_path_ignored(path, root):
+            return None
+        observed_at = now_iso()
+        try:
+            current = live_inbox_state_for_path(path, root, observed_at)
+        except Exception:
+            return None
+        with connect() as conn:
+            previous_row = conn.execute("SELECT * FROM live_inbox_inventory WHERE relative_path=?", (current.get("relative_path"),)).fetchone()
+            previous = live_inbox_row_to_state(previous_row) if previous_row else None
+            alert = live_inbox_persist_transition(conn, previous, current)
+            if alert:
+                live_inbox_state_upsert(conn, {
+                    "watcher_status": self.watcher_status or "running",
+                    "watcher_message": self.watcher_message or f"Watching {root}",
+                    "last_event_seq": int(conn.execute("SELECT MAX(seq) AS seq FROM live_inbox_events").fetchone()["seq"] or 0),
+                    "last_event_at": current.get("observed_at") or observed_at,
+                    "heartbeat_at": now_iso(),
+                })
+        return alert
+
+
+def live_inbox_runtime() -> LiveInboxRuntime:
+    global LIVE_INBOX_RUNTIME
+    with LIVE_INBOX_RUNTIME_LOCK:
+        if LIVE_INBOX_RUNTIME is None:
+            LIVE_INBOX_RUNTIME = LiveInboxRuntime()
+        return LIVE_INBOX_RUNTIME
+
+
+def start_live_inbox_runtime() -> dict:
+    runtime = live_inbox_runtime()
+    return runtime.start()
+
+
+def stop_live_inbox_runtime() -> None:
+    global LIVE_INBOX_RUNTIME
+    with LIVE_INBOX_RUNTIME_LOCK:
+        if LIVE_INBOX_RUNTIME is not None:
+            LIVE_INBOX_RUNTIME.stop()
+
+
+def live_inbox_stream_response(handler, params: dict | None = None) -> None:
+    params = params or {}
+    runtime = live_inbox_runtime()
+    last_event_id = clean_text(handler.headers.get("Last-Event-ID") or params.get("cursor") or params.get("last_event_id") or "")
+    try:
+        last_seq = int(last_event_id or 0)
+    except Exception:
+        last_seq = 0
+    live_status = runtime.live_status()
+    handler.send_response(200)
+    handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
+    handler.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+    handler.send_header("Connection", "keep-alive")
+    handler.send_header("X-Accel-Buffering", "no")
+    handler.end_headers()
+
+    def write_event(event_name: str, payload: dict, event_id: int | str | None = None) -> None:
+        body = json.dumps(payload, ensure_ascii=False)
+        if event_id is not None:
+            handler.wfile.write(f"id: {event_id}\n".encode("utf-8"))
+        handler.wfile.write(f"event: {event_name}\n".encode("utf-8"))
+        for line in body.splitlines() or ["{}"]:
+            handler.wfile.write(f"data: {line}\n".encode("utf-8"))
+        handler.wfile.write(b"\n")
+        handler.wfile.flush()
+
+    try:
+        for event in runtime.replay_since(last_seq):
+            event_id = int(event.get("seq") or last_seq)
+            last_seq = max(last_seq, event_id)
+            write_event("observation", event, event_id=event_id)
+        while not runtime.stop_event.is_set():
+            try:
+                events = runtime.replay_since(last_seq, limit=20)
+                if events:
+                    for event in events:
+                        event_id = int(event.get("seq") or last_seq)
+                        last_seq = max(last_seq, event_id)
+                        write_event("observation", event, event_id=event_id)
+                    continue
+                live_status = runtime.live_status()
+                write_event("heartbeat", {
+                    "watcher_status": live_status.get("watcher_status") or "stopped",
+                    "watcher_message": live_status.get("watcher_message") or "",
+                    "last_event_seq": live_status.get("last_event_seq") or last_seq,
+                    "last_event_at": live_status.get("last_event_at") or "",
+                    "heartbeat_at": now_iso(),
+                }, event_id=live_status.get("last_event_seq") or last_seq or 0)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                break
+            except Exception:
+                break
+            with runtime.condition:
+                runtime.condition.wait(timeout=LIVE_INBOX_HEARTBEAT_SECONDS)
+    finally:
+        try:
+            handler.wfile.flush()
+        except Exception:
+            pass
+
+
 def row_to_raw_observation(row) -> dict:
     item = dict(row)
     item["tags"] = json_loads(item.get("tags"), [])
@@ -11004,6 +12138,12 @@ class Handler(SimpleHTTPRequestHandler):
                 inventory["broken_reference_count"] = len(broken)
                 inventory["broken_reference_samples"] = broken[:20]
                 return self.send_json(inventory)
+            if path == "/api/live-inbox":
+                with connect() as conn:
+                    seed_alert_rules(conn)
+                    return self.send_json(live_inbox_status_payload(conn))
+            if path == "/api/live-inbox/stream":
+                return live_inbox_stream_response(self, params)
             if path == "/api/alerts":
                 with connect() as conn:
                     seed_alert_rules(conn)
@@ -11997,16 +13137,20 @@ def main(argv=None):
     if args.no_serve:
         return
     stop_data_plane = start_data_plane_runtime()
+    live_inbox_start = start_live_inbox_runtime()
     httpd = Server((args.host, args.port), Handler)
     print(f"Info Analyzer OS {APP_VERSION} running at http://{args.host}:{args.port}")
     print(f"SQLite DB: {DB_PATH}")
     print(f"Cutover manifest: {MANIFEST_PATH}")
+    print(f"Live Inbox root: {live_inbox_root()}")
+    print(f"Live Inbox watcher: {live_inbox_start.get('watcher_status', 'stopped')} ({live_inbox_start.get('watcher_message', '')})")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nShutting down.")
     finally:
         stop_data_plane.set()
+        stop_live_inbox_runtime()
         httpd.server_close()
 
 
