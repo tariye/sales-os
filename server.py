@@ -38,6 +38,13 @@ try:
 except Exception:
     _analyze_stock = None  # type: ignore
 
+from core_database import configure_connection
+
+try:
+    from core_migrations import initialize_core_migrations
+except Exception:
+    initialize_core_migrations = None  # type: ignore
+
 
 def _get_anthropic_client():
     if _anthropic is None:
@@ -833,11 +840,7 @@ class ClosingConnection(sqlite3.Connection):
 def connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, factory=ClosingConnection)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 5000")
-    return conn
+    return configure_connection(conn)
 
 
 def sqlite_runtime_status() -> dict:
@@ -936,6 +939,19 @@ def init_db() -> None:
             metadata TEXT DEFAULT '{}',
             FOREIGN KEY(parent_entry_id) REFERENCES entries(id),
             FOREIGN KEY(supersedes_entry_id) REFERENCES entries(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS entity_aliases (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            canonical_entity_id TEXT NOT NULL,
+            canonical_name TEXT NOT NULL,
+            domain TEXT,
+            aliases TEXT DEFAULT '[]',
+            source_record_count INTEGER DEFAULT 0,
+            related_entry_ids TEXT DEFAULT '[]',
+            metadata TEXT DEFAULT '{}'
         );
 
         CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
@@ -1503,6 +1519,8 @@ def init_db() -> None:
         # Command Center. Running it on every startup can block the server
         # from binding while the memory graph is recomputed.
         conn.commit()
+    if initialize_core_migrations is not None:
+        initialize_core_migrations(DB_PATH)
 
 
 def ensure_column(conn, table: str, column: str, definition: str) -> None:
