@@ -41,6 +41,12 @@ except Exception:
 from core_database import configure_connection
 from core_alerts import list_alerts as core_list_alerts, respond_to_alert as core_respond_to_alert
 from core_events import MAX_EVENT_BODY_BYTES, create_event as core_create_event
+from core_innbank_routing import (
+    create_allocation_plan as innbank_create_allocation_plan,
+    get_allocation_plan as innbank_get_allocation_plan,
+    record_allocation_routing as innbank_record_allocation_routing,
+    respond_to_allocation_plan as innbank_respond_to_allocation_plan,
+)
 from core_processors import EventDispatcher, InnbankProcessingError
 
 try:
@@ -6818,6 +6824,10 @@ class Handler(SimpleHTTPRequestHandler):
             if path in {"/alerts", "/api/alerts"}:
                 limit = int(clean_text((params.get("limit") or ["50"])[0]) or 50)
                 return self.send_json(core_list_alerts(DB_PATH, limit=limit))
+            if path.startswith("/innbank/allocation-plans/") or path.startswith("/api/innbank/allocation-plans/"):
+                plan_tail = path.split("/api/innbank/allocation-plans/", 1)[1] if path.startswith("/api/innbank/allocation-plans/") else path.split("/innbank/allocation-plans/", 1)[1]
+                if plan_tail and not plan_tail.endswith("/respond") and not plan_tail.endswith("/routing"):
+                    return self.send_json({"success": True, **innbank_get_allocation_plan(DB_PATH, plan_tail)})
             if path in {"/", "/index.html"}:
                 return self.send_file(WEB_DIR / "index.html", "text/html; charset=utf-8")
             if path == "/app.js":
@@ -7047,6 +7057,19 @@ class Handler(SimpleHTTPRequestHandler):
                 status = 201 if result["created"] else 200
                 return self.send_json({"success": True, **result, "effects": effects}, status)
             payload = self.read_json()
+            if path in {"/innbank/allocation-plans", "/api/innbank/allocation-plans"}:
+                result = innbank_create_allocation_plan(DB_PATH, payload)
+                return self.send_json({"success": True, **result}, 201 if result.get("created") else 200)
+            if path.startswith("/innbank/allocation-plans/") or path.startswith("/api/innbank/allocation-plans/"):
+                plan_tail = path.split("/api/innbank/allocation-plans/", 1)[1] if path.startswith("/api/innbank/allocation-plans/") else path.split("/innbank/allocation-plans/", 1)[1]
+                if plan_tail.endswith("/respond"):
+                    plan_id = plan_tail[: -len("/respond")].rstrip("/")
+                    result = innbank_respond_to_allocation_plan(DB_PATH, plan_id, payload)
+                    return self.send_json({"success": True, **result})
+                if plan_tail.endswith("/routing"):
+                    plan_id = plan_tail[: -len("/routing")].rstrip("/")
+                    result = innbank_record_allocation_routing(DB_PATH, plan_id, payload)
+                    return self.send_json({"success": True, **result})
             if path.startswith("/api/v1/"):
                 return self.handle_v1_write("POST", path, payload)
             if path.startswith("/alerts/") or path.startswith("/api/alerts/"):

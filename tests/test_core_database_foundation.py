@@ -166,7 +166,7 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
         self.assertIn("core_actions", names)
         self.assertEqual(
             open_connection(db_path).execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0],
-            1,
+            2,
         )
 
     def test_existing_v03_database_can_receive_core_migration(self) -> None:
@@ -174,10 +174,11 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
         before = read_counts(db_path, LEGACY_TABLES)
         applied = initialize_core_migrations(db_path)
         after = read_counts(db_path, LEGACY_TABLES)
-        self.assertEqual(applied, [1])
+        self.assertEqual(applied, [1, 2])
         self.assertEqual(before, after)
         names = view_names(db_path)
         self.assertIn("core_record_links", table_names(db_path))
+        self.assertIn("innbank_allocation_plans", table_names(db_path))
         self.assertIn("v_core_open_alerts", names)
         self.assertIn("v_core_learning_loop", names)
 
@@ -193,10 +194,14 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
             migration_count = conn.execute(
                 "SELECT COUNT(*) FROM schema_migrations WHERE version = 1"
             ).fetchone()[0]
+            version_two_count = conn.execute(
+                "SELECT COUNT(*) FROM schema_migrations WHERE version = 2"
+            ).fetchone()[0]
         finally:
             conn.close()
         self.assertEqual(first_counts, second_counts)
         self.assertEqual(migration_count, 1)
+        self.assertEqual(version_two_count, 1)
 
     def test_legacy_tables_remain_present_and_readable(self) -> None:
         db_path = self.canonical_copy("legacy-readable.db")
@@ -491,9 +496,12 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
             rows = conn.execute("SELECT version, name FROM schema_migrations ORDER BY version").fetchall()
         finally:
             conn.close()
-        self.assertEqual(first, [1])
+        self.assertEqual(first, [1, 2])
         self.assertEqual(second, [])
-        self.assertEqual([(row["version"], row["name"]) for row in rows], [(1, "core_foundation")])
+        self.assertEqual(
+            [(row["version"], row["name"]) for row in rows],
+            [(1, "core_foundation"), (2, "innbank_allocation_and_routing")],
+        )
 
     def test_existing_v03_apis_and_ui_still_start(self) -> None:
         db_path = self.fresh_db_path("startup.db")
