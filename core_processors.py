@@ -10,6 +10,7 @@ from typing import Any
 
 from core_alerts import sync_alert_queue
 from home_sentinel import HomeSentinelProcessor, HomeSentinelProcessingError
+from module_processors import ModuleProcessingError, ModuleSignalProcessor, SUPPORTED_EVENTS
 
 
 CONFIRMED_INCOME = {"paycheck", "payroll", "earned_income"}
@@ -279,6 +280,7 @@ class EventDispatcher:
     def __init__(self) -> None:
         self.innbank = InnBankPaydayProcessor()
         self.home_sentinel = HomeSentinelProcessor()
+        self.module_processors = ModuleSignalProcessor()
 
     def dispatch(self, conn, event: dict[str, Any], *, deduplicated: bool) -> dict[str, Any]:
         if deduplicated:
@@ -293,4 +295,6 @@ class EventDispatcher:
             "detection_observed",
         }:
             return self.home_sentinel.process_event(conn, event)
+        if event.get("event_type") in SUPPORTED_EVENTS.get(event.get("source_system_id"), set()):
+            return self.module_processors.process_event(conn, event)
         return {"event_status": event.get("processing_status") or "new", "effects": []}

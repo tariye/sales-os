@@ -49,6 +49,7 @@ from core_innbank_routing import (
 )
 from core_processors import EventDispatcher, InnbankProcessingError
 from home_sentinel import HomeSentinelProcessingError
+from module_processors import ModuleProcessingError
 
 try:
     from core_migrations import initialize_core_migrations
@@ -7026,7 +7027,7 @@ class Handler(SimpleHTTPRequestHandler):
                                 "event_status",
                                 result["event"].get("processing_status"),
                             )
-                        except (InnbankProcessingError, HomeSentinelProcessingError) as e:
+                        except (InnbankProcessingError, HomeSentinelProcessingError, ModuleProcessingError) as e:
                             result["event"]["processing_status"] = "failed"
                             audit(conn, "validation_failed", "core_event", result["event"]["event_id"], {
                                 "method": "POST",
@@ -7190,7 +7191,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({"error": str(e)}, 404)
         except RequestBodyTooLarge as e:
             return self.send_json({"error": str(e)}, 413)
-        except (InnbankProcessingError, HomeSentinelProcessingError) as e:
+        except (InnbankProcessingError, HomeSentinelProcessingError, ModuleProcessingError) as e:
             return self.send_json({"error": str(e), "effects": e.effects}, 400)
         except ValueError as e:
             return self.send_json({"error": str(e)}, 400)
