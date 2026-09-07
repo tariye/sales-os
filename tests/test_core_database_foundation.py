@@ -114,7 +114,7 @@ def start_legacy_server(db_path: Path) -> tuple[subprocess.Popen[str], int]:
     env = os.environ.copy()
     env["INFO_ANALYZER_DB_PATH"] = str(db_path)
     env["PYTHONUNBUFFERED"] = "1"
-    for port in (8131, 8132, 8133, 8134, 8135, 8136, 8137, 8138, 8139, 8140):
+    for port in tuple(range(8150, 8180)):
         proc = subprocess.Popen(
             [sys.executable, "-u", "server.py", "--host", "127.0.0.1", "--port", str(port)],
             cwd=PROJECT_ROOT,

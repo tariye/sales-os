@@ -39,6 +39,8 @@ except Exception:
     _analyze_stock = None  # type: ignore
 
 from core_database import configure_connection
+from core_alerts import list_alerts as core_list_alerts, respond_to_alert as core_respond_to_alert
+from core_events import MAX_EVENT_BODY_BYTES, create_event as core_create_event
 
 try:
     from core_migrations import initialize_core_migrations
@@ -841,6 +843,10 @@ def connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, factory=ClosingConnection)
     return configure_connection(conn)
+
+
+class RequestBodyTooLarge(ValueError):
+    pass
 
 
 def sqlite_runtime_status() -> dict:
@@ -6639,15 +6645,53 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def read_json(self):
+    def read_json(self, max_bytes: int | None = None):
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0:
             return {}
+        if max_bytes is not None and length > max_bytes:
+            raise RequestBodyTooLarge("request body too large")
         raw = self.rfile.read(length).decode("utf-8")
         try:
             return json.loads(raw)
         except Exception as e:
             raise ValueError(f"invalid JSON: {e}")
+
+    def require_external_event_auth(self) -> bool:
+        expected = configured_api_key()
+        if not expected:
+            with connect() as conn:
+                audit(conn, "auth_failed", "core_event", None, {
+                    "method": "POST",
+                    "path": clean_text(urlparse(self.path).path),
+                    "status_code": 503,
+                })
+            self.send_json(
+                {"error": "INFO_ANALYZER_API_KEY is not configured on the server."},
+                503,
+            )
+            return False
+        auth = clean_text(self.headers.get("Authorization") or "")
+        if not auth.lower().startswith("bearer "):
+            with connect() as conn:
+                audit(conn, "auth_failed", "core_event", None, {
+                    "method": "POST",
+                    "path": clean_text(urlparse(self.path).path),
+                    "status_code": 401,
+                })
+            self.send_json({"error": "Bearer authentication is required."}, 401)
+            return False
+        provided = auth.split(" ", 1)[1].strip()
+        if not provided or not hmac.compare_digest(provided, expected):
+            with connect() as conn:
+                audit(conn, "auth_failed", "core_event", None, {
+                    "method": "POST",
+                    "path": clean_text(urlparse(self.path).path),
+                    "status_code": 401,
+                })
+            self.send_json({"error": "Invalid bearer token."}, 401)
+            return False
+        return True
 
     def require_api_auth(self, request_id: str = "") -> bool:
         expected = configured_api_key()
@@ -6770,6 +6814,9 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             if path.startswith("/api/v1/"):
                 return self.handle_v1_read(path, params)
+            if path in {"/alerts", "/api/alerts"}:
+                limit = int(clean_text((params.get("limit") or ["50"])[0]) or 50)
+                return self.send_json(core_list_alerts(DB_PATH, limit=limit))
             if path in {"/", "/index.html"}:
                 return self.send_file(WEB_DIR / "index.html", "text/html; charset=utf-8")
             if path == "/app.js":
@@ -6920,9 +6967,85 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path in {"/events", "/api/events"}:
+                if not self.require_external_event_auth():
+                    return
+                try:
+                    payload = self.read_json(max_bytes=MAX_EVENT_BODY_BYTES)
+                except RequestBodyTooLarge as e:
+                    with connect() as conn:
+                        audit(conn, "validation_failed", "core_event", None, {
+                            "method": "POST",
+                            "path": path,
+                            "status_code": 413,
+                            "error": str(e),
+                        })
+                    return self.send_json({"error": str(e)}, 413)
+                with connect() as conn:
+                    try:
+                        result = core_create_event(conn, payload)
+                    except KeyError as e:
+                        audit(conn, "validation_failed", "core_event", None, {
+                            "method": "POST",
+                            "path": path,
+                            "status_code": 404,
+                            "error": str(e),
+                        })
+                        return self.send_json({"error": str(e)}, 404)
+                    except ValueError as e:
+                        status = 413 if "too large" in str(e).lower() else 400
+                        audit(conn, "validation_failed", "core_event", None, {
+                            "method": "POST",
+                            "path": path,
+                            "status_code": status,
+                            "error": str(e),
+                        })
+                        return self.send_json({"error": str(e)}, status)
+                    audit(conn, "event_accepted" if result["created"] else "duplicate_event_received", "core_event", result["event"]["event_id"], {
+                        "method": "POST",
+                        "path": path,
+                        "status_code": 201 if result["created"] else 200,
+                        "source_system_id": result["event"]["source_system_id"],
+                        "event_type": result["event"]["event_type"],
+                        "dedupe_key": bool(result["event"].get("dedupe_key")),
+                    })
+                    conn.commit()
+                status = 201 if result["created"] else 200
+                return self.send_json({"success": True, **result}, status)
             payload = self.read_json()
             if path.startswith("/api/v1/"):
                 return self.handle_v1_write("POST", path, payload)
+            if path.startswith("/alerts/") or path.startswith("/api/alerts/"):
+                alert_id = path.split("/alerts/", 1)[1] if path.startswith("/alerts/") else path.split("/api/alerts/", 1)[1]
+                alert_id = alert_id.rsplit("/respond", 1)[0]
+                if not alert_id:
+                    return self.send_json({"error": "alert not found"}, 404)
+                with connect() as conn:
+                    try:
+                        result = core_respond_to_alert(DB_PATH, alert_id, payload)
+                    except KeyError as e:
+                        audit(conn, "alert_response_failed", "core_alert", alert_id, {
+                            "method": "POST",
+                            "path": path,
+                            "status_code": 404,
+                            "error": str(e),
+                        })
+                        return self.send_json({"error": str(e)}, 404)
+                    except ValueError as e:
+                        audit(conn, "alert_response_failed", "core_alert", alert_id, {
+                            "method": "POST",
+                            "path": path,
+                            "status_code": 400,
+                            "error": str(e),
+                        })
+                        return self.send_json({"error": str(e)}, 400)
+                    audit(conn, "alert_response", "core_alert", alert_id, {
+                        "method": "POST",
+                        "path": path,
+                        "status_code": 200,
+                        "response": clean_text(payload.get("response") or payload.get("action") or payload.get("status")),
+                    })
+                return self.send_json({"success": True, **result})
             if path == "/api/codify":
                 return self.send_json({"draft": codify_payload(payload)})
             if path == "/api/translate/ai":
@@ -7007,6 +7130,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json({"success": True, **result})
         except KeyError as e:
             return self.send_json({"error": str(e)}, 404)
+        except RequestBodyTooLarge as e:
+            return self.send_json({"error": str(e)}, 413)
         except ValueError as e:
             return self.send_json({"error": str(e)}, 400)
         except Exception as e:
