@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from core_alerts import sync_alert_queue
+from home_sentinel import HomeSentinelProcessor, HomeSentinelProcessingError
 
 
 CONFIRMED_INCOME = {"paycheck", "payroll", "earned_income"}
@@ -277,6 +278,7 @@ class EventDispatcher:
 
     def __init__(self) -> None:
         self.innbank = InnBankPaydayProcessor()
+        self.home_sentinel = HomeSentinelProcessor()
 
     def dispatch(self, conn, event: dict[str, Any], *, deduplicated: bool) -> dict[str, Any]:
         if deduplicated:
@@ -286,4 +288,9 @@ class EventDispatcher:
             and event.get("event_type") == "financial_inflow_posted"
         ):
             return self.innbank.process_event(conn, event)
+        if event.get("source_system_id") == "sys_home_sentinel" and event.get("event_type") in {
+            "camera_health_changed",
+            "detection_observed",
+        }:
+            return self.home_sentinel.process_event(conn, event)
         return {"event_status": event.get("processing_status") or "new", "effects": []}
