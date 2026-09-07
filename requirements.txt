@@ -1,2 +1,3 @@
 # Info Analyzer OS currently uses the Python standard library for the production API.
 # Keep this file so hosted Python builders can run `pip install -r requirements.txt`.
+mcp[cli]==2.2.0
