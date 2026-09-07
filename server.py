@@ -41,6 +41,7 @@ except Exception:
 from core_database import configure_connection
 from core_alerts import list_alerts as core_list_alerts, respond_to_alert as core_respond_to_alert
 from core_events import MAX_EVENT_BODY_BYTES, create_event as core_create_event
+from core_processors import EventDispatcher, InnbankProcessingError
 
 try:
     from core_migrations import initialize_core_migrations
@@ -6982,6 +6983,7 @@ class Handler(SimpleHTTPRequestHandler):
                         })
                     return self.send_json({"error": str(e)}, 413)
                 with connect() as conn:
+                    effects: list[dict] = []
                     try:
                         result = core_create_event(conn, payload)
                     except KeyError as e:
@@ -7001,6 +7003,38 @@ class Handler(SimpleHTTPRequestHandler):
                             "error": str(e),
                         })
                         return self.send_json({"error": str(e)}, status)
+                    if result["created"]:
+                        try:
+                            dispatch_result = EventDispatcher().dispatch(
+                                conn,
+                                result["event"],
+                                deduplicated=False,
+                            )
+                            effects = dispatch_result.get("effects", [])
+                            result["event"]["processing_status"] = dispatch_result.get(
+                                "event_status",
+                                result["event"].get("processing_status"),
+                            )
+                        except InnbankProcessingError as e:
+                            result["event"]["processing_status"] = "failed"
+                            audit(conn, "validation_failed", "core_event", result["event"]["event_id"], {
+                                "method": "POST",
+                                "path": path,
+                                "status_code": 400,
+                                "error": str(e),
+                                "event_type": result["event"]["event_type"],
+                                "source_system_id": result["event"]["source_system_id"],
+                            })
+                            conn.commit()
+                            return self.send_json(
+                                {
+                                    "success": False,
+                                    "error": str(e),
+                                    "event": result["event"],
+                                    "effects": e.effects,
+                                },
+                                400,
+                            )
                     audit(conn, "event_accepted" if result["created"] else "duplicate_event_received", "core_event", result["event"]["event_id"], {
                         "method": "POST",
                         "path": path,
@@ -7011,7 +7045,7 @@ class Handler(SimpleHTTPRequestHandler):
                     })
                     conn.commit()
                 status = 201 if result["created"] else 200
-                return self.send_json({"success": True, **result}, status)
+                return self.send_json({"success": True, **result, "effects": effects}, status)
             payload = self.read_json()
             if path.startswith("/api/v1/"):
                 return self.handle_v1_write("POST", path, payload)
@@ -7132,6 +7166,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({"error": str(e)}, 404)
         except RequestBodyTooLarge as e:
             return self.send_json({"error": str(e)}, 413)
+        except InnbankProcessingError as e:
+            return self.send_json({"error": str(e), "effects": e.effects}, 400)
         except ValueError as e:
             return self.send_json({"error": str(e)}, 400)
         except Exception as e:
