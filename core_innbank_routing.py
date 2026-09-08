@@ -332,6 +332,9 @@ def _insert_plan(conn, signal: dict[str, Any], items: list[dict[str, Any]], payl
         "source_system_id": signal["owner_system_id"],
         "paycheck_amount_cents": signal["paycheck_amount_cents"],
     }
+    extra_metadata = payload.get("metadata")
+    if isinstance(extra_metadata, dict):
+        metadata.update(extra_metadata)
     conn.execute(
         """
         INSERT INTO innbank_allocation_plans (

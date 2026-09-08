@@ -94,6 +94,22 @@ def _maybe_result_state(response: str) -> str:
     return OUTPUT_STATES.get(response, response)
 
 
+def _money_box(label: str, amount_cents: Any, currency: str = "USD", *, extra: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    try:
+        cents = int(amount_cents)
+    except (TypeError, ValueError):
+        return None
+    box = {
+        "label": label,
+        "amount_cents": cents,
+        "amount": cents_to_money(cents, currency),
+        "currency": clean_text(currency or "USD").upper(),
+    }
+    if extra:
+        box.update(extra)
+    return box
+
+
 def _normalize_response(value: Any) -> str:
     response = clean_text(value).lower().replace(" ", "_")
     if response == "notincome":
@@ -444,20 +460,30 @@ def _payday_context(signal: dict[str, Any], allocation_plan: dict[str, Any] | No
         "confirmed_internal_transfer": classification == "internal_transfer",
         "user_override": None,
     }
-    if allocation_plan and allocation_plan.get("plan"):
-        support["user_override"] = clean_text((allocation_plan["plan"] or {}).get("latest_response")) or None
+    plan = (allocation_plan or {}).get("plan") or {}
+    plan_metadata = plan.get("metadata") or {}
+    if allocation_plan and plan:
+        support["user_override"] = clean_text(plan.get("latest_response")) or None
     operating_floor = None
     protected_hold = None
+    protected_holds: dict[str, Any] = {}
     proposed_route: list[dict[str, Any]] = []
     actual_spend: list[dict[str, Any]] = []
+    retained_cash = None
+    capital_semantics = load_json(plan_metadata.get("capital_semantics"), {}) if isinstance(plan_metadata, dict) else {}
+    transfer_evidence = load_json(plan_metadata.get("transfer_evidence"), {}) if isinstance(plan_metadata, dict) else {}
     if allocation_plan:
-        plan = allocation_plan.get("plan") or {}
         items = allocation_plan.get("items") or []
-        operating_floor = next(
-            (item for item in items if item.get("item_type") == "unallocated"),
-            None,
-        )
-        protected_hold = operating_floor
+        route_items = [item for item in items if item.get("item_type") == "allocation"]
+        retained_item = next((item for item in items if item.get("item_type") == "unallocated"), None)
+        route_total_cents = sum(int(item.get("proposed_amount_cents") or 0) for item in route_items)
+        if retained_item:
+            retained_cash = _money_box(
+                retained_item.get("label") or "Retained paycheck remainder",
+                retained_item.get("proposed_amount_cents"),
+                retained_item.get("currency") or plan.get("currency") or "USD",
+                extra={"state": retained_item.get("state"), "source": "allocation_item"},
+            )
         proposed_route = [
             {
                 "allocation_item_id": item.get("allocation_item_id"),
@@ -468,8 +494,7 @@ def _payday_context(signal: dict[str, Any], allocation_plan: dict[str, Any] | No
                 "proposed_amount": item.get("proposed_amount"),
                 "state": item.get("state"),
             }
-            for item in items
-            if item.get("item_type") == "allocation"
+            for item in route_items
         ]
         actual_spend = [
             {
@@ -485,6 +510,77 @@ def _payday_context(signal: dict[str, Any], allocation_plan: dict[str, Any] | No
             }
             for row in allocation_plan.get("routing_items") or []
         ]
+        operating_floor_cents = capital_semantics.get("operating_floor_cents")
+        if operating_floor_cents is not None:
+            operating_floor = _money_box(
+                "Operating floor",
+                operating_floor_cents,
+                plan.get("currency") or "USD",
+                extra={"state": capital_semantics.get("decision_state") or plan.get("status"), "source": "plan_metadata", "purpose": "capital_protection"},
+            )
+        if operating_floor is None and retained_item:
+            operating_floor = _money_box(
+                retained_item.get("label") or "Retained cash",
+                retained_item.get("proposed_amount_cents"),
+                retained_item.get("currency") or plan.get("currency") or "USD",
+                extra={"state": retained_item.get("state"), "source": "allocation_item"},
+            )
+        if isinstance(capital_semantics, dict):
+            protected_holds_data = capital_semantics.get("protected_holds")
+            if isinstance(protected_holds_data, dict):
+                medical_hold = _money_box(
+                    "Medical protected hold",
+                    protected_holds_data.get("medical_cents"),
+                    plan.get("currency") or "USD",
+                    extra={"source": "plan_metadata"},
+                )
+                insurance_hold = _money_box(
+                    "Insurance/daycare protected hold",
+                    protected_holds_data.get("insurance_daycare_cents"),
+                    plan.get("currency") or "USD",
+                    extra={"source": "plan_metadata"},
+                )
+                if medical_hold:
+                    protected_holds["medical"] = medical_hold
+                if insurance_hold:
+                    protected_holds["insurance_daycare"] = insurance_hold
+        if capital_semantics.get("starting_balance_cents") is None and plan.get("paycheck_amount_cents") is not None:
+            capital_semantics["starting_balance_cents"] = plan.get("paycheck_amount_cents")
+        if capital_semantics.get("operating_floor_cents") is None and retained_item is not None:
+            capital_semantics["operating_floor_cents"] = int(retained_item.get("proposed_amount_cents") or 0)
+        if capital_semantics.get("headroom_above_floor_cents") is None and capital_semantics.get("starting_balance_cents") is not None and capital_semantics.get("operating_floor_cents") is not None:
+            capital_semantics["headroom_above_floor_cents"] = int(capital_semantics["starting_balance_cents"]) - int(capital_semantics["operating_floor_cents"])
+        if capital_semantics.get("total_protected_holds_cents") is None:
+            total_holds = 0
+            for hold in protected_holds.values():
+                total_holds += int(hold.get("amount_cents") or 0)
+            capital_semantics["total_protected_holds_cents"] = total_holds
+        if capital_semantics.get("truly_deployable_cents") is None and capital_semantics.get("headroom_above_floor_cents") is not None:
+            capital_semantics["truly_deployable_cents"] = max(
+                int(capital_semantics.get("headroom_above_floor_cents") or 0) - int(capital_semantics.get("total_protected_holds_cents") or 0),
+                0,
+            )
+        if capital_semantics.get("projected_balance_after_routes_cents") is None and capital_semantics.get("starting_balance_cents") is not None:
+            capital_semantics["projected_balance_after_routes_cents"] = int(capital_semantics["starting_balance_cents"]) - route_total_cents
+        if capital_semantics.get("decision_state") is None:
+            capital_semantics["decision_state"] = plan.get("status")
+        if capital_semantics.get("retained_cash_cents") is None:
+            capital_semantics["retained_cash_cents"] = int(retained_item.get("proposed_amount_cents") or 0) if retained_item else max(int(plan.get("paycheck_amount_cents") or 0) - route_total_cents, 0)
+        transfer_probable = transfer_evidence.get("probable_internal_transfer") if isinstance(transfer_evidence, dict) else None
+        transfer_confirmed = transfer_evidence.get("confirmed_internal_transfer") if isinstance(transfer_evidence, dict) else None
+        transfer_confidence = transfer_evidence.get("classification_confidence") if isinstance(transfer_evidence, dict) else None
+        transfer_evidence = {
+            "probable_internal_transfer": support["probable_internal_transfer"] if transfer_probable is None else bool(transfer_probable),
+            "confirmed_internal_transfer": support["confirmed_internal_transfer"] if transfer_confirmed is None else bool(transfer_confirmed),
+            "classification_confidence": support["classification_confidence"] if transfer_confidence is None else float(transfer_confidence),
+            "matching_amount_cents": transfer_evidence.get("matching_amount_cents"),
+            "payroll_posted_at": transfer_evidence.get("payroll_posted_at"),
+            "transfer_posted_at": transfer_evidence.get("transfer_posted_at"),
+            "wells_fargo_reference": transfer_evidence.get("wells_fargo_reference"),
+            "capital_one_reference": transfer_evidence.get("capital_one_reference"),
+            "supporting_evidence": transfer_evidence.get("supporting_evidence") if isinstance(transfer_evidence, dict) else None,
+            "user_override": transfer_evidence.get("user_override") if isinstance(transfer_evidence, dict) else None,
+        }
     return {
         "amount_cents": amount_cents,
         "amount": cents_to_money(int(amount_cents), "USD") if amount_cents is not None else None,
@@ -493,12 +589,19 @@ def _payday_context(signal: dict[str, Any], allocation_plan: dict[str, Any] | No
         "signal_type": signal["signal_type"],
         "classification": support["classification"],
         "classification_confidence": support["classification_confidence"],
-        "probable_internal_transfer": support["probable_internal_transfer"],
-        "confirmed_internal_transfer": support["confirmed_internal_transfer"],
+        "probable_internal_transfer": transfer_evidence["probable_internal_transfer"] if allocation_plan else support["probable_internal_transfer"],
+        "confirmed_internal_transfer": transfer_evidence["confirmed_internal_transfer"] if allocation_plan else support["confirmed_internal_transfer"],
         "supporting_evidence": support["supporting_evidence"],
         "user_override": support["user_override"],
         "operating_floor": operating_floor,
         "protected_hold": protected_hold,
+        "medical_protected_hold": protected_holds.get("medical"),
+        "insurance_daycare_protected_hold": protected_holds.get("insurance_daycare"),
+        "protected_holds": protected_holds,
+        "retained_cash": retained_cash,
+        "capital_semantics": capital_semantics if allocation_plan else {},
+        "transfer_evidence": transfer_evidence if allocation_plan else {},
+        "transfer_classification_confidence": transfer_evidence.get("classification_confidence") if allocation_plan else None,
         "proposed_route": proposed_route,
         "actual_spend": actual_spend,
     }

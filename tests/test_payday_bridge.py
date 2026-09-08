@@ -121,6 +121,82 @@ class PaydayBridgeTests(unittest.TestCase):
             tempdir.cleanup()
 
     @unittest.skipUnless(MCP_AVAILABLE, "official MCP SDK is not installed")
+    def test_semantic_case_arithmetic_and_transfer_classification(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        root = Path(tempdir.name)
+        db_path = root / "payday-semantic.db"
+        app_handle = start_server(db_path, api_key="test-key")
+        bridge_handle = self.start_bridge(db_path, api_key="test-key")
+        try:
+            with core_connect(db_path) as conn:
+                before_counts = {
+                    "events": conn.execute("SELECT COUNT(*) FROM core_events").fetchone()[0],
+                    "signals": conn.execute("SELECT COUNT(*) FROM core_signals").fetchone()[0],
+                    "alerts": conn.execute("SELECT COUNT(*) FROM core_alerts").fetchone()[0],
+                    "live_signals": conn.execute("SELECT COUNT(*) FROM live_signals").fetchone()[0],
+                    "core_actions": conn.execute("SELECT COUNT(*) FROM core_actions").fetchone()[0],
+                    "core_decisions": conn.execute("SELECT COUNT(*) FROM core_decisions").fetchone()[0],
+                    "core_outcomes": conn.execute("SELECT COUNT(*) FROM core_outcomes").fetchone()[0],
+                }
+            case_ids = self.create_semantic_payday_case(app_handle)
+            case = self.call_tool(bridge_handle.port, "get_payday_case", {"plan_id": case_ids["plan_id"]})
+            self.assertTrue(case["ok"])
+            payday = case["case"]["payday_context"]
+
+            self.assertEqual(case["case"]["case_id"]["plan_id"], case_ids["plan_id"])
+            self.assertEqual(case["case"]["case_id"]["signal_id"], case_ids["signal_id"])
+            self.assertEqual(case["case"]["case_id"]["alert_id"], case_ids["alert_id"])
+            self.assertEqual(payday["capital_semantics"]["starting_balance_cents"], 255720)
+            self.assertEqual(payday["capital_semantics"]["operating_floor_cents"], 200000)
+            self.assertEqual(payday["capital_semantics"]["headroom_above_floor_cents"], 55720)
+            self.assertEqual(payday["capital_semantics"]["total_protected_holds_cents"], 33400)
+            self.assertEqual(payday["capital_semantics"]["truly_deployable_cents"], 22320)
+            self.assertEqual(payday["capital_semantics"]["projected_balance_after_routes_cents"], 233400)
+            self.assertEqual(payday["capital_semantics"]["decision_state"], "proposed_only")
+            self.assertTrue(payday["probable_internal_transfer"])
+            self.assertFalse(payday["confirmed_internal_transfer"])
+            self.assertEqual(payday["transfer_classification_confidence"], 0.90)
+            self.assertEqual(payday["transfer_evidence"]["matching_amount_cents"], 108414)
+            self.assertEqual(payday["transfer_evidence"]["payroll_posted_at"], "2026-09-04")
+            self.assertEqual(payday["transfer_evidence"]["transfer_posted_at"], "2026-09-05")
+            self.assertEqual(payday["transfer_evidence"]["wells_fargo_reference"], "Apex Systems payroll 2026-09-04")
+            self.assertEqual(payday["transfer_evidence"]["capital_one_reference"], "Capital One transfer in 2026-09-05")
+            self.assertEqual(payday["operating_floor"]["amount_cents"], 200000)
+            self.assertEqual(payday["medical_protected_hold"]["amount_cents"], 18400)
+            self.assertEqual(payday["insurance_daycare_protected_hold"]["amount_cents"], 15000)
+            self.assertEqual(payday["retained_cash"]["amount_cents"], 86094)
+            self.assertEqual(payday["actual_spend"], [])
+            self.assertEqual(sum(item["proposed_amount_cents"] for item in payday["proposed_route"]), 22320)
+            self.assertNotEqual(payday["retained_cash"]["amount_cents"], payday["operating_floor"]["amount_cents"])
+
+            with core_connect(db_path) as conn:
+                after_counts = {
+                    "events": conn.execute("SELECT COUNT(*) FROM core_events").fetchone()[0],
+                    "signals": conn.execute("SELECT COUNT(*) FROM core_signals").fetchone()[0],
+                    "alerts": conn.execute("SELECT COUNT(*) FROM core_alerts").fetchone()[0],
+                    "live_signals": conn.execute("SELECT COUNT(*) FROM live_signals").fetchone()[0],
+                    "core_actions": conn.execute("SELECT COUNT(*) FROM core_actions").fetchone()[0],
+                    "core_decisions": conn.execute("SELECT COUNT(*) FROM core_decisions").fetchone()[0],
+                    "core_outcomes": conn.execute("SELECT COUNT(*) FROM core_outcomes").fetchone()[0],
+                }
+                ignored = conn.execute(
+                    "SELECT processing_status FROM core_events WHERE dedupe_key=?",
+                    ("semantic-transfer-001",),
+                ).fetchone()
+                self.assertEqual(ignored["processing_status"], "ignored")
+            self.assertEqual(after_counts["events"] - before_counts["events"], 2)
+            self.assertEqual(after_counts["signals"] - before_counts["signals"], 1)
+            self.assertEqual(after_counts["alerts"] - before_counts["alerts"], 1)
+            self.assertEqual(after_counts["live_signals"] - before_counts["live_signals"], 0)
+            self.assertEqual(after_counts["core_actions"] - before_counts["core_actions"], 0)
+            self.assertEqual(after_counts["core_decisions"] - before_counts["core_decisions"], 0)
+            self.assertEqual(after_counts["core_outcomes"] - before_counts["core_outcomes"], 0)
+        finally:
+            self.stop_bridge(bridge_handle)
+            stop_server(app_handle)
+            tempdir.cleanup()
+
+    @unittest.skipUnless(MCP_AVAILABLE, "official MCP SDK is not installed")
     def test_save_decision_and_manual_routing_idempotency(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
         root = Path(tempdir.name)
@@ -277,6 +353,118 @@ class PaydayBridgeTests(unittest.TestCase):
         )
         self.assertEqual(plan_status, 201)
         return signal_id, alert_id, plan_body["plan"]["plan_id"]
+
+    def create_semantic_payday_case(self, handle):
+        status, body = request_json(
+            handle.port,
+            "/events",
+            method="POST",
+            payload={
+                "source_system_id": "sys_innbank",
+                "event_type": "financial_inflow_posted",
+                "occurred_at": "2026-09-04T12:00:00-07:00",
+                "dedupe_key": "semantic-payroll-001",
+                "priority": "P0",
+                "confidence": 0.99,
+                "payload": {
+                    "amount": "1084.14",
+                    "currency": "USD",
+                    "account_name": "Wells Fargo checking",
+                    "classification": "payroll",
+                    "classification_confidence": 0.99,
+                    "transaction_ref": "Apex Systems payroll 2026-09-04",
+                },
+            },
+            headers={"Authorization": "Bearer test-key"},
+        )
+        self.assertEqual(status, 201)
+        signal_id = body["effects"][0]["signal_id"]
+        alert_id = body["effects"][1]["alert_id"]
+
+        transfer_status, transfer_body = request_json(
+            handle.port,
+            "/events",
+            method="POST",
+            payload={
+                "source_system_id": "sys_innbank",
+                "event_type": "financial_inflow_posted",
+                "occurred_at": "2026-09-05T09:30:00-07:00",
+                "dedupe_key": "semantic-transfer-001",
+                "priority": "P2",
+                "confidence": 0.90,
+                "payload": {
+                    "amount": "1084.14",
+                    "currency": "USD",
+                    "account_name": "Capital One checking",
+                    "classification": "internal_transfer",
+                    "classification_confidence": 0.90,
+                    "transaction_ref": "Capital One transfer in 2026-09-05",
+                },
+            },
+            headers={"Authorization": "Bearer test-key"},
+        )
+        self.assertEqual(transfer_status, 201)
+        self.assertEqual(transfer_body["event"]["processing_status"], "ignored")
+
+        metadata = {
+            "capital_semantics": {
+                "starting_balance_cents": 255720,
+                "operating_floor_cents": 200000,
+                "headroom_above_floor_cents": 55720,
+                "protected_holds": {
+                    "medical_cents": 18400,
+                    "insurance_daycare_cents": 15000,
+                },
+                "total_protected_holds_cents": 33400,
+                "truly_deployable_cents": 22320,
+                "projected_balance_after_routes_cents": 233400,
+                "decision_state": "proposed_only",
+            },
+            "transfer_evidence": {
+                "probable_internal_transfer": True,
+                "confirmed_internal_transfer": False,
+                "classification_confidence": 0.90,
+                "matching_amount_cents": 108414,
+                "payroll_posted_at": "2026-09-04",
+                "transfer_posted_at": "2026-09-05",
+                "wells_fargo_reference": "Apex Systems payroll 2026-09-04",
+                "capital_one_reference": "Capital One transfer in 2026-09-05",
+                "supporting_evidence": [
+                    {"field": "matching_amount_cents", "value": 108414},
+                    {"field": "payroll_posted_at", "value": "2026-09-04"},
+                    {"field": "transfer_posted_at", "value": "2026-09-05"},
+                    {"field": "wells_fargo_reference", "value": "Apex Systems payroll 2026-09-04"},
+                    {"field": "capital_one_reference", "value": "Capital One transfer in 2026-09-05"},
+                ],
+            },
+        }
+        plan_status, plan_body = request_json(
+            handle.port,
+            "/innbank/allocation-plans",
+            method="POST",
+            payload={
+                "signal_id": signal_id,
+                "title": "Stage 8.1 semantic payday case",
+                "summary": "Apex Systems payroll, proposed-only allocation, no approval yet",
+                "rationale": "Preserve the paycheck, operating floor, and protected holds before allocation.",
+                "recommended_action": "Review the proposed routes and decide whether to approve, modify, defer, or reject.",
+                "notes": "decision_state=proposed_only; no_allocation_approved; no_manual_routing_recorded",
+                "metadata": metadata,
+                "items": [
+                    {"item_type": "allocation", "label": "Emergency", "proposed_amount_cents": 10000},
+                    {"item_type": "allocation", "label": "Transition", "proposed_amount_cents": 7500},
+                    {"item_type": "allocation", "label": "Rue", "proposed_amount_cents": 4820},
+                    {"item_type": "unallocated", "label": "Retained paycheck remainder", "proposed_amount_cents": 86094},
+                ],
+            },
+        )
+        self.assertEqual(plan_status, 201)
+        return {
+            "signal_id": signal_id,
+            "alert_id": alert_id,
+            "plan_id": plan_body["plan"]["plan_id"],
+            "transfer_event_id": transfer_body["event"]["event_id"],
+        }
 
     def start_bridge(self, db_path: Path, api_key: str | None = "test-key") -> BridgeHandle:
         log_dir = Path(tempfile.mkdtemp(prefix="info-analyzer-payday-bridge-"))

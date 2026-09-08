@@ -172,9 +172,15 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
     def test_existing_v03_database_can_receive_core_migration(self) -> None:
         db_path = self.canonical_copy()
         before = read_counts(db_path, LEGACY_TABLES)
+        existing_versions = [
+            row["version"]
+            for row in open_connection(db_path).execute(
+                "SELECT version FROM schema_migrations ORDER BY version"
+            ).fetchall()
+        ]
         applied = initialize_core_migrations(db_path)
         after = read_counts(db_path, LEGACY_TABLES)
-        self.assertEqual(applied, [1, 2])
+        self.assertEqual(applied, [] if existing_versions else [1, 2])
         self.assertEqual(before, after)
         names = view_names(db_path)
         self.assertIn("core_record_links", table_names(db_path))
@@ -489,6 +495,12 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
 
     def test_migration_application_is_recorded_exactly_once(self) -> None:
         db_path = self.canonical_copy("recorded-once.db")
+        existing_versions = [
+            row["version"]
+            for row in open_connection(db_path).execute(
+                "SELECT version FROM schema_migrations ORDER BY version"
+            ).fetchall()
+        ]
         first = initialize_core_migrations(db_path)
         second = initialize_core_migrations(db_path)
         conn = open_connection(db_path)
@@ -496,7 +508,7 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
             rows = conn.execute("SELECT version, name FROM schema_migrations ORDER BY version").fetchall()
         finally:
             conn.close()
-        self.assertEqual(first, [1, 2])
+        self.assertEqual(first, [] if existing_versions else [1, 2])
         self.assertEqual(second, [])
         self.assertEqual(
             [(row["version"], row["name"]) for row in rows],
