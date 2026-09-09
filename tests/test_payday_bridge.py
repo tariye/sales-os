@@ -64,9 +64,11 @@ class PaydayBridgeTests(unittest.TestCase):
             tool_names = {tool.name for tool in tools}
             self.assertEqual(
                 tool_names,
-                {"get_payday_case", "save_payday_decision", "record_manual_routing"},
+                {"prepare_payday_case", "get_payday_case", "save_payday_decision", "record_manual_routing"},
             )
             annotations = {tool.name: tool.annotations for tool in tools}
+            self.assertFalse(bool(getattr(annotations["prepare_payday_case"], "read_only_hint", True)))
+            self.assertTrue(bool(getattr(annotations["prepare_payday_case"], "destructive_hint", False)))
             self.assertTrue(bool(getattr(annotations["get_payday_case"], "read_only_hint", False)))
             self.assertFalse(bool(getattr(annotations["get_payday_case"], "destructive_hint", True)))
             self.assertFalse(bool(getattr(annotations["get_payday_case"], "open_world_hint", True)))
@@ -118,6 +120,160 @@ class PaydayBridgeTests(unittest.TestCase):
         finally:
             self.stop_bridge(bridge_handle)
             stop_server(app_handle)
+            tempdir.cleanup()
+
+    @unittest.skipUnless(MCP_AVAILABLE, "official MCP SDK is not installed")
+    def test_prepare_payday_case_preview_confirm_idempotency_and_routing_compatibility(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        root = Path(tempdir.name)
+        db_path = root / "payday-prepare.db"
+        bridge_handle = self.start_bridge(db_path, api_key="test-key")
+        try:
+            payload = self.prepare_payday_payload(dedupe_key="stage-8-2-payroll-001")
+            with core_connect(db_path) as conn:
+                before_counts = self.core_counts(conn)
+
+            preview = self.call_tool(
+                bridge_handle.port,
+                "prepare_payday_case",
+                {**payload, "confirmed": False},
+            )
+            self.assertTrue(preview["ok"])
+            self.assertFalse(preview["confirmed"])
+            preview_case = preview["preview"]
+            self.assertEqual(preview_case["paycheck_amount_cents"], 108414)
+            self.assertEqual(preview_case["starting_balance"]["amount_cents"], 255720)
+            self.assertEqual(preview_case["operating_floor"]["amount_cents"], 200000)
+            self.assertEqual(preview_case["headroom_above_floor_cents"], 55720)
+            self.assertEqual(preview_case["total_protected_holds_cents"], 33400)
+            self.assertEqual(preview_case["truly_deployable_cents"], 22320)
+            self.assertEqual(preview_case["proposed_route_total_cents"], 22320)
+            self.assertEqual(preview_case["retained_paycheck_remainder"]["amount_cents"], 86094)
+            self.assertEqual(preview_case["projected_balance_after_routes"]["amount_cents"], 233400)
+            self.assertEqual(preview_case["actual_spend"], [])
+            self.assertTrue(preview_case["possible_matching_transfer_evidence"]["probable_internal_transfer"])
+            with core_connect(db_path) as conn:
+                self.assertEqual(self.core_counts(conn), before_counts)
+
+            confirmed = self.call_tool(
+                bridge_handle.port,
+                "prepare_payday_case",
+                {**payload, "confirmed": True},
+            )
+            self.assertTrue(confirmed["ok"])
+            self.assertTrue(confirmed["confirmed"])
+            self.assertFalse(confirmed["idempotent"])
+            event_id = confirmed["event_id"]
+            signal_id = confirmed["signal_id"]
+            alert_id = confirmed["alert_id"]
+            plan_id = confirmed["plan_id"]
+            self.assertTrue(event_id.startswith("EVT-"))
+            self.assertTrue(signal_id.startswith("SIG-"))
+            self.assertTrue(alert_id.startswith("ALT-"))
+            self.assertTrue(plan_id.startswith("IPL-"))
+
+            case = self.call_tool(bridge_handle.port, "get_payday_case", {"plan_id": plan_id})
+            self.assertTrue(case["ok"])
+            payday = case["case"]["payday_context"]
+            self.assertEqual(payday["capital_semantics"]["starting_balance_cents"], 255720)
+            self.assertEqual(payday["capital_semantics"]["operating_floor_cents"], 200000)
+            self.assertEqual(payday["capital_semantics"]["truly_deployable_cents"], 22320)
+            self.assertEqual(payday["capital_semantics"]["retained_cash_cents"], 86094)
+            self.assertEqual(payday["retained_cash"]["amount_cents"], 86094)
+            self.assertEqual(payday["actual_spend"], [])
+            self.assertTrue(payday["transfer_evidence"]["probable_internal_transfer"])
+            self.assertFalse(payday["transfer_evidence"]["confirmed_internal_transfer"])
+            self.assertEqual(payday["transfer_evidence"]["classification_confidence"], 0.90)
+            self.assertEqual(payday["transfer_evidence"]["matching_amount_cents"], 108414)
+
+            duplicate = self.call_tool(
+                bridge_handle.port,
+                "prepare_payday_case",
+                {**payload, "confirmed": True},
+            )
+            self.assertTrue(duplicate["ok"])
+            self.assertTrue(duplicate["idempotent"])
+            self.assertEqual(duplicate["event_id"], event_id)
+            self.assertEqual(duplicate["signal_id"], signal_id)
+            self.assertEqual(duplicate["alert_id"], alert_id)
+            self.assertEqual(duplicate["plan_id"], plan_id)
+
+            with core_connect(db_path) as conn:
+                after_counts = self.core_counts(conn)
+            self.assertEqual(after_counts["core_events"] - before_counts["core_events"], 1)
+            self.assertEqual(after_counts["core_signals"] - before_counts["core_signals"], 1)
+            self.assertEqual(after_counts["core_alerts"] - before_counts["core_alerts"], 1)
+            self.assertEqual(after_counts["innbank_allocation_plans"] - before_counts["innbank_allocation_plans"], 1)
+            self.assertEqual(after_counts["innbank_allocation_items"] - before_counts["innbank_allocation_items"], 4)
+            self.assertEqual(after_counts["actions"], before_counts["actions"])
+            self.assertEqual(after_counts["live_signals"], before_counts["live_signals"])
+
+            decision = self.call_tool(
+                bridge_handle.port,
+                "save_payday_decision",
+                {"plan_id": plan_id, "decision": "defer", "confirmed": True},
+            )
+            self.assertTrue(decision["ok"])
+            self.assertEqual(decision["canonical_response"], "defer")
+
+            missing_routing_confirmation = self.call_tool(
+                bridge_handle.port,
+                "record_manual_routing",
+                {"plan_id": plan_id, "items": [{"allocation_item_id": "ALI-MISSING", "actual_amount_cents": 0}]},
+            )
+            self.assertFalse(missing_routing_confirmation["ok"])
+            self.assertIn("confirmation required", missing_routing_confirmation["error"])
+        finally:
+            self.stop_bridge(bridge_handle)
+            tempdir.cleanup()
+
+    @unittest.skipUnless(MCP_AVAILABLE, "official MCP SDK is not installed")
+    def test_prepare_payday_case_rejects_routes_over_deployable_and_writes_nothing(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        root = Path(tempdir.name)
+        db_path = root / "payday-prepare-invalid.db"
+        bridge_handle = self.start_bridge(db_path, api_key="test-key")
+        try:
+            payload = self.prepare_payday_payload(
+                dedupe_key="stage-8-2-overdeployable-001",
+                proposed_routes=[
+                    {"label": "Emergency", "amount": "300.00"},
+                ],
+            )
+            with core_connect(db_path) as conn:
+                before_counts = self.core_counts(conn)
+            response = self.call_tool(
+                bridge_handle.port,
+                "prepare_payday_case",
+                {**payload, "confirmed": True},
+            )
+            self.assertFalse(response["ok"])
+            self.assertIn("proposed_routes", response["error"])
+            with core_connect(db_path) as conn:
+                self.assertEqual(self.core_counts(conn), before_counts)
+        finally:
+            self.stop_bridge(bridge_handle)
+            tempdir.cleanup()
+
+    @unittest.skipUnless(MCP_AVAILABLE, "official MCP SDK is not installed")
+    def test_prepare_payday_case_preserves_absence_of_transfer_evidence(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        root = Path(tempdir.name)
+        db_path = root / "payday-prepare-no-transfer.db"
+        bridge_handle = self.start_bridge(db_path, api_key="test-key")
+        try:
+            payload = self.prepare_payday_payload(dedupe_key="stage-8-2-no-transfer-001")
+            payload.pop("possible_matching_transfer_evidence")
+            preview = self.call_tool(bridge_handle.port, "prepare_payday_case", {**payload, "confirmed": False})
+            self.assertTrue(preview["ok"])
+            self.assertIsNone(preview["preview"]["possible_matching_transfer_evidence"])
+            confirmed = self.call_tool(bridge_handle.port, "prepare_payday_case", {**payload, "confirmed": True})
+            self.assertTrue(confirmed["ok"])
+            case = self.call_tool(bridge_handle.port, "get_payday_case", {"plan_id": confirmed["plan_id"]})
+            self.assertTrue(case["ok"])
+            self.assertEqual(case["case"]["payday_context"]["transfer_evidence"], {})
+        finally:
+            self.stop_bridge(bridge_handle)
             tempdir.cleanup()
 
     @unittest.skipUnless(MCP_AVAILABLE, "official MCP SDK is not installed")
@@ -354,6 +510,66 @@ class PaydayBridgeTests(unittest.TestCase):
         self.assertEqual(plan_status, 201)
         return signal_id, alert_id, plan_body["plan"]["plan_id"]
 
+    def core_counts(self, conn):
+        tables = {
+            row["name"]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        result = {}
+        for name in [
+            "core_events",
+            "core_signals",
+            "core_alerts",
+            "innbank_allocation_plans",
+            "innbank_allocation_items",
+            "core_actions",
+            "core_decisions",
+            "core_outcomes",
+            "actions",
+            "live_signals",
+        ]:
+            result[name] = conn.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] if name in tables else 0
+        return result
+
+    def prepare_payday_payload(self, *, dedupe_key: str, proposed_routes: list[dict[str, Any]] | None = None):
+        return {
+            "paycheck_amount": "1084.14",
+            "posted_at": "2026-09-09T12:00:00-07:00",
+            "employer_reference": "Apex Systems payroll",
+            "receiving_account": "Wells Fargo checking",
+            "starting_balance": "2557.20",
+            "operating_floor": "2000.00",
+            "protected_holds": [
+                {"label": "medical", "amount": "184.00"},
+                {"label": "insurance_daycare", "amount": "150.00"},
+            ],
+            "proposed_routes": proposed_routes
+            or [
+                {"label": "Emergency", "amount": "100.00"},
+                {"label": "Transition", "amount": "75.00"},
+                {"label": "Rue", "amount": "48.20"},
+            ],
+            "possible_matching_transfer_evidence": {
+                "probable_internal_transfer": True,
+                "confirmed_internal_transfer": False,
+                "classification_confidence": 0.90,
+                "matching_amount": "1084.14",
+                "payroll_posted_at": "2026-09-09",
+                "transfer_posted_at": "2026-09-10",
+                "wells_fargo_reference": "Apex Systems payroll",
+                "capital_one_reference": "Capital One transfer-in candidate",
+                "supporting_evidence": [
+                    {"field": "matching_amount", "value": "1084.14"},
+                    {"field": "posting_gap_days", "value": 1},
+                ],
+            },
+            "currency": "USD",
+            "source_transaction_id": dedupe_key,
+            "dedupe_key": dedupe_key,
+        }
+
     def create_semantic_payday_case(self, handle):
         status, body = request_json(
             handle.port,
@@ -522,7 +738,7 @@ class PaydayBridgeTests(unittest.TestCase):
                 return False
             try:
                 tools = self.list_tools(port)
-                return len(tools) == 3
+                return len(tools) == 4
             except Exception:
                 time.sleep(0.25)
         return False

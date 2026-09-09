@@ -1,8 +1,9 @@
 """Info Analyzer payday MCP bridge.
 
-This server exposes only the three ChatGPT-facing tools required for the
+This server exposes the ChatGPT-facing tools required for the
 INNBANK payday bridge milestone:
 
+* prepare_payday_case
 * get_payday_case
 * save_payday_decision
 * record_manual_routing
@@ -18,17 +19,23 @@ import argparse
 import asyncio
 import json
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from core_database import connect, resolve_database_path
+from core_events import create_event as core_create_event
+from core_events import normalize_timestamp
 from core_innbank_routing import (
+    amount_to_cents,
     cents_to_money,
+    create_allocation_plan,
     get_allocation_plan,
     record_allocation_routing,
     respond_to_allocation_plan,
 )
 from core_migrations import initialize_core_migrations
+from core_processors import EventDispatcher, InnbankProcessingError
 from server import configured_api_key
 
 try:
@@ -471,7 +478,8 @@ def _payday_context(signal: dict[str, Any], allocation_plan: dict[str, Any] | No
     actual_spend: list[dict[str, Any]] = []
     retained_cash = None
     capital_semantics = load_json(plan_metadata.get("capital_semantics"), {}) if isinstance(plan_metadata, dict) else {}
-    transfer_evidence = load_json(plan_metadata.get("transfer_evidence"), {}) if isinstance(plan_metadata, dict) else {}
+    raw_transfer_evidence = load_json(plan_metadata.get("transfer_evidence"), {}) if isinstance(plan_metadata, dict) else {}
+    transfer_evidence = dict(raw_transfer_evidence) if isinstance(raw_transfer_evidence, dict) else {}
     if allocation_plan:
         items = allocation_plan.get("items") or []
         route_items = [item for item in items if item.get("item_type") == "allocation"]
@@ -566,21 +574,22 @@ def _payday_context(signal: dict[str, Any], allocation_plan: dict[str, Any] | No
             capital_semantics["decision_state"] = plan.get("status")
         if capital_semantics.get("retained_cash_cents") is None:
             capital_semantics["retained_cash_cents"] = int(retained_item.get("proposed_amount_cents") or 0) if retained_item else max(int(plan.get("paycheck_amount_cents") or 0) - route_total_cents, 0)
-        transfer_probable = transfer_evidence.get("probable_internal_transfer") if isinstance(transfer_evidence, dict) else None
-        transfer_confirmed = transfer_evidence.get("confirmed_internal_transfer") if isinstance(transfer_evidence, dict) else None
-        transfer_confidence = transfer_evidence.get("classification_confidence") if isinstance(transfer_evidence, dict) else None
-        transfer_evidence = {
-            "probable_internal_transfer": support["probable_internal_transfer"] if transfer_probable is None else bool(transfer_probable),
-            "confirmed_internal_transfer": support["confirmed_internal_transfer"] if transfer_confirmed is None else bool(transfer_confirmed),
-            "classification_confidence": support["classification_confidence"] if transfer_confidence is None else float(transfer_confidence),
-            "matching_amount_cents": transfer_evidence.get("matching_amount_cents"),
-            "payroll_posted_at": transfer_evidence.get("payroll_posted_at"),
-            "transfer_posted_at": transfer_evidence.get("transfer_posted_at"),
-            "wells_fargo_reference": transfer_evidence.get("wells_fargo_reference"),
-            "capital_one_reference": transfer_evidence.get("capital_one_reference"),
-            "supporting_evidence": transfer_evidence.get("supporting_evidence") if isinstance(transfer_evidence, dict) else None,
-            "user_override": transfer_evidence.get("user_override") if isinstance(transfer_evidence, dict) else None,
-        }
+        if transfer_evidence:
+            transfer_probable = transfer_evidence.get("probable_internal_transfer")
+            transfer_confirmed = transfer_evidence.get("confirmed_internal_transfer")
+            transfer_confidence = transfer_evidence.get("classification_confidence")
+            transfer_evidence = {
+                "probable_internal_transfer": support["probable_internal_transfer"] if transfer_probable is None else bool(transfer_probable),
+                "confirmed_internal_transfer": support["confirmed_internal_transfer"] if transfer_confirmed is None else bool(transfer_confirmed),
+                "classification_confidence": support["classification_confidence"] if transfer_confidence is None else float(transfer_confidence),
+                "matching_amount_cents": transfer_evidence.get("matching_amount_cents"),
+                "payroll_posted_at": transfer_evidence.get("payroll_posted_at"),
+                "transfer_posted_at": transfer_evidence.get("transfer_posted_at"),
+                "wells_fargo_reference": transfer_evidence.get("wells_fargo_reference"),
+                "capital_one_reference": transfer_evidence.get("capital_one_reference"),
+                "supporting_evidence": transfer_evidence.get("supporting_evidence"),
+                "user_override": transfer_evidence.get("user_override"),
+            }
     return {
         "amount_cents": amount_cents,
         "amount": cents_to_money(int(amount_cents), "USD") if amount_cents is not None else None,
@@ -589,8 +598,8 @@ def _payday_context(signal: dict[str, Any], allocation_plan: dict[str, Any] | No
         "signal_type": signal["signal_type"],
         "classification": support["classification"],
         "classification_confidence": support["classification_confidence"],
-        "probable_internal_transfer": transfer_evidence["probable_internal_transfer"] if allocation_plan else support["probable_internal_transfer"],
-        "confirmed_internal_transfer": transfer_evidence["confirmed_internal_transfer"] if allocation_plan else support["confirmed_internal_transfer"],
+        "probable_internal_transfer": transfer_evidence.get("probable_internal_transfer", support["probable_internal_transfer"]) if allocation_plan else support["probable_internal_transfer"],
+        "confirmed_internal_transfer": transfer_evidence.get("confirmed_internal_transfer", support["confirmed_internal_transfer"]) if allocation_plan else support["confirmed_internal_transfer"],
         "supporting_evidence": support["supporting_evidence"],
         "user_override": support["user_override"],
         "operating_floor": operating_floor,
@@ -633,6 +642,382 @@ def _map_requested_decision(requested: str) -> str:
     return "hold" if requested == "modify" else requested
 
 
+def _input_money_to_cents(value: Any, field_name: str) -> int:
+    if isinstance(value, dict):
+        if value.get("amount_cents") not in (None, ""):
+            return int(value["amount_cents"])
+        value = value.get("amount")
+    return amount_to_cents(value, field_name)
+
+
+def _decimal_money_string(cents: int) -> str:
+    return str((Decimal(cents) / Decimal(100)).quantize(Decimal("0.01")))
+
+
+def _parse_bool(value: Any, field_name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    normalized = clean_text(value).lower()
+    if normalized in {"true", "1", "yes"}:
+        return True
+    if normalized in {"false", "0", "no"}:
+        return False
+    raise ValueError(f"{field_name} must be true or false")
+
+
+def _normalize_named_amounts(values: Any, field_name: str) -> list[dict[str, Any]]:
+    if values is None:
+        values = []
+    if not isinstance(values, list):
+        raise ValueError(f"{field_name} must be a JSON array")
+    normalized: list[dict[str, Any]] = []
+    for index, item in enumerate(values):
+        if not isinstance(item, dict):
+            raise ValueError(f"{field_name}[{index}] must be a JSON object")
+        label = clean_text(item.get("label") or item.get("name"))
+        if not label:
+            raise ValueError(f"{field_name}[{index}].label is required")
+        amount_cents = _input_money_to_cents(item, f"{field_name}[{index}].amount")
+        if amount_cents < 0:
+            raise ValueError(f"{field_name}[{index}].amount must be non-negative")
+        normalized.append(
+            {
+                "label": label,
+                "amount_cents": amount_cents,
+                "amount": cents_to_money(amount_cents, clean_text(item.get("currency") or "USD").upper()),
+                "metadata": item.get("metadata") if isinstance(item.get("metadata"), dict) else {},
+            }
+        )
+    return normalized
+
+
+def _normalize_transfer_evidence(value: Any) -> dict[str, Any] | None:
+    if value in (None, ""):
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("possible_matching_transfer_evidence must be a JSON object")
+    evidence: dict[str, Any] = {}
+    for key in (
+        "probable_internal_transfer",
+        "confirmed_internal_transfer",
+        "classification_confidence",
+        "matching_amount_cents",
+        "matching_amount",
+        "payroll_posted_at",
+        "transfer_posted_at",
+        "wells_fargo_reference",
+        "capital_one_reference",
+        "supporting_evidence",
+        "user_override",
+    ):
+        if key in value:
+            evidence[key] = value[key]
+    if "matching_amount_cents" not in evidence and evidence.get("matching_amount") not in (None, ""):
+        evidence["matching_amount_cents"] = _input_money_to_cents(evidence["matching_amount"], "possible_matching_transfer_evidence.matching_amount")
+    evidence.pop("matching_amount", None)
+    if "classification_confidence" in evidence:
+        try:
+            confidence = float(evidence["classification_confidence"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("possible_matching_transfer_evidence.classification_confidence must be between 0 and 1") from exc
+        if confidence < 0 or confidence > 1:
+            raise ValueError("possible_matching_transfer_evidence.classification_confidence must be between 0 and 1")
+        evidence["classification_confidence"] = confidence
+    if "probable_internal_transfer" in evidence:
+        evidence["probable_internal_transfer"] = _parse_bool(
+            evidence["probable_internal_transfer"],
+            "possible_matching_transfer_evidence.probable_internal_transfer",
+        )
+    if "confirmed_internal_transfer" in evidence:
+        evidence["confirmed_internal_transfer"] = _parse_bool(
+            evidence["confirmed_internal_transfer"],
+            "possible_matching_transfer_evidence.confirmed_internal_transfer",
+        )
+    return evidence
+
+
+def _build_payday_case_inputs(
+    *,
+    paycheck_amount: Any,
+    posted_at: str,
+    employer_reference: str,
+    receiving_account: str,
+    starting_balance: Any,
+    operating_floor: Any,
+    protected_holds: list[dict[str, Any]] | None,
+    proposed_routes: list[dict[str, Any]] | None,
+    currency: str | None = "USD",
+    source_transaction_id: str | None = None,
+    dedupe_key: str | None = None,
+    possible_matching_transfer_evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    currency_code = clean_text(currency or "USD").upper()
+    if not currency_code:
+        raise ValueError("currency is required")
+    amount_cents = _input_money_to_cents(paycheck_amount, "paycheck_amount")
+    if amount_cents <= 0:
+        raise ValueError("paycheck_amount must be positive")
+    starting_balance_cents = _input_money_to_cents(starting_balance, "starting_balance")
+    operating_floor_cents = _input_money_to_cents(operating_floor, "operating_floor")
+    if starting_balance_cents < operating_floor_cents:
+        raise ValueError("starting_balance must be greater than or equal to operating_floor")
+    normalized_holds = _normalize_named_amounts(protected_holds, "protected_holds")
+    normalized_routes = _normalize_named_amounts(proposed_routes, "proposed_routes")
+    if not normalized_routes:
+        raise ValueError("proposed_routes must include at least one route")
+    posted_at_utc = normalize_timestamp(posted_at, "posted_at")
+    source_ref = clean_text(source_transaction_id or employer_reference)
+    resolved_dedupe_key = clean_text(dedupe_key or source_transaction_id)
+    if not resolved_dedupe_key:
+        raise ValueError("source_transaction_id or dedupe_key is required")
+    total_protected_holds_cents = sum(item["amount_cents"] for item in normalized_holds)
+    route_total_cents = sum(item["amount_cents"] for item in normalized_routes)
+    headroom_above_floor_cents = starting_balance_cents - operating_floor_cents
+    truly_deployable_cents = headroom_above_floor_cents - total_protected_holds_cents
+    if truly_deployable_cents < 0:
+        raise ValueError("protected holds exceed headroom above operating floor")
+    if route_total_cents > truly_deployable_cents:
+        raise ValueError("sum(proposed_routes) must not exceed truly_deployable capital")
+    retained_paycheck_remainder_cents = amount_cents - route_total_cents
+    if retained_paycheck_remainder_cents < 0:
+        raise ValueError("sum(proposed_routes) must not exceed paycheck amount")
+    projected_balance_after_routes_cents = starting_balance_cents - route_total_cents
+    transfer_evidence = _normalize_transfer_evidence(possible_matching_transfer_evidence)
+    protected_hold_map: dict[str, int] = {}
+    protected_hold_details: list[dict[str, Any]] = []
+    for hold in normalized_holds:
+        key = clean_text(hold["label"]).lower().replace("/", "_").replace(" ", "_").replace("-", "_")
+        protected_hold_map[f"{key}_cents"] = hold["amount_cents"]
+        protected_hold_details.append(
+            {
+                "label": hold["label"],
+                "amount_cents": hold["amount_cents"],
+                "amount": cents_to_money(hold["amount_cents"], currency_code),
+            }
+        )
+    capital_semantics = {
+        "starting_balance_cents": starting_balance_cents,
+        "operating_floor_cents": operating_floor_cents,
+        "headroom_above_floor_cents": headroom_above_floor_cents,
+        "protected_holds": protected_hold_map,
+        "protected_hold_details": protected_hold_details,
+        "total_protected_holds_cents": total_protected_holds_cents,
+        "truly_deployable_cents": truly_deployable_cents,
+        "projected_balance_after_routes_cents": projected_balance_after_routes_cents,
+        "retained_cash_cents": retained_paycheck_remainder_cents,
+        "decision_state": "proposed_only",
+    }
+    event_payload = {
+        "source_system_id": "sys_innbank",
+        "event_type": "financial_inflow_posted",
+        "occurred_at": posted_at_utc,
+        "dedupe_key": resolved_dedupe_key,
+        "source_ref": source_ref or None,
+        "priority": "P0",
+        "confidence": 0.99,
+        "payload": {
+            "amount": _decimal_money_string(amount_cents),
+            "currency": currency_code,
+            "account_name": clean_text(receiving_account),
+            "classification": "payroll",
+            "classification_confidence": 0.99,
+            "transaction_ref": source_ref,
+        },
+    }
+    plan_items = [
+        {
+            "item_type": "allocation",
+            "label": route["label"],
+            "proposed_amount_cents": route["amount_cents"],
+            "metadata": route["metadata"],
+        }
+        for route in normalized_routes
+    ]
+    plan_items.append(
+        {
+            "item_type": "unallocated",
+            "label": "Retained paycheck remainder",
+            "proposed_amount_cents": retained_paycheck_remainder_cents,
+            "metadata": {"reason": "retained_cash_not_operating_floor"},
+        }
+    )
+    metadata = {
+        "capital_semantics": capital_semantics,
+        "prepared_by": "prepare_payday_case",
+    }
+    if transfer_evidence is not None:
+        metadata["transfer_evidence"] = transfer_evidence
+    preview = {
+        "source_system_id": "sys_innbank",
+        "event_type": "financial_inflow_posted",
+        "dedupe_key": resolved_dedupe_key,
+        "source_transaction_id": clean_text(source_transaction_id) or None,
+        "posted_at": posted_at_utc,
+        "paycheck_amount_cents": amount_cents,
+        "paycheck_amount": cents_to_money(amount_cents, currency_code),
+        "starting_balance": _money_box("Starting account balance", starting_balance_cents, currency_code),
+        "operating_floor": _money_box("Operating floor", operating_floor_cents, currency_code),
+        "protected_holds": protected_hold_details,
+        "total_protected_holds_cents": total_protected_holds_cents,
+        "headroom_above_floor_cents": headroom_above_floor_cents,
+        "truly_deployable_cents": truly_deployable_cents,
+        "proposed_routes": [
+            {"label": route["label"], "amount_cents": route["amount_cents"], "amount": cents_to_money(route["amount_cents"], currency_code)}
+            for route in normalized_routes
+        ],
+        "proposed_route_total_cents": route_total_cents,
+        "retained_paycheck_remainder": _money_box("Retained paycheck remainder", retained_paycheck_remainder_cents, currency_code),
+        "projected_balance_after_routes": _money_box("Projected account balance after routes", projected_balance_after_routes_cents, currency_code),
+        "actual_spend": [],
+        "decision_state": "proposed_only",
+        "possible_matching_transfer_evidence": transfer_evidence,
+        "will_write": {
+            "confirmed_false": "no database writes",
+            "confirmed_true": "create event, signal, alert, and proposed allocation plan through existing services",
+        },
+    }
+    return {
+        "event_payload": event_payload,
+        "plan_payload": {
+            "title": f"Payday allocation candidate: {cents_to_money(amount_cents, currency_code)}",
+            "summary": f"{clean_text(employer_reference)} posted to {clean_text(receiving_account)}; allocation is proposed only.",
+            "rationale": "Prepared from explicit paycheck and capital-context inputs. No routing has been approved or recorded.",
+            "recommended_action": "Review the proposed routes and decide whether to approve, modify, defer, or reject.",
+            "notes": "decision_state=proposed_only; no_allocation_approved; no_manual_routing_recorded",
+            "metadata": metadata,
+            "items": plan_items,
+        },
+        "preview": preview,
+    }
+
+
+def _existing_case_for_dedupe(conn, dedupe_key: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        """
+        SELECT e.event_id, s.signal_id, a.alert_id, p.plan_id
+        FROM core_events AS e
+        LEFT JOIN core_signal_events AS se ON se.event_id = e.event_id AND se.relationship = 'trigger'
+        LEFT JOIN core_signals AS s ON s.signal_id = se.signal_id
+        LEFT JOIN core_alerts AS a ON a.signal_id = s.signal_id
+        LEFT JOIN innbank_allocation_plans AS p ON p.signal_id = s.signal_id
+        WHERE e.source_system_id = 'sys_innbank'
+          AND e.event_type = 'financial_inflow_posted'
+          AND e.dedupe_key = ?
+        ORDER BY e.created_at ASC, p.created_at ASC
+        LIMIT 1
+        """,
+        (dedupe_key,),
+    ).fetchone()
+    if not row:
+        return None
+    result = dict(row)
+    plan_id = clean_text(result.get("plan_id"))
+    signal_id = clean_text(result.get("signal_id"))
+    if plan_id:
+        result["case"] = _resolve_case(conn, alert_id=None, signal_id=None, plan_id=plan_id)
+    elif signal_id:
+        result["case"] = _resolve_case(conn, alert_id=None, signal_id=signal_id, plan_id=None)
+    else:
+        result["case"] = None
+    return result
+
+
+def _prepare_payday_case(
+    db_path: Path,
+    *,
+    paycheck_amount: Any,
+    posted_at: str,
+    employer_reference: str,
+    receiving_account: str,
+    starting_balance: Any,
+    operating_floor: Any,
+    protected_holds: list[dict[str, Any]] | None = None,
+    proposed_routes: list[dict[str, Any]] | None = None,
+    possible_matching_transfer_evidence: dict[str, Any] | None = None,
+    currency: str | None = "USD",
+    source_transaction_id: str | None = None,
+    dedupe_key: str | None = None,
+    confirmed: bool | None = None,
+) -> dict[str, Any]:
+    prepared = _build_payday_case_inputs(
+        paycheck_amount=paycheck_amount,
+        posted_at=posted_at,
+        employer_reference=employer_reference,
+        receiving_account=receiving_account,
+        starting_balance=starting_balance,
+        operating_floor=operating_floor,
+        protected_holds=protected_holds,
+        proposed_routes=proposed_routes,
+        possible_matching_transfer_evidence=possible_matching_transfer_evidence,
+        currency=currency,
+        source_transaction_id=source_transaction_id,
+        dedupe_key=dedupe_key,
+    )
+    if not confirmed:
+        return _success(confirmed=False, preview=prepared["preview"], writes=[])
+    if not configured_api_key():
+        return _fail("INFO_ANALYZER_API_KEY is not configured for payday write tools")
+
+    with connect(db_path) as conn:
+        existing = _existing_case_for_dedupe(conn, prepared["event_payload"]["dedupe_key"])
+    if existing and existing.get("plan_id"):
+        return _success(
+            confirmed=True,
+            idempotent=True,
+            preview=prepared["preview"],
+            event_id=existing["event_id"],
+            signal_id=existing["signal_id"],
+            alert_id=existing["alert_id"],
+            plan_id=existing["plan_id"],
+            case=existing["case"],
+        )
+
+    with connect(db_path) as conn:
+        try:
+            event_result = core_create_event(conn, prepared["event_payload"])
+            dispatch_result = EventDispatcher().dispatch(
+                conn,
+                event_result["event"],
+                deduplicated=not event_result["created"],
+            )
+            event_result["event"]["processing_status"] = dispatch_result.get(
+                "event_status",
+                event_result["event"].get("processing_status"),
+            )
+            conn.commit()
+        except InnbankProcessingError as exc:
+            conn.commit()
+            return _fail(str(exc), effects=exc.effects)
+    effects = dispatch_result.get("effects", [])
+    signal_id = clean_text(next((effect.get("signal_id") for effect in effects if effect.get("signal_id")), ""))
+    alert_id = clean_text(next((effect.get("alert_id") for effect in effects if effect.get("alert_id")), ""))
+    if not signal_id:
+        with connect(db_path) as conn:
+            existing = _existing_case_for_dedupe(conn, prepared["event_payload"]["dedupe_key"])
+            signal_id = clean_text((existing or {}).get("signal_id"))
+            alert_id = clean_text((existing or {}).get("alert_id"))
+    if not signal_id:
+        return _fail("payday event did not produce a signal", event=event_result["event"], effects=effects)
+
+    plan_payload = dict(prepared["plan_payload"])
+    plan_payload["signal_id"] = signal_id
+    plan_result = create_allocation_plan(str(db_path), plan_payload)
+    plan_id = plan_result["plan"]["plan_id"]
+    with connect(db_path) as conn:
+        case = _resolve_case(conn, alert_id=None, signal_id=None, plan_id=plan_id)
+    return _success(
+        confirmed=True,
+        idempotent=not event_result["created"] or not plan_result.get("created", False),
+        preview=prepared["preview"],
+        event_id=event_result["event"]["event_id"],
+        signal_id=signal_id,
+        alert_id=alert_id or case["case_id"].get("alert_id"),
+        plan_id=plan_id,
+        case=case,
+        effects=effects,
+    )
+
+
 def build_server(database_path: str | Path | None = None) -> Any:
     if not MCP_AVAILABLE:
         raise RuntimeError("mcp is not installed; install the official MCP SDK first")
@@ -641,8 +1026,48 @@ def build_server(database_path: str | Path | None = None) -> Any:
     server = MCPServer(
         name="info-analyzer-payday-bridge",
         title="Info Analyzer Payday Bridge",
-        description="Read and update INNBANK payday context through three chat tools.",
+        description="Read and update INNBANK payday context through chat tools.",
     )
+
+    @server.tool(
+        name="prepare_payday_case",
+        annotations=_tool_annotations(read_only=False),
+        structured_output=True,
+    )
+    def prepare_payday_case(
+        paycheck_amount: str,
+        posted_at: str,
+        employer_reference: str,
+        receiving_account: str,
+        starting_balance: str,
+        operating_floor: str,
+        protected_holds: list[dict[str, Any]] | None = None,
+        proposed_routes: list[dict[str, Any]] | None = None,
+        possible_matching_transfer_evidence: dict[str, Any] | None = None,
+        currency: str | None = "USD",
+        source_transaction_id: str | None = None,
+        dedupe_key: str | None = None,
+        confirmed: bool | None = None,
+    ) -> dict[str, Any]:
+        try:
+            return _prepare_payday_case(
+                db_path,
+                paycheck_amount=paycheck_amount,
+                posted_at=posted_at,
+                employer_reference=employer_reference,
+                receiving_account=receiving_account,
+                starting_balance=starting_balance,
+                operating_floor=operating_floor,
+                protected_holds=protected_holds,
+                proposed_routes=proposed_routes,
+                possible_matching_transfer_evidence=possible_matching_transfer_evidence,
+                currency=currency,
+                source_transaction_id=source_transaction_id,
+                dedupe_key=dedupe_key,
+                confirmed=confirmed,
+            )
+        except (KeyError, ValueError) as exc:
+            return _fail(str(exc))
 
     @server.tool(
         name="get_payday_case",
