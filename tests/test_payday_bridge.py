@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,20 @@ if MCP_AVAILABLE:
     from mcp import Client
 else:  # pragma: no cover - skipped when SDK is missing
     Client = None  # type: ignore[assignment]
+
+
+ROOT = Path(__file__).resolve().parents[1]
+CANONICAL_DB = ROOT / "data" / "info_analyzer.db"
+MCP_TOOL_NAMES = {
+    "prepare_payday_case",
+    "get_payday_case",
+    "save_payday_decision",
+    "record_manual_routing",
+    "get_system_status",
+    "list_cases",
+    "get_case",
+    "get_event_trace",
+}
 
 
 def utc_now() -> str:
@@ -62,16 +77,17 @@ class PaydayBridgeTests(unittest.TestCase):
             signal_id, alert_id, plan_id = self.create_payday_case(app_handle)
             tools = self.list_tools(bridge_handle.port)
             tool_names = {tool.name for tool in tools}
-            self.assertEqual(
-                tool_names,
-                {"prepare_payday_case", "get_payday_case", "save_payday_decision", "record_manual_routing"},
-            )
+            self.assertEqual(tool_names, MCP_TOOL_NAMES)
             annotations = {tool.name: tool.annotations for tool in tools}
             self.assertFalse(bool(getattr(annotations["prepare_payday_case"], "read_only_hint", True)))
             self.assertTrue(bool(getattr(annotations["prepare_payday_case"], "destructive_hint", False)))
             self.assertTrue(bool(getattr(annotations["get_payday_case"], "read_only_hint", False)))
             self.assertFalse(bool(getattr(annotations["get_payday_case"], "destructive_hint", True)))
             self.assertFalse(bool(getattr(annotations["get_payday_case"], "open_world_hint", True)))
+            for read_tool in ("get_system_status", "list_cases", "get_case", "get_event_trace"):
+                self.assertTrue(bool(getattr(annotations[read_tool], "read_only_hint", False)), read_tool)
+                self.assertFalse(bool(getattr(annotations[read_tool], "destructive_hint", True)), read_tool)
+                self.assertFalse(bool(getattr(annotations[read_tool], "open_world_hint", True)), read_tool)
             self.assertFalse(bool(getattr(annotations["save_payday_decision"], "read_only_hint", True)))
             self.assertTrue(bool(getattr(annotations["save_payday_decision"], "destructive_hint", False)))
 
@@ -93,6 +109,73 @@ class PaydayBridgeTests(unittest.TestCase):
         finally:
             self.stop_bridge(bridge_handle)
             stop_server(app_handle)
+            tempdir.cleanup()
+
+    @unittest.skipUnless(MCP_AVAILABLE, "official MCP SDK is not installed")
+    def test_shared_ledger_tools_over_mcp_are_read_only_and_legacy_opt_in(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        root = Path(tempdir.name)
+        db_path = root / "shared-ledger.db"
+        shutil.copy2(CANONICAL_DB, db_path)
+        bridge_handle = self.start_bridge(db_path, api_key="test-key")
+        try:
+            with core_connect(db_path) as conn:
+                before_counts = self.shared_read_counts(conn)
+
+            status = self.call_tool(bridge_handle.port, "get_system_status", {})
+            self.assertEqual(status["status"], "ok")
+            self.assertTrue(status["foreign_keys_enforced"])
+            self.assertIn("core_events", status["coverage"]["tables"])
+
+            cases = self.call_tool(bridge_handle.port, "list_cases", {"limit": 1})
+            self.assertEqual(cases["status"], "ok")
+            self.assertFalse(cases["legacy_included"])
+            self.assertEqual(cases["cases"][0]["case_id"], "core:innbank_allocation_plan:IPL-703C8FAA34DE4857")
+
+            case = self.call_tool(
+                bridge_handle.port,
+                "get_case",
+                {"case_id": "core:innbank_allocation_plan:IPL-703C8FAA34DE4857"},
+            )
+            self.assertEqual(case["status"], "ok")
+            self.assertEqual(case["case"]["kind"], "normalized")
+            self.assertEqual(case["case"]["delivery"]["status"], "delivery_unknown")
+
+            trace = self.call_tool(
+                bridge_handle.port,
+                "get_event_trace",
+                {"event_id": "EVT-ABA4A8FDC3C64D6C"},
+            )
+            self.assertEqual(trace["status"], "ok")
+            self.assertEqual(trace["event"]["event_id"], "EVT-ABA4A8FDC3C64D6C")
+            self.assertEqual(trace["delivery_status"], "delivery_unknown")
+
+            default_cases = self.call_tool(bridge_handle.port, "list_cases", {"limit": 5})
+            self.assertTrue(all(item["kind"] == "normalized" for item in default_cases["cases"]))
+
+            legacy = self.call_tool(
+                bridge_handle.port,
+                "list_cases",
+                {"include_legacy": True, "legacy_type": "entries", "limit": 2},
+            )
+            self.assertTrue(legacy["legacy_included"])
+            self.assertEqual(len(legacy["cases"]), 2)
+            self.assertTrue(all(item["kind"] == "legacy_candidate" for item in legacy["cases"]))
+            self.assertTrue(all(item["legacy_table"] == "entries" for item in legacy["cases"]))
+            self.assertIn("provenance", legacy["cases"][0])
+
+            invalid_case = self.call_tool(bridge_handle.port, "get_case", {"case_id": "core:innbank_allocation_plan:missing"})
+            self.assertFalse(invalid_case["ok"])
+            self.assertIn("case not found", invalid_case["error"])
+
+            invalid_trace = self.call_tool(bridge_handle.port, "get_event_trace", {"event_id": "EVT-MISSING"})
+            self.assertFalse(invalid_trace["ok"])
+            self.assertIn("event not found", invalid_trace["error"])
+
+            with core_connect(db_path) as conn:
+                self.assertEqual(self.shared_read_counts(conn), before_counts)
+        finally:
+            self.stop_bridge(bridge_handle)
             tempdir.cleanup()
 
         tempdir = tempfile.TemporaryDirectory()
@@ -533,6 +616,24 @@ class PaydayBridgeTests(unittest.TestCase):
             result[name] = conn.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] if name in tables else 0
         return result
 
+    def shared_read_counts(self, conn):
+        return {
+            name: conn.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0]
+            for name in [
+                "core_events",
+                "core_signals",
+                "core_alerts",
+                "core_decisions",
+                "core_actions",
+                "core_outcomes",
+                "innbank_allocation_plans",
+                "innbank_allocation_items",
+                "actions",
+                "live_signals",
+                "audit_log",
+            ]
+        }
+
     def prepare_payday_payload(self, *, dedupe_key: str, proposed_routes: list[dict[str, Any]] | None = None):
         return {
             "paycheck_amount": "1084.14",
@@ -738,7 +839,7 @@ class PaydayBridgeTests(unittest.TestCase):
                 return False
             try:
                 tools = self.list_tools(port)
-                return len(tools) == 4
+                return {tool.name for tool in tools} == MCP_TOOL_NAMES
             except Exception:
                 time.sleep(0.25)
         return False

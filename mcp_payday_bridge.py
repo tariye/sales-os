@@ -36,6 +36,12 @@ from core_innbank_routing import (
 )
 from core_migrations import initialize_core_migrations
 from core_processors import EventDispatcher, InnbankProcessingError
+from core_shared_access import (
+    get_case as shared_get_case,
+    get_event_trace as shared_get_event_trace,
+    get_system_status as shared_get_system_status,
+    list_cases as shared_list_cases,
+)
 from server import configured_api_key
 
 try:
@@ -1085,6 +1091,65 @@ def build_server(database_path: str | Path | None = None) -> Any:
         except (KeyError, ValueError) as exc:
             return _fail(str(exc))
         return _success(case=case)
+
+    @server.tool(
+        name="get_system_status",
+        annotations=_tool_annotations(read_only=True),
+        structured_output=True,
+    )
+    def get_system_status() -> dict[str, Any]:
+        try:
+            return shared_get_system_status(db_path)
+        except Exception as exc:
+            return _fail(str(exc))
+
+    @server.tool(
+        name="list_cases",
+        annotations=_tool_annotations(read_only=True),
+        structured_output=True,
+    )
+    def list_cases(
+        limit: int | None = None,
+        cursor: int | None = None,
+        system_id: str | None = None,
+        include_legacy: bool | None = None,
+        legacy_type: str | None = None,
+        domain: str | None = None,
+    ) -> dict[str, Any]:
+        params = {
+            "limit": [str(limit if limit is not None else "")],
+            "cursor": [str(cursor if cursor is not None else "0")],
+            "system_id": [clean_text(system_id)],
+            "include_legacy": ["true" if include_legacy else "false"],
+            "legacy_type": [clean_text(legacy_type or "entries")],
+            "domain": [clean_text(domain)],
+        }
+        try:
+            return shared_list_cases(db_path, params)
+        except Exception as exc:
+            return _fail(str(exc))
+
+    @server.tool(
+        name="get_case",
+        annotations=_tool_annotations(read_only=True),
+        structured_output=True,
+    )
+    def get_case(case_id: str) -> dict[str, Any]:
+        try:
+            return shared_get_case(db_path, case_id)
+        except (KeyError, ValueError) as exc:
+            return _fail(str(exc))
+
+    @server.tool(
+        name="get_event_trace",
+        annotations=_tool_annotations(read_only=True),
+        structured_output=True,
+    )
+    def get_event_trace(event_id: str) -> dict[str, Any]:
+        try:
+            return shared_get_event_trace(db_path, event_id)
+        except (KeyError, ValueError) as exc:
+            return _fail(str(exc))
 
     @server.tool(
         name="save_payday_decision",

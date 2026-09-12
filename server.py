@@ -48,6 +48,12 @@ from core_innbank_routing import (
     respond_to_allocation_plan as innbank_respond_to_allocation_plan,
 )
 from core_processors import EventDispatcher, InnbankProcessingError
+from core_shared_access import (
+    get_case as shared_get_case,
+    get_event_trace as shared_get_event_trace,
+    get_system_status as shared_get_system_status,
+    list_cases as shared_list_cases,
+)
 from home_sentinel import HomeSentinelProcessingError
 from module_processors import ModuleProcessingError
 
@@ -6821,6 +6827,22 @@ class Handler(SimpleHTTPRequestHandler):
         path = parsed.path
         params = parse_qs(parsed.query)
         try:
+            if path.startswith("/shared/") or path.startswith("/api/shared/"):
+                request_id = clean_text(self.headers.get("X-Request-ID") or "")
+                if not self.require_api_auth(request_id):
+                    return
+                shared_path = path.split("/api/shared", 1)[1] if path.startswith("/api/shared/") else path.split("/shared", 1)[1]
+                if shared_path == "/system-status":
+                    return self.send_json(shared_get_system_status(DB_PATH))
+                if shared_path == "/cases":
+                    return self.send_json(shared_list_cases(DB_PATH, params))
+                if shared_path.startswith("/cases/"):
+                    case_id = unquote(shared_path.split("/cases/", 1)[1])
+                    return self.send_json(shared_get_case(DB_PATH, case_id))
+                if shared_path.startswith("/event-trace/"):
+                    event_id = unquote(shared_path.split("/event-trace/", 1)[1])
+                    return self.send_json(shared_get_event_trace(DB_PATH, event_id))
+                return self.send_json({"error": "shared endpoint not found"}, 404)
             if path.startswith("/api/v1/"):
                 return self.handle_v1_read(path, params)
             if path in {"/alerts", "/api/alerts"}:

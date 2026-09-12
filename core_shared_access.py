@@ -1,0 +1,437 @@
+"""Read-only shared access layer for normalized and legacy records."""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from core_database import connect
+
+
+DEFAULT_LIMIT = 25
+MAX_LIMIT = 100
+CORE_COVERAGE = [
+    "core_systems",
+    "core_events",
+    "core_signals",
+    "core_signal_events",
+    "core_alerts",
+    "core_decisions",
+    "core_actions",
+    "core_outcomes",
+    "core_lessons",
+    "innbank_allocation_plans",
+    "innbank_allocation_items",
+    "innbank_routing_runs",
+    "innbank_routing_items",
+]
+LEGACY_COVERAGE = ["entries", "actions"]
+
+
+def clean_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def load_json(value: Any, default: Any) -> Any:
+    if value in (None, ""):
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    try:
+        return json.loads(value)
+    except Exception:
+        return default
+
+
+def parse_limit(value: Any) -> int:
+    try:
+        limit = int(value or DEFAULT_LIMIT)
+    except (TypeError, ValueError):
+        limit = DEFAULT_LIMIT
+    return max(1, min(limit, MAX_LIMIT))
+
+
+def parse_cursor(value: Any) -> int:
+    try:
+        cursor = int(value or 0)
+    except (TypeError, ValueError):
+        cursor = 0
+    return max(0, cursor)
+
+
+def coverage(tables: list[str], *, systems: list[str] | None = None, limitations: list[str] | None = None) -> dict[str, Any]:
+    return {
+        "tables": tables,
+        "systems": systems or [],
+        "limitations": limitations or [],
+    }
+
+
+def table_counts(conn, tables: list[str]) -> dict[str, int | str]:
+    existing = {
+        row["name"]
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    }
+    counts: dict[str, int | str] = {}
+    for table in tables:
+        if table not in existing:
+            counts[table] = "not_implemented"
+        else:
+            counts[table] = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+    return counts
+
+
+def get_system_status(database_path) -> dict[str, Any]:
+    with connect(database_path) as conn:
+        fk_enforced = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+        systems = [dict(row) for row in conn.execute("SELECT * FROM core_systems ORDER BY system_id").fetchall()]
+        for system in systems:
+            system["metadata"] = load_json(system.pop("metadata_json", "{}"), {})
+            system_id = system["system_id"]
+            event_counts = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT processing_status, COUNT(*) AS count, MAX(created_at) AS latest_created_at
+                    FROM core_events
+                    WHERE source_system_id=?
+                    GROUP BY processing_status
+                    ORDER BY processing_status
+                    """,
+                    (system_id,),
+                ).fetchall()
+            ]
+            signal_counts = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT status, priority, COUNT(*) AS count, MAX(created_at) AS latest_created_at
+                    FROM core_signals
+                    WHERE owner_system_id=?
+                    GROUP BY status, priority
+                    ORDER BY priority, status
+                    """,
+                    (system_id,),
+                ).fetchall()
+            ]
+            system["events"] = event_counts or [{"state": "empty", "count": 0}]
+            system["signals"] = signal_counts or [{"state": "empty", "count": 0}]
+            system["source_freshness"] = {
+                "status": "unknown" if not event_counts else "recorded",
+                "as_of": max((row.get("latest_created_at") or "" for row in event_counts), default=None),
+                "reason": "No source freshness ledger exists yet." if not event_counts else "Based on latest recorded core_events.created_at.",
+            }
+            system["workers"] = {
+                "status": "not_implemented",
+                "reason": "No durable shared worker/lease table exists in the canonical schema.",
+            }
+            system["delivery"] = {
+                "status": "delivery_unknown",
+                "reason": "core_alerts records command_center intent/state only; no notification-attempt ledger exists.",
+            }
+        return {
+            "status": "ok",
+            "foreign_keys_enforced": bool(fk_enforced),
+            "systems": systems,
+            "counts": table_counts(conn, CORE_COVERAGE + LEGACY_COVERAGE + ["audit_log", "schema_migrations"]),
+            "coverage": coverage(
+                CORE_COVERAGE + LEGACY_COVERAGE + ["audit_log", "schema_migrations"],
+                systems=[row["system_id"] for row in systems],
+                limitations=[
+                    "Source freshness is inferred only from recorded events where available.",
+                    "Notification delivery attempts are not implemented as a durable ledger.",
+                    "Legacy records are counted but not promoted by this read layer.",
+                ],
+            ),
+        }
+
+
+def _normalized_cases(conn, *, system_id: str, limit: int, offset: int) -> list[dict[str, Any]]:
+    params: list[Any] = []
+    where = ""
+    if system_id:
+        where = "WHERE p.source_system_id = ?"
+        params.append(system_id)
+    rows = conn.execute(
+        f"""
+        SELECT
+            p.plan_id, p.source_system_id, p.signal_id, p.source_event_id,
+            p.status, p.latest_response, p.created_at, p.updated_at,
+            s.signal_type, s.priority, s.status AS signal_status,
+            a.alert_id, a.state AS alert_state
+        FROM innbank_allocation_plans AS p
+        JOIN core_signals AS s ON s.signal_id = p.signal_id
+        LEFT JOIN core_alerts AS a ON a.signal_id = s.signal_id
+        {where}
+        ORDER BY p.created_at DESC, p.plan_id ASC
+        LIMIT ? OFFSET ?
+        """,
+        (*params, limit, offset),
+    ).fetchall()
+    cases = []
+    for row in rows:
+        item = dict(row)
+        cases.append(
+            {
+                "case_id": f"core:innbank_allocation_plan:{item['plan_id']}",
+                "kind": "normalized",
+                "system_id": item["source_system_id"],
+                "case_type": "innbank_payday_allocation",
+                "state": item["status"],
+                "primary_id": item["plan_id"],
+                "event_id": item["source_event_id"],
+                "signal_id": item["signal_id"],
+                "alert_id": item["alert_id"],
+                "summary": {
+                    "signal_type": item["signal_type"],
+                    "signal_priority": item["priority"],
+                    "signal_status": item["signal_status"],
+                    "alert_state": item["alert_state"] or "not_recorded",
+                    "latest_response": item["latest_response"],
+                },
+                "created_at": item["created_at"],
+                "updated_at": item["updated_at"],
+            }
+        )
+    return cases
+
+
+def _legacy_entry_candidates(conn, *, limit: int, offset: int, domain: str) -> list[dict[str, Any]]:
+    params: list[Any] = []
+    where = ""
+    if domain:
+        where = "WHERE domain = ?"
+        params.append(domain)
+    rows = conn.execute(
+        f"""
+        SELECT id, domain, status, signal_role, action_status, source_type, created_at, updated_at
+        FROM entries
+        {where}
+        ORDER BY created_at DESC, id ASC
+        LIMIT ? OFFSET ?
+        """,
+        (*params, limit, offset),
+    ).fetchall()
+    return [
+        {
+            "case_id": f"legacy:entries:{row['id']}",
+            "kind": "legacy_candidate",
+            "legacy_table": "entries",
+            "legacy_pk": row["id"],
+            "domain": row["domain"],
+            "state": row["status"],
+            "role": row["signal_role"] or "unknown",
+            "action_status": row["action_status"],
+            "source_type": row["source_type"],
+            "provenance": {"table": "entries", "primary_key": row["id"]},
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+        for row in rows
+    ]
+
+
+def _legacy_action_candidates(conn, *, limit: int, offset: int) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT id, entry_id, status, priority, created_at, updated_at
+        FROM actions
+        ORDER BY created_at DESC, id ASC
+        LIMIT ? OFFSET ?
+        """,
+        (limit, offset),
+    ).fetchall()
+    return [
+        {
+            "case_id": f"legacy:actions:{row['id']}",
+            "kind": "legacy_candidate",
+            "legacy_table": "actions",
+            "legacy_pk": row["id"],
+            "entry_id": row["entry_id"],
+            "state": row["status"],
+            "priority": row["priority"],
+            "provenance": {"table": "actions", "primary_key": row["id"], "entry_id": row["entry_id"]},
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+        for row in rows
+    ]
+
+
+def list_cases(database_path, params: dict[str, list[str]]) -> dict[str, Any]:
+    limit = parse_limit((params.get("limit") or [""])[0])
+    cursor = parse_cursor((params.get("cursor") or ["0"])[0])
+    system_id = clean_text((params.get("system_id") or [""])[0])
+    include_legacy = clean_text((params.get("include_legacy") or ["false"])[0]).lower() in {"1", "true", "yes"}
+    legacy_type = clean_text((params.get("legacy_type") or ["entries"])[0]) or "entries"
+    domain = clean_text((params.get("domain") or [""])[0])
+    with connect(database_path) as conn:
+        if include_legacy:
+            if legacy_type == "actions":
+                cases = _legacy_action_candidates(conn, limit=limit, offset=cursor)
+                inspected = ["actions"]
+            else:
+                cases = _legacy_entry_candidates(conn, limit=limit, offset=cursor, domain=domain)
+                inspected = ["entries"]
+        else:
+            cases = _normalized_cases(conn, system_id=system_id, limit=limit, offset=cursor)
+            inspected = ["innbank_allocation_plans", "core_signals", "core_alerts"]
+    return {
+        "status": "ok" if cases else "empty",
+        "cases": cases,
+        "pagination": {
+            "limit": limit,
+            "cursor": cursor,
+            "next_cursor": cursor + len(cases) if len(cases) == limit else None,
+            "stable_order": "created_at DESC, stable primary key ASC",
+        },
+        "legacy_included": include_legacy,
+        "coverage": coverage(
+            inspected,
+            systems=[system_id] if system_id else [],
+            limitations=["Legacy candidates are read-only and not promoted by this endpoint."] if include_legacy else [],
+        ),
+    }
+
+
+def _case_parts(case_id: str) -> tuple[str, str, str]:
+    parts = clean_text(case_id).split(":", 2)
+    if len(parts) != 3:
+        raise ValueError("case_id must be namespace:record_type:record_id")
+    return parts[0], parts[1], parts[2]
+
+
+def get_case(database_path, case_id: str) -> dict[str, Any]:
+    namespace, record_type, record_id = _case_parts(case_id)
+    with connect(database_path) as conn:
+        if namespace == "core" and record_type == "innbank_allocation_plan":
+            row = conn.execute(
+                """
+                SELECT p.*, s.signal_type, s.title AS signal_title, s.summary AS signal_summary,
+                       s.priority AS signal_priority, s.status AS signal_status,
+                       e.event_type, e.processing_status AS event_processing_status,
+                       a.alert_id, a.state AS alert_state, a.delivery_channel, a.presented_at, a.acknowledged_at
+                FROM innbank_allocation_plans AS p
+                JOIN core_signals AS s ON s.signal_id = p.signal_id
+                JOIN core_events AS e ON e.event_id = p.source_event_id
+                LEFT JOIN core_alerts AS a ON a.signal_id = s.signal_id
+                WHERE p.plan_id=?
+                """,
+                (record_id,),
+            ).fetchone()
+            if not row:
+                raise KeyError("case not found")
+            items = [dict(r) for r in conn.execute("SELECT allocation_item_id, item_type, label, proposed_amount_cents, goal_id, state, order_index FROM innbank_allocation_items WHERE plan_id=? ORDER BY order_index", (record_id,)).fetchall()]
+            routing = [dict(r) for r in conn.execute("SELECT routing_run_id, status, completed_at, routing_completed_event_id FROM innbank_routing_runs WHERE plan_id=? ORDER BY created_at", (record_id,)).fetchall()]
+            plan = dict(row)
+            plan["metadata"] = load_json(plan.pop("metadata_json", "{}"), {})
+            return {
+                "status": "ok",
+                "case": {
+                    "case_id": case_id,
+                    "kind": "normalized",
+                    "plan": plan,
+                    "items": items,
+                    "routing_runs": routing,
+                    "delivery": {
+                        "state": plan.get("alert_state") or "not_recorded",
+                        "channel": plan.get("delivery_channel") or "not_recorded",
+                        "status": "delivery_unknown" if plan.get("alert_id") else "not_recorded",
+                        "presented_at": plan.get("presented_at"),
+                        "acknowledged_at": plan.get("acknowledged_at"),
+                    },
+                },
+                "coverage": coverage(["innbank_allocation_plans", "innbank_allocation_items", "core_events", "core_signals", "core_alerts", "innbank_routing_runs"], systems=[plan["source_system_id"]]),
+            }
+        if namespace == "legacy" and record_type == "entries":
+            row = conn.execute("SELECT id, domain, status, signal_role, action_status, source_type, created_at, updated_at, metadata FROM entries WHERE id=?", (record_id,)).fetchone()
+            if not row:
+                raise KeyError("case not found")
+            data = dict(row)
+            data["metadata"] = load_json(data.get("metadata"), {})
+            return {
+                "status": "ok",
+                "case": {
+                    "case_id": case_id,
+                    "kind": "legacy_candidate",
+                    "legacy_table": "entries",
+                    "legacy_pk": record_id,
+                    "record": data,
+                    "provenance": {"table": "entries", "primary_key": record_id},
+                },
+                "coverage": coverage(["entries"], limitations=["Legacy entry content is not promoted or reclassified by this read."]),
+            }
+        if namespace == "legacy" and record_type == "actions":
+            row = conn.execute("SELECT id, entry_id, status, priority, created_at, updated_at, metadata FROM actions WHERE id=?", (record_id,)).fetchone()
+            if not row:
+                raise KeyError("case not found")
+            data = dict(row)
+            data["metadata"] = load_json(data.get("metadata"), {})
+            return {
+                "status": "ok",
+                "case": {
+                    "case_id": case_id,
+                    "kind": "legacy_candidate",
+                    "legacy_table": "actions",
+                    "legacy_pk": record_id,
+                    "record": data,
+                    "provenance": {"table": "actions", "primary_key": record_id, "entry_id": data["entry_id"]},
+                },
+                "coverage": coverage(["actions"], limitations=["Legacy action is not converted to core_actions by this read."]),
+            }
+    raise ValueError("unsupported case namespace or record type")
+
+
+def get_event_trace(database_path, event_id: str) -> dict[str, Any]:
+    event_id = clean_text(event_id)
+    with connect(database_path) as conn:
+        event = conn.execute("SELECT * FROM core_events WHERE event_id=?", (event_id,)).fetchone()
+        if not event:
+            raise KeyError("event not found")
+        event_data = dict(event)
+        event_data["payload"] = load_json(event_data.pop("payload_json", "{}"), {})
+        signals = [dict(r) for r in conn.execute(
+            """
+            SELECT s.signal_id, s.signal_type, s.priority, s.status, se.relationship
+            FROM core_signal_events AS se
+            JOIN core_signals AS s ON s.signal_id = se.signal_id
+            WHERE se.event_id=?
+            ORDER BY s.created_at ASC
+            """,
+            (event_id,),
+        ).fetchall()]
+        signal_ids = [s["signal_id"] for s in signals]
+        alerts: list[dict[str, Any]] = []
+        decisions: list[dict[str, Any]] = []
+        actions: list[dict[str, Any]] = []
+        outcomes: list[dict[str, Any]] = []
+        if signal_ids:
+            placeholders = ",".join("?" for _ in signal_ids)
+            alerts = [dict(r) for r in conn.execute(f"SELECT alert_id, signal_id, priority, state, delivery_channel, presented_at, acknowledged_at, resolved_at FROM core_alerts WHERE signal_id IN ({placeholders}) ORDER BY created_at ASC", tuple(signal_ids)).fetchall()]
+            decisions = [dict(r) for r in conn.execute(f"SELECT decision_id, signal_id, decision_type, selected_option, decided_by, decided_at FROM core_decisions WHERE signal_id IN ({placeholders}) ORDER BY created_at ASC", tuple(signal_ids)).fetchall()]
+        decision_ids = [d["decision_id"] for d in decisions]
+        if decision_ids:
+            placeholders = ",".join("?" for _ in decision_ids)
+            actions = [dict(r) for r in conn.execute(f"SELECT action_id, decision_id, action_type, status, execution_mode, created_at FROM core_actions WHERE decision_id IN ({placeholders}) ORDER BY created_at ASC", tuple(decision_ids)).fetchall()]
+        action_ids = [a["action_id"] for a in actions]
+        if action_ids:
+            placeholders = ",".join("?" for _ in action_ids)
+            outcomes = [dict(r) for r in conn.execute(f"SELECT outcome_id, action_id, outcome_type, result_status, observed_at, created_at FROM core_outcomes WHERE action_id IN ({placeholders}) ORDER BY created_at ASC", tuple(action_ids)).fetchall()]
+        audit_rows = [dict(r) for r in conn.execute("SELECT id, event_type, entity_type, entity_id, created_at FROM audit_log WHERE entity_id=? ORDER BY created_at ASC", (event_id,)).fetchall()]
+        delivery = "delivery_unknown" if alerts else "not_recorded"
+        return {
+            "status": "ok",
+            "event": event_data,
+            "signals": signals,
+            "alerts": alerts,
+            "decisions": decisions,
+            "actions": actions,
+            "outcomes": outcomes,
+            "operations": audit_rows,
+            "delivery_status": delivery,
+            "coverage": coverage(
+                ["core_events", "core_signal_events", "core_signals", "core_alerts", "core_decisions", "core_actions", "core_outcomes", "audit_log"],
+                systems=[event_data["source_system_id"]],
+                limitations=["Notification delivery attempts are not recorded separately; alert presence implies intent/state only."],
+            ),
+        }
