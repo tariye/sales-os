@@ -98,6 +98,10 @@ def table_exists(conn, table: str) -> bool:
 def get_system_status(database_path) -> dict[str, Any]:
     with connect(database_path) as conn:
         fk_enforced = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+        existing_tables = {
+            row["name"]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
         systems = [dict(row) for row in conn.execute("SELECT * FROM core_systems ORDER BY system_id").fetchall()]
         for system in systems:
             system["metadata"] = load_json(system.pop("metadata_json", "{}"), {})
@@ -128,20 +132,79 @@ def get_system_status(database_path) -> dict[str, Any]:
                     (system_id,),
                 ).fetchall()
             ]
+            observation_counts = []
+            latest_observation = None
+            if "core_source_observations" in existing_tables:
+                observation_counts = [
+                    dict(row)
+                    for row in conn.execute(
+                        """
+                        SELECT observation_status, COUNT(*) AS count, MAX(last_seen_at) AS latest_seen_at
+                        FROM core_source_observations
+                        WHERE source_system_id=?
+                        GROUP BY observation_status
+                        ORDER BY observation_status
+                        """,
+                        (system_id,),
+                    ).fetchall()
+                ]
+                latest_observation = max((row.get("latest_seen_at") or "" for row in observation_counts), default=None)
+            notification_counts = []
+            if "core_notification_requests" in existing_tables:
+                notification_counts = [
+                    dict(row)
+                    for row in conn.execute(
+                        """
+                        SELECT nr.status, COUNT(*) AS count, MAX(nr.requested_at) AS latest_requested_at
+                        FROM core_notification_requests AS nr
+                        JOIN core_alerts AS a ON a.alert_id = nr.alert_id
+                        JOIN core_signals AS s ON s.signal_id = a.signal_id
+                        WHERE s.owner_system_id=?
+                        GROUP BY nr.status
+                        ORDER BY nr.status
+                        """,
+                        (system_id,),
+                    ).fetchall()
+                ]
             system["events"] = event_counts or [{"state": "empty", "count": 0}]
             system["signals"] = signal_counts or [{"state": "empty", "count": 0}]
+            system["source_observations"] = {
+                "status": (
+                    "not_implemented"
+                    if "core_source_observations" not in existing_tables
+                    else "records_present"
+                    if observation_counts
+                    else "implemented_empty"
+                ),
+                "counts": observation_counts,
+                "latest_seen_at": latest_observation,
+            }
             system["source_freshness"] = {
-                "status": "unknown" if not event_counts else "recorded",
-                "as_of": max((row.get("latest_created_at") or "" for row in event_counts), default=None),
-                "reason": "No source freshness ledger exists yet." if not event_counts else "Based on latest recorded core_events.created_at.",
+                "status": "unknown" if not observation_counts and not event_counts else "recorded",
+                "as_of": latest_observation or max((row.get("latest_created_at") or "" for row in event_counts), default=None),
+                "reason": (
+                    "Source observation ledger is implemented but empty for this system."
+                    if "core_source_observations" in existing_tables and not observation_counts
+                    else "Source observation ledger is not implemented."
+                    if "core_source_observations" not in existing_tables
+                    else "Based on latest recorded source observation."
+                ),
             }
             system["workers"] = {
-                "status": "not_implemented",
-                "reason": "No durable shared worker/lease table exists in the canonical schema.",
+                "status": "sender_or_poller_not_configured",
+                "reason": "Durable operation tables do not prove that a sender, poller, or worker is currently running.",
             }
             system["delivery"] = {
-                "status": "delivery_unknown",
-                "reason": "core_alerts records command_center intent/state only; no notification-attempt ledger exists.",
+                "status": (
+                    "records_present"
+                    if notification_counts
+                    else "implemented_empty"
+                    if "core_notification_requests" in existing_tables
+                    else "not_implemented"
+                ),
+                "delivery_status": "delivery_unknown",
+                "counts": notification_counts,
+                "reason": "Delivery requires explicit notification request/result evidence; queued alerts alone are not delivered.",
             }
         return {
             "status": "ok",
@@ -152,8 +215,9 @@ def get_system_status(database_path) -> dict[str, Any]:
                 CORE_COVERAGE + GATE3_COVERAGE + LEGACY_COVERAGE + ["audit_log", "schema_migrations"],
                 systems=[row["system_id"] for row in systems],
                 limitations=[
-                    "Source freshness is inferred only from recorded events where available.",
-                    "Notification delivery attempts are not implemented as a durable ledger.",
+                    "Source freshness uses source observations when present, otherwise recorded events where available.",
+                    "Sender/poller configuration is reported separately and is not inferred from table existence.",
+                    "Notification delivery remains unknown until request/result evidence exists.",
                     "Legacy records are counted but not promoted by this read layer.",
                 ],
             ),

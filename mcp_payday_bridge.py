@@ -4,6 +4,8 @@ This server exposes the ChatGPT-facing tools required for the
 INNBANK payday bridge milestone:
 
 * prepare_payday_case
+* record_financial_source_observation
+* get_source_observation_status
 * get_payday_case
 * save_payday_decision
 * record_manual_routing
@@ -35,6 +37,7 @@ from core_innbank_routing import (
     respond_to_allocation_plan,
 )
 from core_migrations import initialize_core_migrations
+from core_observations import ingest_observation, record_source_observation
 from core_processors import EventDispatcher, InnbankProcessingError
 from core_shared_access import (
     get_case as shared_get_case,
@@ -928,6 +931,313 @@ def _existing_case_for_dedupe(conn, dedupe_key: str) -> dict[str, Any] | None:
     return result
 
 
+def _row_to_source_observation(row: Any) -> dict[str, Any]:
+    data = dict(row)
+    data["metadata"] = load_json(data.pop("metadata_json", "{}"), {})
+    return data
+
+
+def _existing_ingestion_for_economic_inflow(conn, observation: dict[str, Any]) -> dict[str, Any] | None:
+    row = conn.execute(
+        """
+        SELECT
+            o.observation_id,
+            i.event_id,
+            s.signal_id,
+            a.alert_id
+        FROM core_source_observations AS o
+        JOIN core_ingestion_results AS i
+            ON i.observation_id = o.observation_id AND i.status = 'succeeded'
+        LEFT JOIN core_signal_events AS se
+            ON se.event_id = i.event_id AND se.relationship = 'trigger'
+        LEFT JOIN core_signals AS s
+            ON s.signal_id = se.signal_id
+        LEFT JOIN core_alerts AS a
+            ON a.signal_id = s.signal_id
+        WHERE o.source_system_id = ?
+          AND o.source_connection_id = ?
+          AND o.account_external_id = ?
+          AND o.economic_inflow_key = ?
+        ORDER BY i.created_at ASC
+        LIMIT 1
+        """,
+        (
+            observation["source_system_id"],
+            observation["source_connection_id"],
+            observation["account_external_id"],
+            observation["economic_inflow_key"],
+        ),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def _normalize_source_observation_payload(
+    *,
+    source_system_id: str,
+    source_connection_id: str,
+    account_external_id: str,
+    source_transaction_id: str,
+    observation_status: str,
+    observed_at: str,
+    amount_cents: int | None = None,
+    currency: str | None = "USD",
+    account_name: str | None = None,
+    classification: str | None = None,
+    classification_confidence: float | None = None,
+    effective_date: str | None = None,
+    posted_at: str | None = None,
+    source_name: str | None = None,
+    observation_type: str | None = "financial_inflow",
+    economic_inflow_key: str | None = None,
+    provider_transaction_id: str | None = None,
+    provider_pending_id: str | None = None,
+    provider_posted_id: str | None = None,
+    source_modified_at: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    required = {
+        "source_system_id": source_system_id,
+        "source_connection_id": source_connection_id,
+        "account_external_id": account_external_id,
+        "source_transaction_id": source_transaction_id,
+        "observation_status": observation_status,
+        "observed_at": observed_at,
+    }
+    missing = [name for name, value in required.items() if not clean_text(value)]
+    if missing:
+        raise ValueError(f"missing required source observation fields: {', '.join(missing)}")
+    status = clean_text(observation_status).lower()
+    if status not in {"pending", "posted", "removed", "unknown"}:
+        raise ValueError("observation_status must be pending, posted, removed, or unknown")
+    normalized_observed_at = normalize_timestamp(observed_at, "observed_at")
+    normalized_posted_at = normalize_timestamp(posted_at, "posted_at") if clean_text(posted_at) else None
+    if status == "posted" and not normalized_posted_at:
+        normalized_posted_at = normalized_observed_at
+    amount_value = None
+    if amount_cents is not None:
+        try:
+            amount_value = int(amount_cents)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("amount_cents must be an integer") from exc
+        if amount_value <= 0:
+            raise ValueError("amount_cents must be positive when supplied")
+    confidence_value = None
+    if classification_confidence is not None:
+        try:
+            confidence_value = float(classification_confidence)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("classification_confidence must be between 0 and 1") from exc
+        if confidence_value < 0 or confidence_value > 1:
+            raise ValueError("classification_confidence must be between 0 and 1")
+    return {
+        "source_system_id": clean_text(source_system_id),
+        "source_connection_id": clean_text(source_connection_id),
+        "account_external_id": clean_text(account_external_id),
+        "source_name": clean_text(source_name) or clean_text(source_system_id),
+        "observation_type": clean_text(observation_type) or "financial_inflow",
+        "source_transaction_id": clean_text(source_transaction_id),
+        "provider_transaction_id": clean_text(provider_transaction_id) or None,
+        "provider_pending_id": clean_text(provider_pending_id) or None,
+        "provider_posted_id": clean_text(provider_posted_id) or None,
+        "economic_inflow_key": clean_text(economic_inflow_key) or clean_text(source_transaction_id),
+        "observation_status": status,
+        "amount_cents": amount_value,
+        "currency": clean_text(currency or "USD").upper(),
+        "account_name": clean_text(account_name) or None,
+        "classification": clean_text(classification).lower() or None,
+        "classification_confidence": confidence_value,
+        "observed_at": normalized_observed_at,
+        "effective_date": clean_text(effective_date) or None,
+        "posted_at": normalized_posted_at,
+        "source_modified_at": normalize_timestamp(source_modified_at, "source_modified_at") if clean_text(source_modified_at) else None,
+        "metadata": {
+            **(metadata if isinstance(metadata, dict) else {}),
+            "recorded_by": "mcp_source_observation_tool",
+            "caller_contract": "chatgpt_finances_observation_manual_or_supported_automation",
+            "access_gap": "Local Python process does not have direct bank or ChatGPT Finances API access.",
+        },
+    }
+
+
+def _record_financial_source_observation(
+    db_path: Path,
+    *,
+    source_system_id: str,
+    source_connection_id: str,
+    account_external_id: str,
+    source_transaction_id: str,
+    observation_status: str,
+    observed_at: str,
+    amount_cents: int | None = None,
+    currency: str | None = "USD",
+    account_name: str | None = None,
+    classification: str | None = None,
+    classification_confidence: float | None = None,
+    effective_date: str | None = None,
+    posted_at: str | None = None,
+    source_name: str | None = None,
+    observation_type: str | None = "financial_inflow",
+    economic_inflow_key: str | None = None,
+    provider_transaction_id: str | None = None,
+    provider_pending_id: str | None = None,
+    provider_posted_id: str | None = None,
+    source_modified_at: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    confirmed: bool | None = None,
+) -> dict[str, Any]:
+    if not configured_api_key():
+        return _fail("INFO_ANALYZER_API_KEY is not configured for source observation write tools")
+    if not confirmed:
+        return _fail("confirmation required")
+    try:
+        payload = _normalize_source_observation_payload(
+            source_system_id=source_system_id,
+            source_connection_id=source_connection_id,
+            account_external_id=account_external_id,
+            source_transaction_id=source_transaction_id,
+            observation_status=observation_status,
+            observed_at=observed_at,
+            amount_cents=amount_cents,
+            currency=currency,
+            account_name=account_name,
+            classification=classification,
+            classification_confidence=classification_confidence,
+            effective_date=effective_date,
+            posted_at=posted_at,
+            source_name=source_name,
+            observation_type=observation_type,
+            economic_inflow_key=economic_inflow_key,
+            provider_transaction_id=provider_transaction_id,
+            provider_pending_id=provider_pending_id,
+            provider_posted_id=provider_posted_id,
+            source_modified_at=source_modified_at,
+            metadata=metadata,
+        )
+        with connect(db_path) as conn:
+            result = record_source_observation(conn, payload, worker_id="mcp-source-observer")
+            observation = result["observation"]
+            effects: list[dict[str, Any]] = []
+            event_id = None
+            signal_id = None
+            alert_id = None
+            ingestion_result = None
+            if observation["observation_status"] == "posted":
+                existing = _existing_ingestion_for_economic_inflow(conn, observation)
+                if existing:
+                    event_id = existing.get("event_id")
+                    signal_id = existing.get("signal_id")
+                    alert_id = existing.get("alert_id")
+                    effects.append(
+                        {
+                            "type": "economic_inflow_already_ingested",
+                            "event_id": event_id,
+                            "signal_id": signal_id,
+                            "alert_id": alert_id,
+                            "source_observation_id": existing.get("observation_id"),
+                        }
+                    )
+                else:
+                    ingestion_result = ingest_observation(
+                        conn,
+                        observation["observation_id"],
+                        worker_id="mcp-ingestion-worker",
+                    )
+                    event_id = ingestion_result.get("event_id")
+                    effects.extend(ingestion_result.get("effects") or [])
+                    signal_id = clean_text(next((effect.get("signal_id") for effect in effects if effect.get("signal_id")), ""))
+                    alert_id = clean_text(next((effect.get("alert_id") for effect in effects if effect.get("alert_id")), ""))
+            conn.commit()
+        return _success(
+            observation=observation,
+            created=result.get("created", False),
+            updated=result.get("updated", False),
+            event_id=event_id,
+            signal_id=signal_id,
+            alert_id=alert_id,
+            ingestion=ingestion_result,
+            effects=effects,
+            pending_without_event=observation["observation_status"] == "pending",
+            caller_contract={
+                "supported_caller": "ChatGPT or trusted automation supplying observed financial source fields through MCP",
+                "local_bank_access": "not_available",
+                "notes": "The local process records observations it is given; it does not fetch bank data itself.",
+            },
+        )
+    except (KeyError, ValueError, RuntimeError, InnbankProcessingError) as exc:
+        return _fail(str(exc))
+
+
+def _get_source_observation_status(
+    db_path: Path,
+    *,
+    observation_id: str | None = None,
+    source_system_id: str | None = None,
+    source_connection_id: str | None = None,
+    account_external_id: str | None = None,
+    source_transaction_id: str | None = None,
+    economic_inflow_key: str | None = None,
+    limit: int | None = 10,
+) -> dict[str, Any]:
+    limit_value = max(1, min(int(limit or 10), 50))
+    where: list[str] = []
+    args: list[Any] = []
+    if clean_text(observation_id):
+        where.append("o.observation_id = ?")
+        args.append(clean_text(observation_id))
+    else:
+        filters = {
+            "o.source_system_id": source_system_id,
+            "o.source_connection_id": source_connection_id,
+            "o.account_external_id": account_external_id,
+            "o.source_transaction_id": source_transaction_id,
+            "o.economic_inflow_key": economic_inflow_key,
+        }
+        for column, value in filters.items():
+            if clean_text(value):
+                where.append(f"{column} = ?")
+                args.append(clean_text(value))
+    if not where:
+        return _fail("provide observation_id or at least one source identity filter")
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT o.*
+            FROM core_source_observations AS o
+            WHERE {' AND '.join(where)}
+            ORDER BY o.created_at DESC, o.observation_id ASC
+            LIMIT ?
+            """,
+            (*args, limit_value),
+        ).fetchall()
+        observations = [_row_to_source_observation(row) for row in rows]
+        for observation in observations:
+            ingestion_rows = conn.execute(
+                """
+                SELECT ingestion_result_id, operation_id, attempt_id, event_id, status, created_at
+                FROM core_ingestion_results
+                WHERE observation_id=?
+                ORDER BY created_at ASC
+                """,
+                (observation["observation_id"],),
+            ).fetchall()
+            observation["ingestion_results"] = [dict(row) for row in ingestion_rows]
+            observation["event_id"] = observation["ingestion_results"][0]["event_id"] if observation["ingestion_results"] else None
+            observation["status_explanation"] = (
+                "pending observation recorded without settled event"
+                if observation["observation_status"] == "pending" and not observation["event_id"]
+                else "posted observation linked to event" if observation["event_id"]
+                else "observation recorded; ingestion not recorded"
+            )
+    return _success(
+        status="ok" if observations else "empty",
+        observations=observations,
+        coverage={
+            "tables": ["core_source_observations", "core_ingestion_results", "core_events"],
+            "limitations": ["This read reports recorded observations only; it does not poll bank or Finances sources."],
+        },
+    )
+
+
 def _prepare_payday_case(
     db_path: Path,
     *,
@@ -1091,6 +1401,86 @@ def build_server(database_path: str | Path | None = None) -> Any:
         except (KeyError, ValueError) as exc:
             return _fail(str(exc))
         return _success(case=case)
+
+    @server.tool(
+        name="record_financial_source_observation",
+        annotations=_tool_annotations(read_only=False),
+        structured_output=True,
+    )
+    def record_financial_source_observation(
+        source_system_id: str,
+        source_connection_id: str,
+        account_external_id: str,
+        source_transaction_id: str,
+        observation_status: str,
+        observed_at: str,
+        amount_cents: int | None = None,
+        currency: str | None = "USD",
+        account_name: str | None = None,
+        classification: str | None = None,
+        classification_confidence: float | None = None,
+        effective_date: str | None = None,
+        posted_at: str | None = None,
+        source_name: str | None = None,
+        observation_type: str | None = "financial_inflow",
+        economic_inflow_key: str | None = None,
+        provider_transaction_id: str | None = None,
+        provider_pending_id: str | None = None,
+        provider_posted_id: str | None = None,
+        source_modified_at: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        confirmed: bool | None = None,
+    ) -> dict[str, Any]:
+        return _record_financial_source_observation(
+            db_path,
+            source_system_id=source_system_id,
+            source_connection_id=source_connection_id,
+            account_external_id=account_external_id,
+            source_transaction_id=source_transaction_id,
+            observation_status=observation_status,
+            observed_at=observed_at,
+            amount_cents=amount_cents,
+            currency=currency,
+            account_name=account_name,
+            classification=classification,
+            classification_confidence=classification_confidence,
+            effective_date=effective_date,
+            posted_at=posted_at,
+            source_name=source_name,
+            observation_type=observation_type,
+            economic_inflow_key=economic_inflow_key,
+            provider_transaction_id=provider_transaction_id,
+            provider_pending_id=provider_pending_id,
+            provider_posted_id=provider_posted_id,
+            source_modified_at=source_modified_at,
+            metadata=metadata,
+            confirmed=confirmed,
+        )
+
+    @server.tool(
+        name="get_source_observation_status",
+        annotations=_tool_annotations(read_only=True),
+        structured_output=True,
+    )
+    def get_source_observation_status(
+        observation_id: str | None = None,
+        source_system_id: str | None = None,
+        source_connection_id: str | None = None,
+        account_external_id: str | None = None,
+        source_transaction_id: str | None = None,
+        economic_inflow_key: str | None = None,
+        limit: int | None = 10,
+    ) -> dict[str, Any]:
+        return _get_source_observation_status(
+            db_path,
+            observation_id=observation_id,
+            source_system_id=source_system_id,
+            source_connection_id=source_connection_id,
+            account_external_id=account_external_id,
+            source_transaction_id=source_transaction_id,
+            economic_inflow_key=economic_inflow_key,
+            limit=limit,
+        )
 
     @server.tool(
         name="get_system_status",

@@ -29,6 +29,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_DB = ROOT / "data" / "info_analyzer.db"
 MCP_TOOL_NAMES = {
     "prepare_payday_case",
+    "record_financial_source_observation",
+    "get_source_observation_status",
     "get_payday_case",
     "save_payday_decision",
     "record_manual_routing",
@@ -81,10 +83,12 @@ class PaydayBridgeTests(unittest.TestCase):
             annotations = {tool.name: tool.annotations for tool in tools}
             self.assertFalse(bool(getattr(annotations["prepare_payday_case"], "read_only_hint", True)))
             self.assertTrue(bool(getattr(annotations["prepare_payday_case"], "destructive_hint", False)))
+            self.assertFalse(bool(getattr(annotations["record_financial_source_observation"], "read_only_hint", True)))
+            self.assertTrue(bool(getattr(annotations["record_financial_source_observation"], "destructive_hint", False)))
             self.assertTrue(bool(getattr(annotations["get_payday_case"], "read_only_hint", False)))
             self.assertFalse(bool(getattr(annotations["get_payday_case"], "destructive_hint", True)))
             self.assertFalse(bool(getattr(annotations["get_payday_case"], "open_world_hint", True)))
-            for read_tool in ("get_system_status", "list_cases", "get_case", "get_event_trace"):
+            for read_tool in ("get_system_status", "list_cases", "get_case", "get_event_trace", "get_source_observation_status"):
                 self.assertTrue(bool(getattr(annotations[read_tool], "read_only_hint", False)), read_tool)
                 self.assertFalse(bool(getattr(annotations[read_tool], "destructive_hint", True)), read_tool)
                 self.assertFalse(bool(getattr(annotations[read_tool], "open_world_hint", True)), read_tool)
@@ -110,6 +114,137 @@ class PaydayBridgeTests(unittest.TestCase):
             self.stop_bridge(bridge_handle)
             stop_server(app_handle)
             tempdir.cleanup()
+
+    @unittest.skipUnless(MCP_AVAILABLE, "official MCP SDK is not installed")
+    def test_source_observation_ingestion_pending_posted_retry_correction_and_auth(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        root = Path(tempdir.name)
+        db_path = root / "source-observations.db"
+        bridge_handle = self.start_bridge(db_path, api_key="test-key")
+        try:
+            with core_connect(db_path) as conn:
+                before_counts = self.source_observation_counts(conn)
+                initial_status = self.call_tool(bridge_handle.port, "get_system_status", {})
+                innbank = next(system for system in initial_status["systems"] if system["system_id"] == "sys_innbank")
+                self.assertEqual(innbank["source_observations"]["status"], "implemented_empty")
+                self.assertEqual(innbank["workers"]["status"], "sender_or_poller_not_configured")
+
+            pending_payload = self.source_observation_payload(
+                source_transaction_id="pending-payroll-001",
+                observation_status="pending",
+                economic_inflow_key="econ-payroll-001",
+            )
+            pending = self.call_tool(
+                bridge_handle.port,
+                "record_financial_source_observation",
+                {**pending_payload, "confirmed": True},
+            )
+            self.assertTrue(pending["ok"])
+            self.assertTrue(pending["pending_without_event"])
+            self.assertIsNone(pending["event_id"])
+            self.assertEqual(pending["observation"]["observation_status"], "pending")
+
+            pending_status = self.call_tool(
+                bridge_handle.port,
+                "get_source_observation_status",
+                {"observation_id": pending["observation"]["observation_id"]},
+            )
+            self.assertTrue(pending_status["ok"])
+            self.assertEqual(pending_status["observations"][0]["event_id"], None)
+            self.assertIn("pending observation", pending_status["observations"][0]["status_explanation"])
+
+            posted_payload = self.source_observation_payload(
+                source_transaction_id="posted-payroll-001",
+                observation_status="posted",
+                economic_inflow_key="econ-payroll-001",
+                posted_at="2026-09-17T12:00:00-07:00",
+            )
+            posted = self.call_tool(
+                bridge_handle.port,
+                "record_financial_source_observation",
+                {**posted_payload, "confirmed": True},
+            )
+            self.assertTrue(posted["ok"])
+            self.assertIsNotNone(posted["event_id"])
+            self.assertTrue(str(posted["signal_id"]).startswith("SIG-"))
+            self.assertTrue(str(posted["alert_id"]).startswith("ALT-"))
+            self.assertEqual(posted["observation"]["pending_observation_id"], pending["observation"]["observation_id"])
+
+            retry = self.call_tool(
+                bridge_handle.port,
+                "record_financial_source_observation",
+                {**posted_payload, "confirmed": True},
+            )
+            self.assertTrue(retry["ok"])
+            self.assertEqual(retry["observation"]["observation_id"], posted["observation"]["observation_id"])
+            self.assertEqual(retry["event_id"], posted["event_id"])
+            self.assertEqual(retry["signal_id"], posted["signal_id"])
+            self.assertEqual(retry["alert_id"], posted["alert_id"])
+
+            correction = self.call_tool(
+                bridge_handle.port,
+                "record_financial_source_observation",
+                {**posted_payload, "amount_cents": 108514, "confirmed": True},
+            )
+            self.assertTrue(correction["ok"])
+            self.assertNotEqual(correction["observation"]["observation_id"], posted["observation"]["observation_id"])
+            self.assertEqual(correction["event_id"], posted["event_id"])
+            self.assertEqual(correction["signal_id"], posted["signal_id"])
+            self.assertEqual(correction["alert_id"], posted["alert_id"])
+
+            by_economic_key = self.call_tool(
+                bridge_handle.port,
+                "get_source_observation_status",
+                {
+                    "source_system_id": "sys_innbank",
+                    "source_connection_id": "conn-chatgpt-finances-test",
+                    "account_external_id": "acct-test-checking",
+                    "economic_inflow_key": "econ-payroll-001",
+                    "limit": 10,
+                },
+            )
+            self.assertTrue(by_economic_key["ok"])
+            self.assertEqual(by_economic_key["status"], "ok")
+            self.assertEqual(len(by_economic_key["observations"]), 3)
+
+            with core_connect(db_path) as conn:
+                after_counts = self.source_observation_counts(conn)
+                self.assertEqual(after_counts["core_events"], before_counts["core_events"] + 1)
+                self.assertEqual(after_counts["core_signals"], before_counts["core_signals"] + 1)
+                self.assertEqual(after_counts["core_alerts"], before_counts["core_alerts"] + 1)
+                self.assertEqual(after_counts["core_source_observations"], before_counts["core_source_observations"] + 3)
+                self.assertEqual(after_counts["actions"], before_counts["actions"])
+                self.assertEqual(after_counts["live_signals"], before_counts["live_signals"])
+
+            missing = self.call_tool(
+                bridge_handle.port,
+                "record_financial_source_observation",
+                {**pending_payload, "source_transaction_id": "", "confirmed": True},
+            )
+            self.assertFalse(missing["ok"])
+            self.assertIn("source_transaction_id", missing["error"])
+        finally:
+            self.stop_bridge(bridge_handle)
+            tempdir.cleanup()
+
+        no_auth_dir = tempfile.TemporaryDirectory()
+        no_auth_db = Path(no_auth_dir.name) / "source-observations-no-auth.db"
+        no_auth_bridge = self.start_bridge(no_auth_db, api_key=None)
+        try:
+            with core_connect(no_auth_db) as conn:
+                before = self.source_observation_counts(conn)
+            denied = self.call_tool(
+                no_auth_bridge.port,
+                "record_financial_source_observation",
+                {**self.source_observation_payload(source_transaction_id="auth-denied-001"), "confirmed": True},
+            )
+            self.assertFalse(denied["ok"])
+            self.assertIn("INFO_ANALYZER_API_KEY", denied["error"])
+            with core_connect(no_auth_db) as conn:
+                self.assertEqual(self.source_observation_counts(conn), before)
+        finally:
+            self.stop_bridge(no_auth_bridge)
+            no_auth_dir.cleanup()
 
     @unittest.skipUnless(MCP_AVAILABLE, "official MCP SDK is not installed")
     def test_shared_ledger_tools_over_mcp_are_read_only_and_legacy_opt_in(self) -> None:
@@ -616,6 +751,29 @@ class PaydayBridgeTests(unittest.TestCase):
             result[name] = conn.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] if name in tables else 0
         return result
 
+    def source_observation_counts(self, conn):
+        tables = {
+            row["name"]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        result = {}
+        for name in [
+            "core_source_observations",
+            "core_ingestion_results",
+            "core_events",
+            "core_signals",
+            "core_alerts",
+            "core_decisions",
+            "core_actions",
+            "core_outcomes",
+            "actions",
+            "live_signals",
+        ]:
+            result[name] = conn.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] if name in tables else 0
+        return result
+
     def shared_read_counts(self, conn):
         return {
             name: conn.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0]
@@ -669,6 +827,38 @@ class PaydayBridgeTests(unittest.TestCase):
             "currency": "USD",
             "source_transaction_id": dedupe_key,
             "dedupe_key": dedupe_key,
+        }
+
+    def source_observation_payload(
+        self,
+        *,
+        source_transaction_id: str,
+        observation_status: str = "pending",
+        economic_inflow_key: str | None = None,
+        posted_at: str | None = None,
+    ):
+        return {
+            "source_system_id": "sys_innbank",
+            "source_connection_id": "conn-chatgpt-finances-test",
+            "account_external_id": "acct-test-checking",
+            "source_transaction_id": source_transaction_id,
+            "observation_status": observation_status,
+            "observed_at": "2026-09-17T12:05:00-07:00",
+            "amount_cents": 108414,
+            "currency": "USD",
+            "account_name": "Fictional Test Checking",
+            "classification": "payroll",
+            "classification_confidence": 0.99,
+            "effective_date": "2026-09-17",
+            "posted_at": posted_at,
+            "source_name": "ChatGPT Finances supplied observation",
+            "observation_type": "financial_inflow",
+            "economic_inflow_key": economic_inflow_key or source_transaction_id,
+            "provider_transaction_id": source_transaction_id,
+            "metadata": {
+                "fixture": True,
+                "source_field_mapping": "fictional_finances_observation",
+            },
         }
 
     def create_semantic_payday_case(self, handle):
