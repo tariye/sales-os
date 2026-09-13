@@ -89,8 +89,17 @@ const SUB_CONTROL_PLANES = [
   { name:"Project OS", function:"Tracks builds, experiments, tools, and shipped artifacts.", domains:["AI Project","Lab"] },
 ];
 
+function clientApiAuthHeaders(){
+  const key = (sessionStorage.getItem("infoAnalyzerApiKey") || localStorage.getItem("infoAnalyzerApiKey") || "").trim();
+  return key ? {"Authorization": `Bearer ${key}`} : {};
+}
+window.setInfoAnalyzerApiKey = function setInfoAnalyzerApiKey(key){
+  const cleaned = String(key || "").trim();
+  if(cleaned) sessionStorage.setItem("infoAnalyzerApiKey", cleaned);
+  else sessionStorage.removeItem("infoAnalyzerApiKey");
+};
 async function api(path, opts={}){
-  const res = await fetch(API + path, { ...opts, headers:{"Content-Type":"application/json", ...(opts.headers||{})} });
+  const res = await fetch(API + path, { ...opts, headers:{"Content-Type":"application/json", ...clientApiAuthHeaders(), ...(opts.headers||{})} });
   const txt = await res.text();
   const data = txt ? JSON.parse(txt) : {};
   if(!res.ok) throw new Error(data.error || res.statusText);

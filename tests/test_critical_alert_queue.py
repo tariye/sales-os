@@ -11,6 +11,9 @@ from core_database import connect as core_connect
 from tests.support import request_json, start_server, stop_server
 
 
+AUTH_HEADERS = {"Authorization": "Bearer test-key"}
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
@@ -66,6 +69,32 @@ class CriticalAlertQueueTests(unittest.TestCase):
         status, body = request_json(port, "/alerts?limit=50")
         self.assertEqual(status, 200)
         return body
+
+    def alert_mutation_counts(self, db_path: Path, alert_id: str) -> dict[str, object]:
+        with core_connect(db_path) as conn:
+            alert = conn.execute(
+                "SELECT state, acknowledged_at, snoozed_until, resolved_at FROM core_alerts WHERE alert_id=?",
+                (alert_id,),
+            ).fetchone()
+            return {
+                "alert": dict(alert) if alert else None,
+                "decisions": conn.execute("SELECT COUNT(*) FROM core_decisions").fetchone()[0],
+                "core_actions": conn.execute("SELECT COUNT(*) FROM core_actions").fetchone()[0],
+                "legacy_actions": conn.execute("SELECT COUNT(*) FROM actions").fetchone()[0],
+                "alert_decisions": conn.execute("SELECT COUNT(*) FROM core_alert_decisions").fetchone()[0],
+            }
+
+    def seed_single_alert(self, db_path: Path, port: int, *, signal_id: str = "signal-auth", title: str = "Auth required") -> str:
+        self.seed_signal(
+            db_path,
+            signal_id=signal_id,
+            title=title,
+            priority="P0",
+            actionability_score=0.95,
+            detected_at="2026-09-07T12:00:00.000Z",
+        )
+        alerts = self.queue_alerts(port)["alerts"]
+        return next(alert["alert_id"] for alert in alerts if alert["title"] == title)
 
     def test_queue_policy_ordering_and_idempotency(self) -> None:
         db_path = self.db_path()
@@ -196,6 +225,7 @@ class CriticalAlertQueueTests(unittest.TestCase):
                 f"/alerts/{alert_ids['Acknowledge me']}/respond",
                 method="POST",
                 payload={"response": "acknowledge", "decided_by": "human"},
+                headers=AUTH_HEADERS,
             )
             self.assertEqual(status, 200)
             self.assertEqual(body["alert"]["state"], "acknowledged")
@@ -206,6 +236,7 @@ class CriticalAlertQueueTests(unittest.TestCase):
                 f"/alerts/{alert_ids['Analyze me']}/respond",
                 method="POST",
                 payload={"response": "analyze", "decided_by": "human"},
+                headers=AUTH_HEADERS,
             )
             self.assertEqual(status, 200)
             self.assertEqual(body["alert"]["state"], "presented")
@@ -216,6 +247,7 @@ class CriticalAlertQueueTests(unittest.TestCase):
                 f"/alerts/{alert_ids['Snooze me']}/respond",
                 method="POST",
                 payload={"response": "snooze", "snooze_until": future, "decided_by": "human"},
+                headers=AUTH_HEADERS,
             )
             self.assertEqual(status, 200)
             self.assertEqual(body["alert"]["state"], "snoozed")
@@ -244,6 +276,7 @@ class CriticalAlertQueueTests(unittest.TestCase):
                 f"/alerts/{alert_ids['Dismiss me']}/respond",
                 method="POST",
                 payload={"response": "dismiss", "decided_by": "human"},
+                headers=AUTH_HEADERS,
             )
             self.assertEqual(status, 200)
             self.assertEqual(body["alert"]["state"], "dismissed")
@@ -260,6 +293,7 @@ class CriticalAlertQueueTests(unittest.TestCase):
                 f"/alerts/{alert_ids['Dismiss me']}/respond",
                 method="POST",
                 payload={"response": "acknowledge", "decided_by": "human"},
+                headers=AUTH_HEADERS,
             )
             self.assertEqual(status, 400)
             self.assertIn("terminal", body["error"])
@@ -276,6 +310,7 @@ class CriticalAlertQueueTests(unittest.TestCase):
                 f"/alerts/{alert_ids['Convert me']}/respond",
                 method="POST",
                 payload={"response": "convert_to_action", "decided_by": "human"},
+                headers=AUTH_HEADERS,
             )
             self.assertEqual(status, 200)
             self.assertEqual(body["alert"]["state"], "actioned")
@@ -294,11 +329,81 @@ class CriticalAlertQueueTests(unittest.TestCase):
                 f"/alerts/{alert_ids['Convert me']}/respond",
                 method="POST",
                 payload={"response": "convert_to_action", "decided_by": "human"},
+                headers=AUTH_HEADERS,
             )
             self.assertEqual(repeat_status, 400)
             self.assertIn("terminal", repeat_body["error"])
         finally:
             stop_server(handle)
+
+    def test_alert_response_requires_configured_and_valid_api_key_before_mutation(self) -> None:
+        db_path = self.db_path()
+        handle = start_server(db_path, api_key="test-key")
+        try:
+            alert_id = self.seed_single_alert(db_path, handle.port)
+            before = self.alert_mutation_counts(db_path, alert_id)
+
+            missing_status, missing_body = request_json(
+                handle.port,
+                f"/alerts/{alert_id}/respond",
+                method="POST",
+                payload={"response": "acknowledge", "decided_by": "human"},
+            )
+            self.assertEqual(missing_status, 401)
+            self.assertEqual(missing_body["error"]["code"], "unauthorized")
+            self.assertEqual(self.alert_mutation_counts(db_path, alert_id), before)
+
+            invalid_status, invalid_body = request_json(
+                handle.port,
+                f"/api/alerts/{alert_id}/respond",
+                method="POST",
+                payload={"response": "acknowledge", "decided_by": "human"},
+                headers={"Authorization": "Bearer wrong-key"},
+            )
+            self.assertEqual(invalid_status, 401)
+            self.assertEqual(invalid_body["error"]["code"], "unauthorized")
+            self.assertEqual(self.alert_mutation_counts(db_path, alert_id), before)
+
+            valid_status, valid_body = request_json(
+                handle.port,
+                f"/api/alerts/{alert_id}/respond",
+                method="POST",
+                payload={"response": "acknowledge", "decided_by": "human"},
+                headers=AUTH_HEADERS,
+            )
+            self.assertEqual(valid_status, 200)
+            self.assertEqual(valid_body["alert"]["state"], "acknowledged")
+            after = self.alert_mutation_counts(db_path, alert_id)
+            self.assertEqual(after["decisions"], int(before["decisions"]) + 1)
+            self.assertEqual(after["legacy_actions"], before["legacy_actions"])
+        finally:
+            stop_server(handle)
+
+    def test_alert_response_rejects_when_server_api_key_unconfigured(self) -> None:
+        db_path = self.db_path()
+        handle = start_server(db_path, api_key=None)
+        try:
+            alert_id = self.seed_single_alert(db_path, handle.port, signal_id="signal-no-key", title="No key configured")
+            before = self.alert_mutation_counts(db_path, alert_id)
+            status, body = request_json(
+                handle.port,
+                f"/alerts/{alert_id}/respond",
+                method="POST",
+                payload={"response": "acknowledge", "decided_by": "human"},
+                headers={"Authorization": "Bearer anything"},
+            )
+            self.assertEqual(status, 503)
+            self.assertEqual(body["error"]["code"], "api_key_not_configured")
+            self.assertEqual(self.alert_mutation_counts(db_path, alert_id), before)
+        finally:
+            stop_server(handle)
+
+    def test_browser_api_helper_supports_authenticated_ui_request_path_without_embedded_key(self) -> None:
+        app_js = (Path(__file__).resolve().parents[1] / "web" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("infoAnalyzerApiKey", app_js)
+        self.assertIn("Authorization", app_js)
+        self.assertNotIn("test-key", app_js)
+        self.assertNotIn("INFO_ANALYZER_API_KEY", app_js)
 
 
 if __name__ == "__main__":

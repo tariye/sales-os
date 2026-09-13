@@ -7080,6 +7080,10 @@ class Handler(SimpleHTTPRequestHandler):
                     conn.commit()
                 status = 201 if result["created"] else 200
                 return self.send_json({"success": True, **result, "effects": effects}, status)
+            if path.startswith("/alerts/") or path.startswith("/api/alerts/"):
+                request_id = clean_text(self.headers.get("X-Request-ID") or "")
+                if not self.require_api_auth(request_id):
+                    return
             payload = self.read_json()
             if path in {"/innbank/allocation-plans", "/api/innbank/allocation-plans"}:
                 result = innbank_create_allocation_plan(DB_PATH, payload)
