@@ -14,7 +14,8 @@ from core_delivery import (
     request_notification,
 )
 from core_migrations import initialize_core_migrations
-from core_observations import ingest_observation, record_source_observation
+from core_events import create_event
+from core_observations import event_payload_from_observation, ingest_observation, record_source_observation
 from core_operations import claim_operation, complete_attempt
 from core_shared_access import get_event_trace
 
@@ -238,6 +239,76 @@ class Gate3AReliabilityTests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM core_ingestion_results WHERE status='succeeded'").fetchone()[0], 1)
             alert = conn.execute("SELECT presented_at FROM core_alerts LIMIT 1").fetchone()
             self.assertIsNone(alert["presented_at"])
+
+    def test_ingestion_recovers_after_event_created_before_dispatch_result(self) -> None:
+        db = self.fresh_db()
+        with core_connect(db) as conn:
+            obs = record_source_observation(
+                conn,
+                self.observation_payload(observation_status="posted", posted_at="2026-09-13T13:00:00.000Z"),
+                worker_id="observer",
+                now="2026-09-13T13:01:00.000Z",
+            )
+            # Simulate a crash after the event insert but before dispatch/result recording.
+            created = create_event(conn, event_payload_from_observation(obs["observation"]))
+            self.assertTrue(created["created"])
+            conn.commit()
+
+            recovered = ingest_observation(
+                conn,
+                obs["observation"]["observation_id"],
+                worker_id="ingest",
+                now="2026-09-13T13:02:00.000Z",
+            )
+            conn.commit()
+
+            self.assertFalse(recovered["created"])
+            self.assertTrue(recovered["duplicate"])
+            self.assertEqual(recovered["event_id"], created["event"]["event_id"])
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM core_events").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM core_signals").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM core_alerts").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM core_ingestion_results WHERE status='succeeded'").fetchone()[0], 1)
+
+    def test_exact_retry_of_older_observation_after_newer_version_does_not_regress(self) -> None:
+        db = self.fresh_db()
+        with core_connect(db) as conn:
+            original = record_source_observation(
+                conn,
+                self.observation_payload(amount_cents=108414),
+                worker_id="observer",
+                now="2026-09-13T12:00:00.000Z",
+            )
+            correction = record_source_observation(
+                conn,
+                self.observation_payload(amount_cents=108514),
+                worker_id="observer",
+                now="2026-09-13T12:02:00.000Z",
+            )
+            replay = record_source_observation(
+                conn,
+                self.observation_payload(amount_cents=108414),
+                worker_id="observer",
+                now="2026-09-13T12:05:00.000Z",
+            )
+            conn.commit()
+
+            latest = conn.execute(
+                """
+                SELECT *
+                FROM core_source_observations
+                WHERE source_system_id='sys_innbank'
+                  AND source_connection_id='conn-wells'
+                  AND account_external_id='acct-checking'
+                  AND source_transaction_id='txn-001'
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            self.assertEqual(replay["observation"]["observation_id"], original["observation"]["observation_id"])
+            self.assertEqual(latest["observation_id"], correction["observation"]["observation_id"])
+            self.assertEqual(latest["amount_cents"], 108514)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM core_source_observations").fetchone()[0], 2)
 
     def test_notification_delivery_presentation_ack_and_cross_case_validation(self) -> None:
         db = self.fresh_db()

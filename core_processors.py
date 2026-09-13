@@ -283,8 +283,9 @@ class EventDispatcher:
         self.module_processors = ModuleSignalProcessor()
 
     def dispatch(self, conn, event: dict[str, Any], *, deduplicated: bool) -> dict[str, Any]:
-        if deduplicated:
-            return {"event_status": event.get("processing_status") or "new", "effects": []}
+        # Domain processors are idempotent. Dispatching duplicate events lets
+        # retry paths recover from a crash after event creation but before
+        # signal/alert processing or ingestion-result recording.
         if (
             event.get("source_system_id") == "sys_innbank"
             and event.get("event_type") == "financial_inflow_posted"
