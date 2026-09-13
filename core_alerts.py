@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from core_database import connect
+from core_delivery import record_alert_acknowledgment
 
 
 OPEN_ALERT_STATES = {"queued", "presented", "acknowledged"}
@@ -54,6 +55,10 @@ def parse_utc_timestamp(value: Any, field_name: str) -> str:
 
 def alert_row_to_dict(row) -> dict[str, Any]:
     return dict(row)
+
+
+def _table_exists(conn, table: str) -> bool:
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone() is not None
 
 
 def _eligible_signal_row(signal_row) -> bool:
@@ -144,13 +149,12 @@ def sync_alert_queue(conn, now: str | None = None) -> dict[str, int]:
                 alert_id, signal_id, priority, state, requires_acknowledgment,
                 delivery_channel, scheduled_at, presented_at, acknowledged_at,
                 snoozed_until, resolved_at, attempt_count, last_error, created_at, updated_at
-            ) VALUES (?, ?, ?, 'queued', 1, 'command_center', NULL, ?, NULL, NULL, NULL, 0, NULL, ?, ?)
+            ) VALUES (?, ?, ?, 'queued', 1, 'command_center', NULL, NULL, NULL, NULL, NULL, 0, NULL, ?, ?)
             """,
             (
                 make_id("ALT"),
                 signal["signal_id"],
                 signal["priority"],
-                now,
                 now,
                 now,
             ),
@@ -347,6 +351,20 @@ def respond_to_alert(database_path, alert_id: str, payload: dict[str, Any]) -> d
             "INSERT INTO core_alert_decisions (alert_id, decision_id, relationship) VALUES (?, ?, ?)",
             (alert_id, decision["decision_id"], relationship),
         )
+        if response == "acknowledge" and _table_exists(conn, "core_alert_acknowledgments"):
+            auth_context = clean_text(payload.get("_auth_context") or payload.get("auth_context"))
+            acknowledged_by = clean_text(payload.get("_acknowledged_by") or payload.get("acknowledged_by") or payload.get("decided_by") or "authenticated_service")
+            if auth_context:
+                record_alert_acknowledgment(
+                    conn,
+                    alert_id=alert_id,
+                    acknowledged_by=acknowledged_by,
+                    auth_context=auth_context,
+                    response=response,
+                    decision_id=decision["decision_id"],
+                    same_case_id=clean_text(payload.get("same_case_id")) or None,
+                    now=now_utc_iso(),
+                )
         action = None
         if response == "convert_to_action":
             action_id = make_id("ACT")

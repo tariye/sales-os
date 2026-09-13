@@ -166,7 +166,7 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
         self.assertIn("core_actions", names)
         self.assertEqual(
             open_connection(db_path).execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0],
-            2,
+            3,
         )
 
     def test_existing_v03_database_can_receive_core_migration(self) -> None:
@@ -180,11 +180,13 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
         ]
         applied = initialize_core_migrations(db_path)
         after = read_counts(db_path, LEGACY_TABLES)
-        self.assertEqual(applied, [] if existing_versions else [1, 2])
+        self.assertEqual(applied, [version for version in [1, 2, 3] if version not in existing_versions])
         self.assertEqual(before, after)
         names = view_names(db_path)
         self.assertIn("core_record_links", table_names(db_path))
         self.assertIn("innbank_allocation_plans", table_names(db_path))
+        self.assertIn("core_source_observations", table_names(db_path))
+        self.assertIn("core_notification_delivery_results", table_names(db_path))
         self.assertIn("v_core_open_alerts", names)
         self.assertIn("v_core_learning_loop", names)
 
@@ -203,11 +205,15 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
             version_two_count = conn.execute(
                 "SELECT COUNT(*) FROM schema_migrations WHERE version = 2"
             ).fetchone()[0]
+            version_three_count = conn.execute(
+                "SELECT COUNT(*) FROM schema_migrations WHERE version = 3"
+            ).fetchone()[0]
         finally:
             conn.close()
         self.assertEqual(first_counts, second_counts)
         self.assertEqual(migration_count, 1)
         self.assertEqual(version_two_count, 1)
+        self.assertEqual(version_three_count, 1)
 
     def test_legacy_tables_remain_present_and_readable(self) -> None:
         db_path = self.canonical_copy("legacy-readable.db")
@@ -508,11 +514,15 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
             rows = conn.execute("SELECT version, name FROM schema_migrations ORDER BY version").fetchall()
         finally:
             conn.close()
-        self.assertEqual(first, [] if existing_versions else [1, 2])
+        self.assertEqual(first, [version for version in [1, 2, 3] if version not in existing_versions])
         self.assertEqual(second, [])
         self.assertEqual(
             [(row["version"], row["name"]) for row in rows],
-            [(1, "core_foundation"), (2, "innbank_allocation_and_routing")],
+            [
+                (1, "core_foundation"),
+                (2, "innbank_allocation_and_routing"),
+                (3, "payday_intake_notification_reliability"),
+            ],
         )
 
     def test_existing_v03_apis_and_ui_still_start(self) -> None:

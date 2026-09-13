@@ -7085,6 +7085,9 @@ class Handler(SimpleHTTPRequestHandler):
                 if not self.require_api_auth(request_id):
                     return
             payload = self.read_json()
+            if path.startswith("/alerts/") or path.startswith("/api/alerts/"):
+                payload["_auth_context"] = "api_key"
+                payload["_acknowledged_by"] = clean_text(self.headers.get("X-Source-Client") or self.headers.get("X-Source-Chat") or "authenticated_api_client")
             if path in {"/innbank/allocation-plans", "/api/innbank/allocation-plans"}:
                 result = innbank_create_allocation_plan(DB_PATH, payload)
                 return self.send_json({"success": True, **result}, 201 if result.get("created") else 200)
