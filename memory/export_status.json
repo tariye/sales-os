@@ -24,7 +24,7 @@
     "memory/projects.jsonl",
     "memory/entity_aliases.json"
   ],
-  "content_commit": "",
+  "content_commit": "487f676ac59e9e40a57d4309c78d11086d5c793a",
   "counts": {
     "actions": 120,
     "captures": 1,
@@ -51,8 +51,10 @@
     "pending_before": 0
   },
   "json_errors": [],
-  "publication_status": "pending",
-  "remote_head_sha": "",
+  "last_push": "2026-09-14T02:30:15Z",
+  "last_push_commit": "487f676ac59e9e40a57d4309c78d11086d5c793a",
+  "publication_status": "green",
+  "remote_head_sha": "487f676ac59e9e40a57d4309c78d11086d5c793a",
   "source_of_truth": "data/info_analyzer.db",
   "validation": {
     "broken_links": 0,
