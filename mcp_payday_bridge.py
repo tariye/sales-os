@@ -9,6 +9,8 @@ INNBANK payday bridge milestone:
 * get_payday_case
 * save_payday_decision
 * record_manual_routing
+* ingest_capture
+* get_day_progress
 
 It reads from the canonical SQLite database through the shared connection
 helper, keeps API credentials server-side, and reuses the existing INNBANK
@@ -26,6 +28,8 @@ from pathlib import Path
 from typing import Any
 
 from core_database import connect, resolve_database_path
+from core_captures import get_day_progress as shared_get_day_progress
+from core_captures import ingest_capture as core_ingest_capture
 from core_events import create_event as core_create_event
 from core_events import normalize_timestamp
 from core_innbank_routing import (
@@ -1481,6 +1485,62 @@ def build_server(database_path: str | Path | None = None) -> Any:
             economic_inflow_key=economic_inflow_key,
             limit=limit,
         )
+
+    @server.tool(
+        name="ingest_capture",
+        annotations=_tool_annotations(read_only=False),
+        structured_output=True,
+    )
+    def ingest_capture(
+        capture_type: str,
+        source: str,
+        raw_text: str,
+        captured_at: str,
+        request_id: str,
+        idempotency_key: str,
+        payload_version: int | None = 1,
+        occurred_at: str | None = None,
+        conversation_id: str | None = None,
+        message_id: str | None = None,
+        correlation_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        confirmed: bool | None = None,
+    ) -> dict[str, Any]:
+        if not configured_api_key():
+            return _fail("INFO_ANALYZER_API_KEY is not configured for capture write tools")
+        if not confirmed:
+            return _fail("confirmation required")
+        try:
+            return core_ingest_capture(
+                db_path,
+                {
+                    "capture_type": capture_type,
+                    "source": source,
+                    "raw_text": raw_text,
+                    "captured_at": captured_at,
+                    "request_id": request_id,
+                    "idempotency_key": idempotency_key,
+                    "payload_version": payload_version or 1,
+                    "occurred_at": occurred_at,
+                    "conversation_id": conversation_id,
+                    "message_id": message_id,
+                    "correlation_id": correlation_id,
+                    "metadata": metadata or {},
+                },
+            )
+        except (KeyError, ValueError, RuntimeError) as exc:
+            return _fail(str(exc))
+
+    @server.tool(
+        name="get_day_progress",
+        annotations=_tool_annotations(read_only=True),
+        structured_output=True,
+    )
+    def get_day_progress(local_date: str | None = None) -> dict[str, Any]:
+        try:
+            return shared_get_day_progress(db_path, local_date=local_date)
+        except Exception as exc:
+            return _fail(str(exc))
 
     @server.tool(
         name="get_system_status",

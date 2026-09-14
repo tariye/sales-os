@@ -93,8 +93,9 @@ class Gate3AReliabilityTests(unittest.TestCase):
                 "entries": conn.execute("SELECT COUNT(*) FROM entries").fetchone()[0],
             }
             versions = [row["version"] for row in conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()]
-            self.assertEqual(versions, [1, 2, 3])
+            self.assertEqual(versions, [1, 2, 3, 4])
             self.assertIn("core_source_observations", {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()})
+            self.assertIn("core_captures", {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()})
         self.assertEqual(initialize_core_migrations(db), [])
         with core_connect(db) as conn:
             after = {

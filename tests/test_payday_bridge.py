@@ -31,6 +31,8 @@ MCP_TOOL_NAMES = {
     "prepare_payday_case",
     "record_financial_source_observation",
     "get_source_observation_status",
+    "ingest_capture",
+    "get_day_progress",
     "get_payday_case",
     "save_payday_decision",
     "record_manual_routing",
@@ -85,10 +87,12 @@ class PaydayBridgeTests(unittest.TestCase):
             self.assertTrue(bool(getattr(annotations["prepare_payday_case"], "destructive_hint", False)))
             self.assertFalse(bool(getattr(annotations["record_financial_source_observation"], "read_only_hint", True)))
             self.assertTrue(bool(getattr(annotations["record_financial_source_observation"], "destructive_hint", False)))
+            self.assertFalse(bool(getattr(annotations["ingest_capture"], "read_only_hint", True)))
+            self.assertTrue(bool(getattr(annotations["ingest_capture"], "destructive_hint", False)))
             self.assertTrue(bool(getattr(annotations["get_payday_case"], "read_only_hint", False)))
             self.assertFalse(bool(getattr(annotations["get_payday_case"], "destructive_hint", True)))
             self.assertFalse(bool(getattr(annotations["get_payday_case"], "open_world_hint", True)))
-            for read_tool in ("get_system_status", "list_cases", "get_case", "get_event_trace", "get_source_observation_status"):
+            for read_tool in ("get_system_status", "list_cases", "get_case", "get_event_trace", "get_source_observation_status", "get_day_progress"):
                 self.assertTrue(bool(getattr(annotations[read_tool], "read_only_hint", False)), read_tool)
                 self.assertFalse(bool(getattr(annotations[read_tool], "destructive_hint", True)), read_tool)
                 self.assertFalse(bool(getattr(annotations[read_tool], "open_world_hint", True)), read_tool)
@@ -114,6 +118,110 @@ class PaydayBridgeTests(unittest.TestCase):
             self.stop_bridge(bridge_handle)
             stop_server(app_handle)
             tempdir.cleanup()
+
+    @unittest.skipUnless(MCP_AVAILABLE, "official MCP SDK is not installed")
+    def test_capture_ingestion_idempotency_daily_progress_and_auth(self) -> None:
+        tempdir = tempfile.TemporaryDirectory()
+        root = Path(tempdir.name)
+        db_path = root / "capture-loop.db"
+        bridge_handle = self.start_bridge(db_path, api_key="test-key")
+        try:
+            with core_connect(db_path) as conn:
+                before = self.capture_counts(conn)
+            morning = self.capture_payload(
+                capture_type="begin_day_checklist",
+                idempotency_key="capture-loop-morning-001",
+                request_id="req-capture-morning-001",
+                message_id="msg-capture-morning-001",
+                raw_text=(
+                    "Begin-Day Checklist\n"
+                    "- Ship the capture loop\n"
+                    "- Verify publication proof\n"
+                    "- Blocker: remote publication not validated"
+                ),
+                occurred_at="2026-09-13T08:00:00-07:00",
+                captured_at="2026-09-13T08:02:00-07:00",
+            )
+            created = self.call_tool(bridge_handle.port, "ingest_capture", {**morning, "confirmed": True})
+            self.assertTrue(created["ok"])
+            self.assertFalse(created["duplicate"])
+            self.assertTrue(created["capture_id"].startswith("CAP-"))
+            self.assertEqual(created["capture"]["raw_text"], morning["raw_text"])
+            self.assertEqual(created["capture"]["processing_state"], "processed")
+            self.assertTrue(created["content_hash"])
+            self.assertTrue(created["processing"]["signal_id"].startswith("SIG-"))
+
+            duplicate = self.call_tool(bridge_handle.port, "ingest_capture", {**morning, "confirmed": True})
+            self.assertTrue(duplicate["ok"])
+            self.assertTrue(duplicate["duplicate"])
+            self.assertEqual(duplicate["capture_id"], created["capture_id"])
+            self.assertEqual(duplicate["content_hash"], created["content_hash"])
+
+            conflict = self.call_tool(
+                bridge_handle.port,
+                "ingest_capture",
+                {**morning, "raw_text": morning["raw_text"] + "\n- Different immutable payload", "confirmed": True},
+            )
+            self.assertFalse(conflict["ok"])
+            self.assertIn("conflict", conflict["error"])
+
+            evening = self.capture_payload(
+                capture_type="end_of_day_report",
+                idempotency_key="capture-loop-evening-001",
+                request_id="req-capture-evening-001",
+                message_id="msg-capture-evening-001",
+                raw_text=(
+                    "End of day report\n"
+                    "- Capture loop generated receipts\n"
+                    "- Publication state machine still needs remote verification\n"
+                    "- Smallest next step: run golden export"
+                ),
+                occurred_at="2026-09-13T20:30:00-07:00",
+                captured_at="2026-09-13T20:32:00-07:00",
+            )
+            report = self.call_tool(bridge_handle.port, "ingest_capture", {**evening, "confirmed": True})
+            self.assertTrue(report["ok"])
+            self.assertEqual(report["capture"]["processing_state"], "processed")
+
+            progress = self.call_tool(bridge_handle.port, "get_day_progress", {"local_date": "2026-09-13"})
+            self.assertEqual(progress["status"], "ok")
+            self.assertEqual(progress["day_case"]["local_date"], "2026-09-13")
+            self.assertEqual(progress["day_case"]["plan_capture_id"], created["capture_id"])
+            self.assertEqual(progress["day_case"]["report_capture_id"], report["capture_id"])
+            evidence = progress["day_case"]["progress"]["evidence_capture_ids"]
+            self.assertIn(created["capture_id"], evidence)
+            self.assertIn(report["capture_id"], evidence)
+            self.assertGreaterEqual(len(progress["links"]), 4)
+
+            with core_connect(db_path) as conn:
+                after = self.capture_counts(conn)
+                self.assertEqual(after["core_captures"], before["core_captures"] + 2)
+                self.assertEqual(after["core_day_cases"], before["core_day_cases"] + 1)
+                self.assertEqual(after["core_signals"], before["core_signals"] + 2)
+                self.assertEqual(after["actions"], before["actions"])
+                self.assertEqual(after["live_signals"], before["live_signals"])
+        finally:
+            self.stop_bridge(bridge_handle)
+            tempdir.cleanup()
+
+        no_auth_dir = tempfile.TemporaryDirectory()
+        no_auth_db = Path(no_auth_dir.name) / "capture-no-auth.db"
+        no_auth_bridge = self.start_bridge(no_auth_db, api_key=None)
+        try:
+            with core_connect(no_auth_db) as conn:
+                before = self.capture_counts(conn)
+            denied = self.call_tool(
+                no_auth_bridge.port,
+                "ingest_capture",
+                {**self.capture_payload(idempotency_key="capture-auth-denied-001"), "confirmed": True},
+            )
+            self.assertFalse(denied["ok"])
+            self.assertIn("INFO_ANALYZER_API_KEY", denied["error"])
+            with core_connect(no_auth_db) as conn:
+                self.assertEqual(self.capture_counts(conn), before)
+        finally:
+            self.stop_bridge(no_auth_bridge)
+            no_auth_dir.cleanup()
 
     @unittest.skipUnless(MCP_AVAILABLE, "official MCP SDK is not installed")
     def test_source_observation_ingestion_pending_posted_retry_correction_and_auth(self) -> None:
@@ -773,6 +881,54 @@ class PaydayBridgeTests(unittest.TestCase):
         ]:
             result[name] = conn.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] if name in tables else 0
         return result
+
+    def capture_counts(self, conn):
+        tables = {
+            row["name"]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        result = {}
+        for name in [
+            "core_captures",
+            "core_day_cases",
+            "core_capture_derivations",
+            "core_operations",
+            "core_operation_attempts",
+            "core_signals",
+            "core_actions",
+            "actions",
+            "live_signals",
+        ]:
+            result[name] = conn.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] if name in tables else 0
+        return result
+
+    def capture_payload(
+        self,
+        *,
+        capture_type: str = "begin_day_checklist",
+        idempotency_key: str,
+        request_id: str = "req-capture-001",
+        message_id: str = "msg-capture-001",
+        raw_text: str = "Begin-Day Checklist\n- Review today's signal movement",
+        occurred_at: str = "2026-09-13T08:00:00-07:00",
+        captured_at: str = "2026-09-13T08:01:00-07:00",
+    ):
+        return {
+            "capture_type": capture_type,
+            "source": "chatgpt",
+            "raw_text": raw_text,
+            "occurred_at": occurred_at,
+            "captured_at": captured_at,
+            "conversation_id": "conv-capture-test",
+            "message_id": message_id,
+            "request_id": request_id,
+            "correlation_id": "corr-capture-test",
+            "idempotency_key": idempotency_key,
+            "payload_version": 1,
+            "metadata": {"fixture": True},
+        }
 
     def shared_read_counts(self, conn):
         return {

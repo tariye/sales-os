@@ -273,6 +273,31 @@ def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, cwd=ROOT, check=check, text=True, capture_output=True)
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def git_remote_head(branch: str = "main") -> str:
+    output = run(["git", "ls-remote", "origin", f"refs/heads/{branch}"]).stdout.strip()
+    if not output:
+        raise RuntimeError(f"origin/{branch} not found")
+    return output.split()[0]
+
+
+def git_show(ref: str, path: str) -> bytes:
+    result = subprocess.run(
+        ["git", "show", f"{ref}:{path}"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    )
+    return result.stdout
+
+
 def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -291,6 +316,14 @@ def load_json(value: Any, fallback: Any) -> Any:
         return json.loads(value)
     except Exception:
         return fallback
+
+
+def table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+        (name,),
+    ).fetchone()
+    return row is not None
 
 
 def one_line(value: Any, limit: int = 220) -> str:
@@ -1003,6 +1036,77 @@ def fetch_projects(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return projects
 
 
+def fetch_daily_progress(conn: sqlite3.Connection, limit: int = 5) -> dict[str, Any]:
+    if not table_exists(conn, "core_captures") or not table_exists(conn, "core_day_cases"):
+        return {"status": "not_implemented", "recent_captures": [], "day_cases": []}
+    captures = [
+        {
+            "capture_id": row["capture_id"],
+            "capture_type": row["capture_type"],
+            "source": row["source"],
+            "content_hash": row["content_hash"],
+            "occurred_at": row["occurred_at"],
+            "captured_at": row["captured_at"],
+            "ingested_at": row["ingested_at"],
+            "processing_state": row["processing_state"],
+            "summary": summarize_for_bundle(row["raw_text"], 180),
+        }
+        for row in conn.execute(
+            """
+            SELECT capture_id, capture_type, source, content_hash, occurred_at,
+                   captured_at, ingested_at, processing_state, raw_text
+            FROM core_captures
+            ORDER BY captured_at DESC, created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    ]
+    day_cases = []
+    for row in conn.execute(
+        """
+        SELECT day_case_id, local_date, timezone, status, plan_capture_id,
+               report_capture_id, progress_json, updated_at
+        FROM core_day_cases
+        ORDER BY local_date DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall():
+        progress = load_json(row["progress_json"], {})
+        day_cases.append(
+            {
+                "day_case_id": row["day_case_id"],
+                "local_date": row["local_date"],
+                "timezone": row["timezone"],
+                "status": row["status"],
+                "plan_capture_id": row["plan_capture_id"],
+                "report_capture_id": row["report_capture_id"],
+                "updated_at": row["updated_at"],
+                "progress": {
+                    "overarching_goal": summarize_for_bundle(progress.get("overarching_goal"), 180),
+                    "current_short_term_milestone": summarize_for_bundle(progress.get("current_short_term_milestone"), 180),
+                    "validated_milestones": progress.get("validated_milestones") or [],
+                    "unvalidated_milestones": [
+                        summarize_for_bundle(item, 140)
+                        for item in (progress.get("unvalidated_milestones") or [])[:6]
+                    ],
+                    "blocker": summarize_for_bundle(progress.get("blocker"), 160),
+                    "evidence_capture_ids": progress.get("evidence_capture_ids") or [],
+                    "smallest_next_validated_state_transition": summarize_for_bundle(
+                        progress.get("smallest_next_validated_state_transition"),
+                        180,
+                    ),
+                },
+            }
+        )
+    return {
+        "status": "ok",
+        "recent_captures": captures,
+        "day_cases": day_cases,
+    }
+
+
 def reconcile_entity_aliases(conn: sqlite3.Connection, generated_at: str) -> dict[str, Any]:
     rows = conn.execute(
         """
@@ -1298,6 +1402,7 @@ def build_assistant_bundle(
     manifest: dict[str, Any],
     health: dict[str, Any],
     entity_aliases: dict[str, Any],
+    daily_progress: dict[str, Any],
 ) -> dict[str, Any]:
     run_id = export_run_id(generated_at)
     active_projects = [
@@ -1424,6 +1529,7 @@ def build_assistant_bundle(
             "career_state": "Career and job-search context is tracked through the Career Intelligence Ledger project.",
             "important_deadlines": [a.get("deadline") for a in action_rows if a.get("deadline")][:8],
         },
+        "daily_capture_loop": daily_progress,
         "weekend_clarity": [
             "Stabilize the ChatGPT read path through one immutable assistant bundle.",
             "Prioritize transition-critical actions, open decisions, and proof artifacts over background themes.",
@@ -1516,6 +1622,42 @@ def build_assistant_fetch(generated_at: str, run_id: str, immutable_commit: str,
             "Read memory/assistant_bundle.json from the immutable_commit recorded in that file",
         ],
     }
+
+
+def write_publication_pointer(
+    *,
+    generated_at: str = "",
+    validated_at: str = "",
+    remote_verified_at: str = "",
+    content_commit: str,
+    publication_status: str = "",
+    state: str = "",
+    publisher_version: str = "memory_manager_verified_publication",
+) -> dict[str, Any]:
+    bundle_path = MEMORY_DIR / "assistant_bundle.json"
+    export_status = _load_existing_json(MEMORY_DIR / "export_status.json")
+    generated_at = generated_at or str(export_status.get("generated_at") or now_iso())
+    validated_at = validated_at or generated_at
+    if state:
+        publication_state = state
+    else:
+        publication_state = "verified" if publication_status == "green" else "failed"
+    publication = {
+        "schema_version": 1,
+        "publication_state": publication_state,
+        "content_commit": content_commit,
+        "bundle_path": "memory/assistant_bundle.json",
+        "bundle_sha256": file_sha256(bundle_path) if bundle_path.exists() else "",
+        "generated_at": generated_at,
+        "validated_at": validated_at,
+        "remote_verified_at": remote_verified_at if publication_state == "verified" else "",
+        "privacy_validation_passed": bool((export_status.get("assistant_bundle") or {}).get("privacy_validation_passed")),
+        "export_validation_passed": bool(export_status.get("export_success")),
+        "source_db_as_of": str(export_status.get("generated_at") or generated_at or "unknown"),
+        "publisher_version": publisher_version,
+    }
+    write_json(MEMORY_DIR / "publication.json", publication)
+    return publication
 
 
 def validation_report(conn: sqlite3.Connection, entity_aliases: dict[str, Any]) -> dict[str, Any]:
@@ -1688,6 +1830,13 @@ def update_publication_state(
     write_json(fetch_path, fetch_meta)
     write_json(health_path, current_health)
     write_json(status_path, export_status)
+    write_publication_pointer(
+        generated_at=fetch_generated_at,
+        validated_at=fetch_generated_at,
+        remote_verified_at=push_time if publication_status == "green" else "",
+        content_commit=immutable_commit,
+        publication_status=publication_status,
+    )
     activity = read_jsonl(activity_path)
     activity.append(
         {
@@ -1711,33 +1860,49 @@ def remote_main_head() -> str:
     return text.split()[0]
 
 
-def verify_remote_publication(expected_head: str, immutable_commit: str) -> dict[str, Any]:
+def verify_remote_publication(expected_head: str, immutable_commit: str, *, require_publication_pointer: bool = False) -> dict[str, Any]:
     run(["git", "fetch", "origin", "main", "--prune"])
     remote_head = remote_main_head()
     if remote_head != expected_head:
         raise RuntimeError(f"remote main verification failed: origin/main={remote_head}, expected={expected_head}")
     fetch_json = run(["git", "show", "origin/main:memory/assistant_fetch.json"]).stdout
-    bundle_json = run(["git", "show", "origin/main:memory/assistant_bundle.json"]).stdout
+    bundle_json = run(["git", "show", f"{immutable_commit}:memory/assistant_bundle.json"]).stdout
     health_json = run(["git", "show", "origin/main:memory/system_health.json"]).stdout
     fetch_meta = json.loads(fetch_json)
     bundle = json.loads(bundle_json)
     health = json.loads(health_json)
+    publication: dict[str, Any] = {}
     errors = []
-    if fetch_meta.get("immutable_commit") != immutable_commit:
+    if require_publication_pointer and fetch_meta.get("immutable_commit") != immutable_commit:
         errors.append(f"assistant_fetch immutable_commit={fetch_meta.get('immutable_commit')} expected={immutable_commit}")
-    if fetch_meta.get("publication_status") != "green":
+    if require_publication_pointer and fetch_meta.get("publication_status") != "green":
         errors.append(f"assistant_fetch publication_status={fetch_meta.get('publication_status')}")
-    if bundle.get("export_run_id") != fetch_meta.get("export_run_id"):
+    if require_publication_pointer and bundle.get("export_run_id") != fetch_meta.get("export_run_id"):
         errors.append("assistant_bundle export_run_id does not match assistant_fetch export_run_id")
-    if health.get("publication", {}).get("immutable_commit") != immutable_commit:
+    if require_publication_pointer and health.get("publication", {}).get("immutable_commit") != immutable_commit:
         errors.append(f"system_health publication immutable_commit={health.get('publication', {}).get('immutable_commit')} expected={immutable_commit}")
     if health.get("overall_status") not in {"green", "yellow"}:
         errors.append(f"system_health overall_status={health.get('overall_status')}")
+    if require_publication_pointer:
+        publication_json = run(["git", "show", "origin/main:memory/publication.json"]).stdout
+        publication = json.loads(publication_json)
+        bundle_sha = hashlib.sha256(bundle_json.encode("utf-8")).hexdigest()
+        if publication.get("publication_state") != "verified":
+            errors.append(f"publication_state={publication.get('publication_state')}")
+        if publication.get("content_commit") != immutable_commit:
+            errors.append(f"publication content_commit={publication.get('content_commit')} expected={immutable_commit}")
+        if publication.get("bundle_sha256") != bundle_sha:
+            errors.append("publication bundle_sha256 does not match immutable assistant_bundle.json")
+        if not publication.get("privacy_validation_passed"):
+            errors.append("publication privacy_validation_passed is false")
+        if not publication.get("export_validation_passed"):
+            errors.append("publication export_validation_passed is false")
     return {
         "remote_head": remote_head,
         "assistant_fetch": fetch_meta,
         "assistant_bundle": bundle,
         "system_health": health,
+        "publication": publication,
         "errors": errors,
     }
 
@@ -1759,6 +1924,7 @@ def export_memory(args: argparse.Namespace) -> int:
     watchlist = fetch_watchlist(conn)
     decisions = fetch_decisions(conn)
     projects = fetch_projects(conn)
+    daily_progress = fetch_daily_progress(conn)
 
     snapshot = build_snapshot(generated_at, entries, actions, patterns, watchlist, decisions, projects, entity_aliases, import_result)
     manifest = build_manifest(snapshot, actions, patterns)
@@ -1797,6 +1963,8 @@ def export_memory(args: argparse.Namespace) -> int:
             "decisions": len(decisions),
             "projects": len(projects),
             "entity_aliases": len(entity_aliases.get("aliases", [])),
+            "captures": len(daily_progress.get("recent_captures") or []),
+            "day_cases": len(daily_progress.get("day_cases") or []),
         },
         "entity_aliases": {
             "duplicate_groups_detected": entity_aliases.get("duplicate_groups_detected", 0),
@@ -1841,6 +2009,7 @@ def export_memory(args: argparse.Namespace) -> int:
         manifest,
         {"export_success": export_status["export_success"]},
         entity_aliases,
+        daily_progress,
     )
     write_json(MEMORY_DIR / "assistant_bundle.json", assistant_bundle)
     health = _build_publication_health(
@@ -1983,7 +2152,7 @@ def main() -> int:
                     raise RuntimeError("bundle verification failed: " + "; ".join(bundle_verification["errors"]))
                 push_time = now_iso()
                 update_publication_state(push_time, immutable_commit, immutable_commit, publication_status="green", remote_head_sha=immutable_commit)
-                run(["git", "add", "memory/assistant_fetch.json", "memory/system_health.json", "memory/export_status.json", "memory/activity.jsonl"])
+                run(["git", "add", "memory/assistant_fetch.json", "memory/system_health.json", "memory/export_status.json", "memory/activity.jsonl", "memory/publication.json"])
                 if run(["git", "diff", "--cached", "--quiet"], check=False).returncode != 0:
                     run(["git", "commit", "-m", f"{args.commit_message} [pointer]"])
                     pointer_commit = run(["git", "rev-parse", "HEAD"]).stdout.strip()
@@ -1991,7 +2160,7 @@ def main() -> int:
                     remote_pointer_head = remote_main_head()
                     if remote_pointer_head != pointer_commit:
                         raise RuntimeError(f"pointer push verification failed: origin/main={remote_pointer_head}, expected={pointer_commit}")
-                    pointer_verification = verify_remote_publication(pointer_commit, immutable_commit)
+                    pointer_verification = verify_remote_publication(pointer_commit, immutable_commit, require_publication_pointer=True)
                     if pointer_verification["errors"]:
                         raise RuntimeError("pointer verification failed: " + "; ".join(pointer_verification["errors"]))
         except Exception as exc:

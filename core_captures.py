@@ -1,0 +1,421 @@
+"""Durable chat capture ingestion and deterministic daily-loop interpretation."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from datetime import datetime, timezone
+from typing import Any
+from zoneinfo import ZoneInfo
+
+from core_database import connect
+from core_operations import claim_operation, clean_text, complete_attempt, make_id, now_utc_iso, stable_json
+
+
+CAPTURE_TYPES = {"begin_day_checklist", "end_of_day_report", "voice_debrief"}
+
+
+def content_hash(raw_text: str) -> str:
+    return hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+
+
+def load_json(value: Any, default: Any) -> Any:
+    if value in (None, ""):
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    try:
+        return json.loads(value)
+    except Exception:
+        return default
+
+
+def normalize_timestamp(value: Any, field_name: str, *, required: bool) -> str | None:
+    raw = clean_text(value)
+    if not raw:
+        if required:
+            raise ValueError(f"{field_name} is required")
+        return None
+    candidate = raw.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(candidate)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be timezone-aware ISO-8601") from exc
+    if dt.tzinfo is None or dt.utcoffset() is None:
+        raise ValueError(f"{field_name} must be timezone-aware ISO-8601")
+    return dt.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def local_date_for_capture(capture: dict[str, Any]) -> str:
+    basis = capture.get("occurred_at") or capture.get("captured_at")
+    if not basis:
+        return datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
+    return datetime.fromisoformat(str(basis).replace("Z", "+00:00")).astimezone(ZoneInfo("America/Los_Angeles")).date().isoformat()
+
+
+def row_to_capture(row) -> dict[str, Any]:
+    data = dict(row)
+    data["metadata"] = load_json(data.pop("metadata_json", "{}"), {})
+    return data
+
+
+def row_to_day_case(row) -> dict[str, Any]:
+    data = dict(row)
+    data["progress"] = load_json(data.pop("progress_json", "{}"), {})
+    return data
+
+
+def validate_capture_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("capture payload must be a JSON object")
+    capture_type = clean_text(payload.get("capture_type"))
+    if capture_type not in CAPTURE_TYPES:
+        raise ValueError("capture_type must be begin_day_checklist, end_of_day_report, or voice_debrief")
+    raw_text = str(payload.get("raw_text") or "")
+    if not raw_text.strip():
+        raise ValueError("raw_text is required")
+    source = clean_text(payload.get("source") or "chatgpt")
+    if source != "chatgpt":
+        raise ValueError("source must be chatgpt for this phase")
+    idempotency_key = clean_text(payload.get("idempotency_key"))
+    if not idempotency_key:
+        raise ValueError("idempotency_key is required")
+    request_id = clean_text(payload.get("request_id"))
+    if not request_id:
+        raise ValueError("request_id is required")
+    try:
+        payload_version = int(payload.get("payload_version") or 1)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("payload_version must be an integer") from exc
+    if payload_version < 1:
+        raise ValueError("payload_version must be positive")
+    captured_at = normalize_timestamp(payload.get("captured_at"), "captured_at", required=True)
+    occurred_at = normalize_timestamp(payload.get("occurred_at"), "occurred_at", required=False)
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    return {
+        "capture_type": capture_type,
+        "source": source,
+        "raw_text": raw_text,
+        "content_hash": content_hash(raw_text),
+        "occurred_at": occurred_at,
+        "occurred_precision": "datetime" if occurred_at else "unknown",
+        "captured_at": captured_at,
+        "conversation_id": clean_text(payload.get("conversation_id")) or None,
+        "message_id": clean_text(payload.get("message_id")) or None,
+        "request_id": request_id,
+        "correlation_id": clean_text(payload.get("correlation_id")) or None,
+        "idempotency_key": idempotency_key,
+        "payload_version": payload_version,
+        "metadata": metadata,
+    }
+
+
+def _insert_link(conn, *, capture_id: str, day_case_id: str | None, namespace: str, record_type: str, record_id: str, relationship: str, metadata: dict[str, Any] | None = None) -> None:
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO core_capture_derivations (
+            derivation_id, capture_id, day_case_id, derived_namespace,
+            derived_record_type, derived_record_id, relationship, metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            make_id("DRV"),
+            capture_id,
+            day_case_id,
+            namespace,
+            record_type,
+            record_id,
+            relationship,
+            stable_json(metadata or {}),
+        ),
+    )
+
+
+def _get_or_create_day_case(conn, capture: dict[str, Any], *, now: str) -> dict[str, Any]:
+    local_date = local_date_for_capture(capture)
+    row = conn.execute(
+        "SELECT * FROM core_day_cases WHERE owner_system_id='sys_info_analyzer' AND local_date=?",
+        (local_date,),
+    ).fetchone()
+    if not row:
+        day_case_id = make_id("DAY")
+        conn.execute(
+            """
+            INSERT INTO core_day_cases (
+                day_case_id, owner_system_id, local_date, timezone, status,
+                summary, progress_json, created_at, updated_at
+            ) VALUES (?, 'sys_info_analyzer', ?, 'America/Los_Angeles', 'open', ?, '{}', ?, ?)
+            """,
+            (day_case_id, local_date, f"Daily loop for {local_date}", now, now),
+        )
+        row = conn.execute("SELECT * FROM core_day_cases WHERE day_case_id=?", (day_case_id,)).fetchone()
+    return row_to_day_case(row)
+
+
+def _extract_bullets(raw_text: str) -> list[str]:
+    lines = []
+    for line in raw_text.splitlines():
+        cleaned = re.sub(r"^[-*#\\d.\\s]+", "", line).strip()
+        if cleaned:
+            lines.append(cleaned)
+    return lines[:12]
+
+
+def _progress_for(day_case: dict[str, Any], capture: dict[str, Any], bullets: list[str]) -> dict[str, Any]:
+    current = dict(day_case.get("progress") or {})
+    evidence = current.get("evidence_capture_ids") or []
+    if capture["capture_id"] not in evidence:
+        evidence.append(capture["capture_id"])
+    current.update(
+        {
+            "overarching_goal": current.get("overarching_goal") or "Move important information into a decision/action loop.",
+            "current_short_term_milestone": bullets[0] if bullets else current.get("current_short_term_milestone") or "Review today's captured evidence.",
+            "validated_milestones": current.get("validated_milestones") or [],
+            "unvalidated_milestones": bullets[1:6],
+            "blocker": next((b for b in bullets if "block" in b.lower() or "stuck" in b.lower()), ""),
+            "evidence_capture_ids": evidence,
+            "smallest_next_validated_state_transition": "Review linked capture evidence and mark one planned/observed item as validated.",
+        }
+    )
+    return current
+
+
+def ingest_capture(database_path, payload: dict[str, Any], *, process: bool = True, worker_id: str = "capture-ingest") -> dict[str, Any]:
+    normalized = validate_capture_payload(payload)
+    operation_payload = {k: normalized[k] for k in sorted(normalized) if k != "metadata"}
+    operation_payload["metadata"] = normalized["metadata"]
+    now = now_utc_iso()
+    with connect(database_path) as conn:
+        claimed = claim_operation(
+            conn,
+            operation_type="ingest_capture",
+            operation_key=f"{normalized['source']}:{normalized['idempotency_key']}",
+            request_payload=operation_payload,
+            worker_id=worker_id,
+            source_system_id="sys_info_analyzer",
+            subject_namespace="core",
+            subject_type="capture",
+            subject_id=normalized["idempotency_key"],
+            immutable_payload=True,
+            now=now,
+        )
+        if claimed["idempotent"]:
+            result = claimed["operation"].get("result") or {}
+            row = conn.execute("SELECT * FROM core_captures WHERE capture_id=?", (result.get("capture_id"),)).fetchone()
+            capture = row_to_capture(row) if row else None
+            return {
+                "ok": True,
+                "duplicate": True,
+                "capture": capture,
+                "capture_id": result.get("capture_id"),
+                "operation_id": claimed["operation"]["operation_id"],
+                "attempt_id": None,
+                "status": claimed["operation"]["status"],
+                "content_hash": result.get("content_hash"),
+                "processing_job_id": result.get("processing_job_id"),
+            }
+        capture_id = make_id("CAP")
+        try:
+            conn.execute(
+                """
+                INSERT INTO core_captures (
+                    capture_id, capture_type, source, conversation_id, message_id,
+                    request_id, correlation_id, idempotency_key, payload_version,
+                    raw_text, content_hash, occurred_at, occurred_precision,
+                    captured_at, ingested_at, processing_state, metadata_json,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
+                """,
+                (
+                    capture_id,
+                    normalized["capture_type"],
+                    normalized["source"],
+                    normalized["conversation_id"],
+                    normalized["message_id"],
+                    normalized["request_id"],
+                    normalized["correlation_id"],
+                    normalized["idempotency_key"],
+                    normalized["payload_version"],
+                    normalized["raw_text"],
+                    normalized["content_hash"],
+                    normalized["occurred_at"],
+                    normalized["occurred_precision"],
+                    normalized["captured_at"],
+                    now,
+                    stable_json(normalized["metadata"]),
+                    now,
+                    now,
+                ),
+            )
+            result = {"capture_id": capture_id, "content_hash": normalized["content_hash"], "processing_job_id": None}
+            completed = complete_attempt(
+                conn,
+                operation_id=claimed["operation"]["operation_id"],
+                attempt_id=claimed["attempt"]["attempt_id"],
+                worker_id=worker_id,
+                status="succeeded",
+                result=result,
+                result_namespace="core",
+                result_type="capture",
+                result_id=capture_id,
+                now=now,
+            )
+            conn.commit()
+        except Exception as exc:
+            if conn.in_transaction:
+                conn.rollback()
+            raise exc
+    processing_result = process_capture(database_path, capture_id, worker_id="capture-worker") if process else None
+    with connect(database_path) as conn:
+        row = conn.execute("SELECT * FROM core_captures WHERE capture_id=?", (capture_id,)).fetchone()
+        capture = row_to_capture(row)
+    return {
+        "ok": True,
+        "duplicate": False,
+        "capture": capture,
+        "capture_id": capture_id,
+        "operation_id": completed["operation_id"],
+        "attempt_id": claimed["attempt"]["attempt_id"],
+        "status": completed["status"],
+        "content_hash": normalized["content_hash"],
+        "processing_job_id": (processing_result or {}).get("operation_id"),
+        "processing": processing_result,
+    }
+
+
+def process_capture(database_path, capture_id: str, *, worker_id: str = "capture-worker") -> dict[str, Any]:
+    now = now_utc_iso()
+    with connect(database_path) as conn:
+        row = conn.execute("SELECT * FROM core_captures WHERE capture_id=?", (clean_text(capture_id),)).fetchone()
+        if not row:
+            raise KeyError("capture not found")
+        capture = row_to_capture(row)
+        claimed = claim_operation(
+            conn,
+            operation_type="process_capture",
+            operation_key=capture["capture_id"],
+            request_payload={"capture_id": capture["capture_id"], "content_hash": capture["content_hash"]},
+            worker_id=worker_id,
+            source_system_id="sys_info_analyzer",
+            subject_namespace="core",
+            subject_type="capture",
+            subject_id=capture["capture_id"],
+            immutable_payload=True,
+            now=now,
+        )
+        if claimed["idempotent"]:
+            return {"ok": True, "idempotent": True, "operation_id": claimed["operation"]["operation_id"], **(claimed["operation"].get("result") or {})}
+        try:
+            conn.execute("UPDATE core_captures SET processing_state='processing', updated_at=? WHERE capture_id=?", (now, capture["capture_id"]))
+            day_case = _get_or_create_day_case(conn, capture, now=now)
+            bullets = _extract_bullets(capture["raw_text"])
+            signal_id = make_id("SIG")
+            signal_type = f"capture_{capture['capture_type']}"
+            title = {
+                "begin_day_checklist": "Begin-day checklist captured",
+                "end_of_day_report": "End-of-day report captured",
+                "voice_debrief": "Voice debrief captured",
+            }[capture["capture_type"]]
+            summary = bullets[0] if bullets else f"{capture['capture_type']} received from {capture['source']}."
+            metadata = {
+                "capture_id": capture["capture_id"],
+                "content_hash": capture["content_hash"],
+                "bullet_count": len(bullets),
+                "bullets": bullets,
+                "interpretation_status": "deterministic_initial_pass",
+            }
+            conn.execute(
+                """
+                INSERT INTO core_signals (
+                    signal_id, owner_system_id, signal_type, title, summary,
+                    priority, confidence, actionability_score, status,
+                    rationale, recommended_action, detected_at, metadata_json
+                ) VALUES (?, 'sys_info_analyzer', ?, ?, ?, 'P2', 0.75, 0.50, 'new', ?, ?, ?, ?)
+                """,
+                (
+                    signal_id,
+                    signal_type,
+                    title,
+                    summary,
+                    "Raw capture was preserved and converted into a reviewable daily-loop signal.",
+                    "Review the linked capture and confirm the next evidence-backed transition.",
+                    capture.get("captured_at") or now,
+                    stable_json(metadata),
+                ),
+            )
+            _insert_link(conn, capture_id=capture["capture_id"], day_case_id=day_case["day_case_id"], namespace="core", record_type="signal", record_id=signal_id, relationship="interpreted_as", metadata={"content_hash": capture["content_hash"]})
+            progress = _progress_for(day_case, capture, bullets)
+            updates = ["progress_json=?", "updated_at=?"]
+            args: list[Any] = [stable_json(progress), now]
+            if capture["capture_type"] == "begin_day_checklist":
+                updates.append("plan_capture_id=COALESCE(plan_capture_id, ?)")
+                args.append(capture["capture_id"])
+            if capture["capture_type"] == "end_of_day_report":
+                updates.append("report_capture_id=COALESCE(report_capture_id, ?)")
+                args.append(capture["capture_id"])
+            args.append(day_case["day_case_id"])
+            conn.execute(f"UPDATE core_day_cases SET {', '.join(updates)} WHERE day_case_id=?", tuple(args))
+            _insert_link(conn, capture_id=capture["capture_id"], day_case_id=day_case["day_case_id"], namespace="core", record_type="day_case", record_id=day_case["day_case_id"], relationship="updates_day_case")
+            if bullets:
+                action_id = make_id("ACT")
+                conn.execute(
+                    """
+                    INSERT INTO core_actions (
+                        action_id, owner_system_id, action_type, title, details,
+                        status, execution_mode, assigned_to, metadata_json
+                    ) VALUES (?, 'sys_info_analyzer', 'capture_next_step', ?, ?, 'proposed', 'manual', 'user', ?)
+                    """,
+                    (
+                        action_id,
+                        "Review captured next step",
+                        bullets[-1],
+                        stable_json({"capture_id": capture["capture_id"], "source": "capture_interpretation"}),
+                    ),
+                )
+                _insert_link(conn, capture_id=capture["capture_id"], day_case_id=day_case["day_case_id"], namespace="core", record_type="action", record_id=action_id, relationship="proposes_action")
+            conn.execute(
+                "UPDATE core_captures SET processing_state='processed', processed_at=?, process_operation_id=?, updated_at=? WHERE capture_id=?",
+                (now, claimed["operation"]["operation_id"], now, capture["capture_id"]),
+            )
+            result = {"capture_id": capture["capture_id"], "day_case_id": day_case["day_case_id"], "signal_id": signal_id}
+            completed = complete_attempt(
+                conn,
+                operation_id=claimed["operation"]["operation_id"],
+                attempt_id=claimed["attempt"]["attempt_id"],
+                worker_id=worker_id,
+                status="succeeded",
+                result=result,
+                result_namespace="core",
+                result_type="capture_interpretation",
+                result_id=capture["capture_id"],
+                now=now,
+            )
+            conn.commit()
+            return {"ok": True, "idempotent": False, "operation_id": completed["operation_id"], **result}
+        except Exception as exc:
+            conn.execute("UPDATE core_captures SET processing_state='failed', updated_at=? WHERE capture_id=?", (now, capture["capture_id"]))
+            complete_attempt(
+                conn,
+                operation_id=claimed["operation"]["operation_id"],
+                attempt_id=claimed["attempt"]["attempt_id"],
+                worker_id=worker_id,
+                status="failed",
+                error={"error": str(exc)},
+                now=now,
+            )
+            conn.commit()
+            raise
+
+
+def get_day_progress(database_path, *, local_date: str | None = None) -> dict[str, Any]:
+    with connect(database_path) as conn:
+        if local_date:
+            row = conn.execute("SELECT * FROM core_day_cases WHERE owner_system_id='sys_info_analyzer' AND local_date=?", (local_date,)).fetchone()
+        else:
+            row = conn.execute("SELECT * FROM core_day_cases WHERE owner_system_id='sys_info_analyzer' ORDER BY local_date DESC LIMIT 1").fetchone()
+        if not row:
+            return {"status": "empty", "day_case": None}
+        day = row_to_day_case(row)
+        links = [dict(r) for r in conn.execute("SELECT * FROM core_capture_derivations WHERE day_case_id=? ORDER BY created_at", (day["day_case_id"],)).fetchall()]
+        return {"status": "ok", "day_case": day, "links": links}

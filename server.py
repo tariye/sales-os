@@ -40,6 +40,7 @@ except Exception:
 
 from core_database import configure_connection
 from core_alerts import list_alerts as core_list_alerts, respond_to_alert as core_respond_to_alert
+from core_captures import ingest_capture as core_ingest_capture
 from core_events import MAX_EVENT_BODY_BYTES, create_event as core_create_event
 from core_innbank_routing import (
     create_allocation_plan as innbank_create_allocation_plan,
@@ -7080,6 +7081,13 @@ class Handler(SimpleHTTPRequestHandler):
                     conn.commit()
                 status = 201 if result["created"] else 200
                 return self.send_json({"success": True, **result, "effects": effects}, status)
+            if path in {"/captures", "/api/captures"}:
+                request_id = clean_text(self.headers.get("X-Request-ID") or "")
+                if not self.require_api_auth(request_id):
+                    return
+                payload = self.read_json()
+                result = core_ingest_capture(DB_PATH, payload)
+                return self.send_json({"success": True, **result}, 200 if result.get("duplicate") else 201)
             if path.startswith("/alerts/") or path.startswith("/api/alerts/"):
                 request_id = clean_text(self.headers.get("X-Request-ID") or "")
                 if not self.require_api_auth(request_id):
