@@ -1,6 +1,6 @@
 {
   "assistant_bundle": {
-    "bytes": 31500,
+    "bytes": 44848,
     "errors": [],
     "max_bytes": 150000,
     "path": "memory/assistant_bundle.json",
@@ -25,22 +25,24 @@
     "memory/entity_aliases.json"
   ],
   "counts": {
-    "actions": 59,
-    "decisions": 43,
-    "entity_aliases": 8,
-    "entries": 59,
-    "patterns": 2,
+    "actions": 120,
+    "captures": 1,
+    "day_cases": 1,
+    "decisions": 10,
+    "entity_aliases": 16,
+    "entries": 100,
+    "patterns": 59,
     "projects": 9,
-    "watchlist": 0
+    "watchlist": 126
   },
-  "current_run_id": "export-20260824-071746",
+  "current_run_id": "export-20260914-014437",
   "entity_aliases": {
-    "duplicate_groups_detected": 2,
-    "duplicate_groups_reconciled": 8,
+    "duplicate_groups_detected": 10,
+    "duplicate_groups_reconciled": 16,
     "unresolved_duplicate_entities": 0
   },
   "export_success": true,
-  "generated_at": "2026-08-24T07:17:46Z",
+  "generated_at": "2026-09-14T01:44:37Z",
   "immutable_commit": "",
   "import_result": {
     "archived": "",
@@ -51,12 +53,12 @@
   "json_errors": [],
   "publication_status": "pending",
   "remote_head_sha": "",
-  "source_of_truth": "/Users/admin/Library/Application Support/InfoAnalyzer/active/info_analyzer.db",
+  "source_of_truth": "data/info_analyzer.db",
   "validation": {
     "broken_links": 0,
     "duplicate_entities": 0,
-    "duplicate_groups_detected": 2,
-    "duplicate_groups_reconciled": 8,
+    "duplicate_groups_detected": 10,
+    "duplicate_groups_reconciled": 16,
     "errors": [],
     "missing_required_files": [],
     "ok": true,
