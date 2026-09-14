@@ -429,7 +429,7 @@ def _build_publication_health(
     *,
     current_stage: str,
     publication_status: str,
-    immutable_commit: str = "",
+    content_commit: str = "",
     pointer_commit: str = "",
     remote_head_sha: str = "",
     remote_verified_at: str = "",
@@ -453,7 +453,8 @@ def _build_publication_health(
         "status": publication_status,
         "last_attempt": generated_at,
         "last_success": remote_verified_at if publication_status == "green" else _iso_or_empty(previous_health.get("publication", {}).get("last_success")),
-        "immutable_commit": immutable_commit or _iso_or_empty(previous_health.get("publication", {}).get("immutable_commit")),
+        "verified_content_commit": content_commit or _iso_or_empty(previous_health.get("publication", {}).get("verified_content_commit")),
+        "remote_head_at_content_verification": (content_commit if publication_status == "green" else "") or _iso_or_empty(previous_health.get("publication", {}).get("remote_head_at_content_verification")),
         "pointer_commit": pointer_commit or _iso_or_empty(previous_health.get("publication", {}).get("pointer_commit")),
         "remote_branch": "origin/main",
         "remote_head_sha": remote_head_sha or _iso_or_empty(previous_health.get("publication", {}).get("remote_head_sha")),
@@ -480,7 +481,7 @@ def _build_publication_health(
         "export_success": export_success and db_validation.get("ok") and publication_status == "green",
         "last_export": export_state["last_success"],
         "last_push": publication_state["remote_verified_at"],
-        "last_push_commit": pointer_commit or immutable_commit or _iso_or_empty(previous_health.get("last_push_commit")),
+        "last_push_commit": pointer_commit or content_commit or _iso_or_empty(previous_health.get("last_push_commit")),
         "snapshot_age_minutes": freshness_state["age_minutes"],
         "database": source_status,
         "broken_links": db_validation.get("broken_links", 0),
@@ -1600,7 +1601,7 @@ def build_assistant_bundle(
     return bundle
 
 
-def build_assistant_fetch(generated_at: str, run_id: str, immutable_commit: str, publication_commit: str = "", publication_status: str = "pending") -> dict[str, Any]:
+def build_assistant_fetch(generated_at: str, run_id: str, content_commit: str, publication_status: str = "pending") -> dict[str, Any]:
     return {
         "schema_version": "1.0",
         "repository": "tariye/sales-os",
@@ -1610,16 +1611,15 @@ def build_assistant_fetch(generated_at: str, run_id: str, immutable_commit: str,
         "index_path": "memory/index.json",
         "generated_at": generated_at,
         "export_run_id": run_id,
-        "immutable_commit": immutable_commit,
-        "publication_commit": publication_commit,
+        "content_commit": content_commit,
         "publication_status": publication_status,
-        "immutable_bundle_ref": f"{immutable_commit}:memory/assistant_bundle.json" if immutable_commit else "",
-        "immutable_bundle_url": f"https://raw.githubusercontent.com/tariye/sales-os/{immutable_commit}/memory/assistant_bundle.json" if immutable_commit else "",
+        "content_bundle_ref": f"{content_commit}:memory/assistant_bundle.json" if content_commit else "",
+        "content_bundle_url": f"https://raw.githubusercontent.com/tariye/sales-os/{content_commit}/memory/assistant_bundle.json" if content_commit else "",
         "fetch_strategy": [
             "Read the remote branch with git ls-remote origin refs/heads/main",
             "Fetch origin/main locally with git fetch origin main",
             "Read memory/assistant_fetch.json from origin/main",
-            "Read memory/assistant_bundle.json from the immutable_commit recorded in that file",
+            "Read memory/assistant_bundle.json from the content_commit recorded in that file",
         ],
     }
 
@@ -1787,7 +1787,7 @@ def update_publication_state(
         bool(export_status.get("export_success")),
         current_stage="publication",
         publication_status=publication_status,
-        immutable_commit=immutable_commit,
+        content_commit=immutable_commit,
         pointer_commit=commit_hash,
         remote_head_sha=remote_head_sha,
         remote_verified_at=push_time if publication_status == "green" else "",
@@ -1796,7 +1796,8 @@ def update_publication_state(
     )
     export_status["last_push"] = push_time
     export_status["last_push_commit"] = commit_hash
-    export_status["immutable_commit"] = immutable_commit
+    export_status.pop("immutable_commit", None)
+    export_status["content_commit"] = immutable_commit
     export_status["publication_status"] = publication_status
     export_status["remote_head_sha"] = remote_head_sha
     fetch_generated_at = str(export_status.get("generated_at") or push_time)
@@ -1806,7 +1807,7 @@ def update_publication_state(
     else:
         fetch_meta = {}
     if not fetch_meta:
-        fetch_meta = build_assistant_fetch(fetch_generated_at, fetch_run_id, immutable_commit, commit_hash, publication_status)
+        fetch_meta = build_assistant_fetch(fetch_generated_at, fetch_run_id, immutable_commit, publication_status)
     fetch_meta["schema_version"] = "1.0"
     fetch_meta["repository"] = "tariye/sales-os"
     fetch_meta["branch"] = "main"
@@ -1815,18 +1816,22 @@ def update_publication_state(
     fetch_meta["index_path"] = "memory/index.json"
     fetch_meta["generated_at"] = fetch_generated_at
     fetch_meta["export_run_id"] = fetch_run_id
-    fetch_meta["immutable_commit"] = immutable_commit
-    fetch_meta["publication_commit"] = commit_hash
+    fetch_meta.pop("immutable_commit", None)
+    fetch_meta.pop("publication_commit", None)
+    fetch_meta.pop("immutable_bundle_ref", None)
+    fetch_meta.pop("immutable_bundle_url", None)
+    fetch_meta["content_commit"] = immutable_commit
     fetch_meta["publication_status"] = publication_status
     fetch_meta["last_verified_commit"] = commit_hash
     fetch_meta["last_verified_at"] = push_time if publication_status == "green" else _iso_or_empty(fetch_meta.get("last_verified_at"))
     fetch_meta["fetch_strategy"] = [
         "Read the remote branch with git ls-remote origin refs/heads/main",
+        "Treat that live remote head as current_main_commit (the pointer commit)",
         "Fetch origin/main locally with git fetch origin main",
         "Read memory/assistant_fetch.json from origin/main",
-        "Read memory/assistant_bundle.json from the immutable_commit recorded in that file",
+        "Read memory/assistant_bundle.json from the content_commit recorded in that file",
     ]
-    fetch_meta["immutable_bundle_url"] = f"https://raw.githubusercontent.com/tariye/sales-os/{immutable_commit}/memory/assistant_bundle.json" if immutable_commit else fetch_meta.get("immutable_bundle_url", "")
+    fetch_meta["content_bundle_url"] = f"https://raw.githubusercontent.com/tariye/sales-os/{immutable_commit}/memory/assistant_bundle.json" if immutable_commit else fetch_meta.get("content_bundle_url", "")
     write_json(fetch_path, fetch_meta)
     write_json(health_path, current_health)
     write_json(status_path, export_status)
@@ -1845,7 +1850,7 @@ def update_publication_state(
             "type": "remote_push_verified",
             "entity": "GitHub memory bridge",
             "summary": f"Verified origin/main at {commit_hash}.",
-            "immutable_commit": immutable_commit,
+            "content_commit": immutable_commit,
             "remote_head_sha": remote_head_sha or commit_hash,
         }
     )
@@ -1873,14 +1878,14 @@ def verify_remote_publication(expected_head: str, immutable_commit: str, *, requ
     health = json.loads(health_json)
     publication: dict[str, Any] = {}
     errors = []
-    if require_publication_pointer and fetch_meta.get("immutable_commit") != immutable_commit:
-        errors.append(f"assistant_fetch immutable_commit={fetch_meta.get('immutable_commit')} expected={immutable_commit}")
+    if require_publication_pointer and fetch_meta.get("content_commit") != immutable_commit:
+        errors.append(f"assistant_fetch content_commit={fetch_meta.get('content_commit')} expected={immutable_commit}")
     if require_publication_pointer and fetch_meta.get("publication_status") != "green":
         errors.append(f"assistant_fetch publication_status={fetch_meta.get('publication_status')}")
     if require_publication_pointer and bundle.get("export_run_id") != fetch_meta.get("export_run_id"):
         errors.append("assistant_bundle export_run_id does not match assistant_fetch export_run_id")
-    if require_publication_pointer and health.get("publication", {}).get("immutable_commit") != immutable_commit:
-        errors.append(f"system_health publication immutable_commit={health.get('publication', {}).get('immutable_commit')} expected={immutable_commit}")
+    if require_publication_pointer and health.get("publication", {}).get("verified_content_commit") != immutable_commit:
+        errors.append(f"system_health verified_content_commit={health.get('publication', {}).get('verified_content_commit')} expected={immutable_commit}")
     if health.get("overall_status") not in {"green", "yellow"}:
         errors.append(f"system_health overall_status={health.get('overall_status')}")
     if require_publication_pointer:
@@ -1972,7 +1977,7 @@ def export_memory(args: argparse.Namespace) -> int:
             "unresolved_duplicate_entities": entity_aliases.get("unresolved_duplicate_entities", 0),
         },
         "publication_status": "pending",
-        "immutable_commit": "",
+        "content_commit": "",
         "remote_head_sha": "",
     }
 
@@ -2171,7 +2176,7 @@ def main() -> int:
                 "error_summary": str(exc),
                 "attempted_at": failure_time,
                 "run_id": run_id,
-                "immutable_commit": immutable_commit,
+                "content_commit": immutable_commit,
                 "pointer_commit": pointer_commit,
             }
             try:

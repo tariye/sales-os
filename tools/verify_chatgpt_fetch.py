@@ -77,8 +77,8 @@ def main() -> int:
 
     try:
         fetch_meta = git_show_json(f"{args.remote}/{args.branch}", args.fetch_path)
-        immutable_commit = str(fetch_meta.get("immutable_commit") or "")
-        bundle = git_show_json(immutable_commit, args.bundle_path)
+        content_commit = str(fetch_meta.get("content_commit") or "")
+        bundle = git_show_json(content_commit, args.bundle_path)
         health = git_show_json(f"{args.remote}/{args.branch}", args.health_path)
     except Exception as exc:
         print(json.dumps({"status": "fail", "remote_head": remote_head, "error": str(exc)}, indent=2))
@@ -97,12 +97,12 @@ def main() -> int:
         errors.append("privacy_validation_passed is not true")
     if fetch_meta.get("publication_status") != "green":
         errors.append("assistant_fetch publication_status is not green")
-    if fetch_meta.get("immutable_commit") != immutable_commit:
-        errors.append("assistant_fetch immutable_commit missing or mismatched")
+    if not content_commit:
+        errors.append("assistant_fetch content_commit missing")
     if health.get("overall_status") not in {"green", "yellow"}:
         errors.append("system_health overall_status is not green or yellow")
-    if health.get("publication", {}).get("immutable_commit") != immutable_commit:
-        errors.append("system_health publication immutable_commit does not match assistant_fetch immutable_commit")
+    if health.get("publication", {}).get("verified_content_commit") != content_commit:
+        errors.append("system_health verified_content_commit does not match assistant_fetch content_commit")
     if health.get("publication", {}).get("status") != "green":
         errors.append("system_health publication status is not green")
     if not any(item.get("id") == "CHATGPT-FETCH-TEST-202607" for item in bundle.get("recent_activity", [])):
@@ -111,16 +111,17 @@ def main() -> int:
     age_hours = (datetime.now(timezone.utc) - generated_at).total_seconds() / 3600
     if age_hours > args.max_age_hours:
         errors.append(f"bundle age {age_hours:.2f}h exceeds {args.max_age_hours}h")
-    remote_bundle = git_show_json(immutable_commit, args.bundle_path)
+    remote_bundle = git_show_json(content_commit, args.bundle_path)
     if remote_bundle != bundle:
-        errors.append("bundle content read from immutable_commit does not match parsed bundle")
+        errors.append("bundle content read from content_commit does not match parsed bundle")
 
     result = {
         "status": "pass" if not errors else "fail",
         "remote": args.remote,
         "branch": args.branch,
         "remote_head": remote_head,
-        "immutable_commit": immutable_commit,
+        "current_main_commit": remote_head,
+        "content_commit": content_commit,
         "bundle_bytes": len(bundle_bytes),
         "generated_at": bundle.get("generated_at"),
         "age_hours": round(age_hours, 3),

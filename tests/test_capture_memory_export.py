@@ -92,6 +92,24 @@ class CaptureMemoryExportTests(unittest.TestCase):
             memory_manager.MEMORY_DIR = original_memory_dir
             tempdir.cleanup()
 
+    def test_publication_health_anchors_verified_content_commit(self) -> None:
+        health = memory_manager._build_publication_health(
+            "2026-09-13T21:00:00Z",
+            "run-1",
+            {"status": "green", "age_minutes": 1},
+            {"ok": True, "errors": []},
+            True,
+            current_stage="publication",
+            publication_status="green",
+            content_commit="content-sha",
+            pointer_commit="pointer-sha",
+            remote_head_sha="pointer-sha",
+            remote_verified_at="2026-09-13T21:00:01Z",
+        )
+        self.assertEqual(health["publication"]["verified_content_commit"], "content-sha")
+        self.assertEqual(health["publication"]["remote_head_at_content_verification"], "content-sha")
+        self.assertEqual(health["publication"]["pointer_commit"], "pointer-sha")
+
 
 if __name__ == "__main__":
     unittest.main()
