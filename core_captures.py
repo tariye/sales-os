@@ -20,6 +20,11 @@ CAPTURE_TYPES = {
 }
 DAILY_CAPTURE_TYPES = {"begin_day_checklist", "end_of_day_report", "voice_debrief"}
 AUTHOR_ROLES = {"user", "assistant"}
+CAPTURE_POLICY_VERSION = "chat_capture_v2"
+ALLOWED_ASSISTANT_REPORT_TYPES = {
+    "daily_intelligence_briefing", "end_of_day_analysis", "architecture_report",
+    "decision_packet", "research_report", "project_handoff", "operating_review",
+}
 
 
 def content_hash(raw_text: str) -> str:
@@ -81,7 +86,7 @@ def infer_capture_request(raw_text: str, *, author_role: str = "user") -> dict[s
     if lowered.startswith(("note:", "save this:")):
         return {"capture": True, "capture_type": "assistant_report" if author_role == "assistant" else "user_note", "reason": "explicit_force_capture"}
     if author_role == "assistant":
-        return {"capture": True, "capture_type": "assistant_report", "reason": "durable_report_requested"} if len(text) >= 80 else {"capture": False, "reason": "ordinary_assistant_answer"}
+        return {"capture": False, "reason": "ordinary_assistant_answer"}
     patterns = (
         ("begin-day checklist", "begin_day_checklist"),
         ("beginning of day", "begin_day_checklist"),
@@ -95,7 +100,7 @@ def infer_capture_request(raw_text: str, *, author_role: str = "user") -> dict[s
     for marker, capture_type in patterns:
         if marker in lowered:
             return {"capture": True, "capture_type": capture_type, "reason": "recognized_daily_capture"}
-    return {"capture": len(text) >= 80, "capture_type": "user_report", "reason": "substantive_user_message" if len(text) >= 80 else "ordinary_conversation"}
+    return {"capture": False, "reason": "ordinary_conversation"}
 
 
 def validate_capture_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -129,10 +134,24 @@ def validate_capture_payload(payload: dict[str, Any]) -> dict[str, Any]:
     capture_type = clean_text(payload.get("capture_type") or inferred.get("capture_type") or "user_note")
     if capture_type not in CAPTURE_TYPES:
         raise ValueError("capture_type is required or must be a supported chat capture class")
-    metadata = {**metadata, "author_role": author_role}
+    explicit_type = bool(payload.get("capture_type"))
+    report_type = clean_text(metadata.get("report_type") or payload.get("report_type"))
+    durable_output = bool(metadata.get("durable_output") or payload.get("durable_output"))
+    if author_role == "assistant" and (durable_output or report_type in ALLOWED_ASSISTANT_REPORT_TYPES):
+        inferred = {"capture": True, "capture_type": "assistant_report", "reason": "explicit_durable_output"}
+        if not explicit_type:
+            capture_type = "assistant_report"
+    elif explicit_type and inferred.get("reason") in {"ordinary_conversation", "ordinary_assistant_answer"}:
+        inferred = {"capture": True, "capture_type": capture_type, "reason": "explicit_caller_classification"}
+    metadata = {
+        **metadata,
+        "author_role": author_role,
+        "capture_reason": inferred.get("reason"),
+        "capture_policy_version": CAPTURE_POLICY_VERSION,
+    }
     if author_role == "assistant":
         metadata.setdefault("generation_timestamp", captured_at)
-        metadata.setdefault("report_type", "durable_assistant_report")
+        metadata.setdefault("report_type", report_type or "durable_assistant_report")
     return {
         "capture_type": capture_type,
         "source": source,
@@ -212,6 +231,28 @@ def _extract_bullets(raw_text: str) -> list[str]:
         if cleaned:
             lines.append(cleaned)
     return lines[:12]
+
+
+def extract_explicit_actions(raw_text: str, capture_type: str) -> list[dict[str, str]]:
+    """Extract only text with an explicit action signal and retain its evidence span."""
+    actions: list[dict[str, str]] = []
+    explicit = re.compile(
+        r"^(?:action|next action|next step|todo|to-do|follow[- ]?up|commitment|plan|i will|we will|must|should)\s*[:\-]?\s*(.+)$",
+        re.IGNORECASE,
+    )
+    for raw_line in raw_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        candidate = re.sub(r"^[-*#\d.\s]+", "", line).strip()
+        match = explicit.match(candidate)
+        if capture_type == "begin_day_checklist" and candidate and not re.search(r"\b(blocker|blocked|risk|note)\b", candidate, re.IGNORECASE):
+            match = match or re.match(r"(.+)", candidate)
+        if match:
+            phrase = (match.group(1) if match.lastindex else match.group(0)).strip()
+            if phrase and not re.match(r"^(no action|none|n/?a)\b", phrase, re.IGNORECASE):
+                actions.append({"phrase": phrase, "source_span": line})
+    return actions[:12]
 
 
 def _progress_for(day_case: dict[str, Any], capture: dict[str, Any], bullets: list[str]) -> dict[str, Any]:
@@ -378,6 +419,7 @@ def process_capture(database_path, capture_id: str, *, worker_id: str = "capture
                 if day_case_row:
                     day_case = row_to_day_case(day_case_row)
             bullets = _extract_bullets(capture["raw_text"])
+            explicit_actions = extract_explicit_actions(capture["raw_text"], capture["capture_type"])
             signal_id = make_id("SIG")
             signal_type = f"capture_{capture['capture_type']}"
             title = {
@@ -398,6 +440,9 @@ def process_capture(database_path, capture_id: str, *, worker_id: str = "capture
                 "bullet_count": len(bullets),
                 "bullets": bullets,
                 "interpretation_status": "deterministic_initial_pass",
+                "capture_reason": capture.get("metadata", {}).get("capture_reason"),
+                "capture_policy_version": capture.get("metadata", {}).get("capture_policy_version"),
+                "explicit_action_count": len(explicit_actions),
             }
             conn.execute(
                 """
@@ -436,7 +481,7 @@ def process_capture(database_path, capture_id: str, *, worker_id: str = "capture
                 source_row = conn.execute("SELECT capture_id FROM core_captures WHERE capture_id=?", (clean_text(source_capture_id),)).fetchone()
                 if source_row:
                     _insert_link(conn, capture_id=source_row["capture_id"], day_case_id=day_case["day_case_id"] if day_case else None, namespace="core", record_type="capture", record_id=capture["capture_id"], relationship="assistant_report", metadata={"source_capture_id": source_row["capture_id"]})
-            if bullets:
+            for action in explicit_actions:
                 action_id = make_id("ACT")
                 conn.execute(
                     """
@@ -448,8 +493,14 @@ def process_capture(database_path, capture_id: str, *, worker_id: str = "capture
                     (
                         action_id,
                         "Review captured next step",
-                        bullets[-1],
-                        stable_json({"capture_id": capture["capture_id"], "source": "capture_interpretation"}),
+                        action["phrase"],
+                        stable_json({
+                            "capture_id": capture["capture_id"],
+                            "source": "capture_interpretation",
+                            "source_span": action["source_span"],
+                            "extraction_rule": "explicit_action_prefix_v1",
+                            "extraction_version": "chat_capture_v2",
+                        }),
                     ),
                 )
                 _insert_link(conn, capture_id=capture["capture_id"], day_case_id=day_case["day_case_id"] if day_case else None, namespace="core", record_type="action", record_id=action_id, relationship="proposes_action")

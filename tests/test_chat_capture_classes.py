@@ -54,7 +54,40 @@ class ChatCaptureClassTests(unittest.TestCase):
             row = conn.execute("SELECT raw_text, capture_type, metadata_json FROM core_captures WHERE capture_id=?", (first["capture_id"],)).fetchone()
             self.assertEqual(row["raw_text"], "note: Home Sentinel camera failed after power change")
             self.assertEqual(row["capture_type"], "user_note")
-            self.assertEqual(row["metadata_json"], '{"author_role":"user"}')
+            self.assertIn('"capture_reason":"explicit_force_capture"', row["metadata_json"])
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM core_actions").fetchone()[0], 0)
+
+    def test_long_ordinary_message_is_not_captured_and_durable_assistant_output_is_explicit(self) -> None:
+        ordinary = ingest_capture(
+            self.db_path,
+            payload("This is a long exploratory question about whether a future architecture should use a worker, but it is not a durable report.", "ordinary-1"),
+        )
+        self.assertEqual(ordinary["status"], "not_captured")
+        report = ingest_capture(
+            self.db_path,
+            payload(
+                "This is a durable architecture report with conclusions and reusable operating guidance.",
+                "durable-1",
+                author_role="assistant",
+                metadata={"durable_output": True, "report_type": "architecture_report"},
+            ),
+        )
+        self.assertEqual(report["capture"]["capture_type"], "assistant_report")
+        self.assertEqual(report["capture"]["metadata"]["capture_reason"], "explicit_durable_output")
+
+    def test_research_note_is_evidence_without_manufactured_action(self) -> None:
+        result = ingest_capture(
+            self.db_path,
+            payload(
+                "HBM prices increased this quarter and the evidence needs further review.",
+                "research-1",
+                capture_type="research_note",
+            ),
+        )
+        self.assertEqual(result["capture"]["capture_type"], "research_note")
+        with connect(self.db_path) as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM core_actions").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM core_signals").fetchone()[0], 1)
 
     def test_opt_out_has_no_capture(self) -> None:
         result = ingest_capture(self.db_path, payload("don't save this: temporary thought", "optout-1"))
