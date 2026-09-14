@@ -1,6 +1,6 @@
 {
   "assistant_bundle": {
-    "bytes": 44848,
+    "bytes": 44861,
     "errors": [],
     "max_bytes": 150000,
     "path": "memory/assistant_bundle.json",
@@ -24,6 +24,7 @@
     "memory/projects.jsonl",
     "memory/entity_aliases.json"
   ],
+  "content_commit": "",
   "counts": {
     "actions": 120,
     "captures": 1,
@@ -35,15 +36,14 @@
     "projects": 9,
     "watchlist": 126
   },
-  "current_run_id": "export-20260914-014437",
+  "current_run_id": "export-20260914-023011",
   "entity_aliases": {
     "duplicate_groups_detected": 10,
     "duplicate_groups_reconciled": 16,
     "unresolved_duplicate_entities": 0
   },
   "export_success": true,
-  "generated_at": "2026-09-14T01:44:37Z",
-  "immutable_commit": "122c67d72bb6f2496a5b68025f52c565d55bce56",
+  "generated_at": "2026-09-14T02:30:11Z",
   "import_result": {
     "archived": "",
     "duplicates": 0,
@@ -51,10 +51,8 @@
     "pending_before": 0
   },
   "json_errors": [],
-  "last_push": "2026-09-14T01:44:42Z",
-  "last_push_commit": "122c67d72bb6f2496a5b68025f52c565d55bce56",
-  "publication_status": "green",
-  "remote_head_sha": "122c67d72bb6f2496a5b68025f52c565d55bce56",
+  "publication_status": "pending",
+  "remote_head_sha": "",
   "source_of_truth": "data/info_analyzer.db",
   "validation": {
     "broken_links": 0,

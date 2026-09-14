@@ -620,32 +620,11 @@
     "Credentials or host secrets",
     "Non-actionable archive notes"
   ],
-  "export_run_id": "export-20260914-014437",
+  "export_run_id": "export-20260914-023011",
   "export_success": true,
-  "generated_at": "2026-09-14T01:44:37Z",
+  "generated_at": "2026-09-14T02:30:11Z",
   "privacy_validation_passed": true,
   "recent_activity": [
-    {
-      "entity": "Info Analyzer OS",
-      "id": "activity-2026-07-15T19:40:10Z-export",
-      "summary": "Regenerated ChatGPT memory exports and validation reports.",
-      "time": "2026-07-15T19:40:10Z",
-      "type": "operating_state_exported"
-    },
-    {
-      "entity": "Info Analyzer OS",
-      "id": "activity-2026-07-15T19:40:37Z-export",
-      "summary": "Regenerated ChatGPT memory exports and validation reports.",
-      "time": "2026-07-15T19:40:37Z",
-      "type": "operating_state_exported"
-    },
-    {
-      "entity": "Info Analyzer OS",
-      "id": "activity-2026-07-15T19:41:45Z-export",
-      "summary": "Regenerated ChatGPT memory exports and validation reports.",
-      "time": "2026-07-15T19:41:45Z",
-      "type": "operating_state_exported"
-    },
     {
       "entity": "Info Analyzer OS",
       "id": "activity-2026-07-15T19:57:30Z-export",
@@ -763,6 +742,27 @@
       "id": "activity-2026-08-24T07:17:46Z-export",
       "summary": "Regenerated ChatGPT memory exports and validation reports.",
       "time": "2026-08-24T07:17:46Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-09-14T01:44:37Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-09-14T01:44:37Z",
+      "type": "operating_state_exported"
+    },
+    {
+      "entity": "GitHub memory bridge",
+      "id": "activity-2026-09-14T01:44:42Z-122c67d72bb6",
+      "summary": "Verified origin/main at 122c67d72bb6f2496a5b68025f52c565d55bce56.",
+      "time": "2026-09-14T01:44:42Z",
+      "type": "remote_push_verified"
+    },
+    {
+      "entity": "Info Analyzer OS",
+      "id": "activity-2026-09-14T02:25:03Z-export",
+      "summary": "Regenerated ChatGPT memory exports and validation reports.",
+      "time": "2026-09-14T02:25:03Z",
       "type": "operating_state_exported"
     },
     {
