@@ -1,18 +1,22 @@
 {
   "branch": "main",
   "bundle_path": "memory/assistant_bundle.json",
-  "export_run_id": "export-20260718-081823",
+  "export_run_id": "export-20260914-014437",
   "fetch_strategy": [
-    "Read GitHub API branch HEAD SHA",
-    "Fetch assistant_bundle.json using immutable commit SHA",
-    "Use GitHub contents API as fallback"
+    "Read the remote branch with git ls-remote origin refs/heads/main",
+    "Fetch origin/main locally with git fetch origin main",
+    "Read memory/assistant_fetch.json from origin/main",
+    "Read memory/assistant_bundle.json from the immutable_commit recorded in that file"
   ],
-  "generated_at": "2026-07-18T08:18:23Z",
+  "generated_at": "2026-09-14T01:44:37Z",
   "health_path": "memory/system_health.json",
-  "immutable_bundle_url": "https://raw.githubusercontent.com/tariye/sales-os/5a94649e50aedae804a1b2d8cbeb8b341756bb37/memory/assistant_bundle.json",
+  "immutable_bundle_url": "https://raw.githubusercontent.com/tariye/sales-os/122c67d72bb6f2496a5b68025f52c565d55bce56/memory/assistant_bundle.json",
+  "immutable_commit": "122c67d72bb6f2496a5b68025f52c565d55bce56",
   "index_path": "memory/index.json",
-  "last_verified_at": "2026-07-18T08:19:17Z",
-  "last_verified_commit": "5a94649e50aedae804a1b2d8cbeb8b341756bb37",
+  "last_verified_at": "2026-09-14T01:44:42Z",
+  "last_verified_commit": "122c67d72bb6f2496a5b68025f52c565d55bce56",
+  "publication_commit": "122c67d72bb6f2496a5b68025f52c565d55bce56",
+  "publication_status": "green",
   "repository": "tariye/sales-os",
   "schema_version": "1.0"
 }

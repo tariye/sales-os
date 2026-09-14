@@ -43,7 +43,7 @@
   },
   "export_success": true,
   "generated_at": "2026-09-14T01:44:37Z",
-  "immutable_commit": "",
+  "immutable_commit": "122c67d72bb6f2496a5b68025f52c565d55bce56",
   "import_result": {
     "archived": "",
     "duplicates": 0,
@@ -51,8 +51,10 @@
     "pending_before": 0
   },
   "json_errors": [],
-  "publication_status": "pending",
-  "remote_head_sha": "",
+  "last_push": "2026-09-14T01:44:42Z",
+  "last_push_commit": "122c67d72bb6f2496a5b68025f52c565d55bce56",
+  "publication_status": "green",
+  "remote_head_sha": "122c67d72bb6f2496a5b68025f52c565d55bce56",
   "source_of_truth": "data/info_analyzer.db",
   "validation": {
     "broken_links": 0,

@@ -1,0 +1,14 @@
+{
+  "bundle_path": "memory/assistant_bundle.json",
+  "bundle_sha256": "ffa3d9065474be2a877fe1983e27712a8d96582abe9da671ec360534c49cb01e",
+  "content_commit": "122c67d72bb6f2496a5b68025f52c565d55bce56",
+  "export_validation_passed": true,
+  "generated_at": "2026-09-14T01:44:37Z",
+  "privacy_validation_passed": true,
+  "publication_state": "verified",
+  "publisher_version": "memory_manager_verified_publication",
+  "remote_verified_at": "2026-09-14T01:44:42Z",
+  "schema_version": 1,
+  "source_db_as_of": "2026-09-14T01:44:37Z",
+  "validated_at": "2026-09-14T01:44:37Z"
+}

@@ -1,39 +1,39 @@
 {
   "broken_links": 0,
   "chat_inbox_pending": 0,
-  "checked_at": "2026-09-14T01:44:37Z",
-  "current_stage": "export",
+  "checked_at": "2026-09-14T01:44:42Z",
+  "current_stage": "publication",
   "database": "green",
   "duplicate_entities": 0,
   "duplicate_groups_detected": 10,
   "duplicate_groups_reconciled": 16,
   "export": {
-    "last_attempt": "2026-09-14T01:44:37Z",
-    "last_success": "2026-09-14T01:44:37Z",
+    "last_attempt": "2026-09-14T01:44:42Z",
+    "last_success": "2026-09-14T01:44:42Z",
     "run_id": "export-20260914-014437",
     "status": "green"
   },
-  "export_success": false,
+  "export_success": true,
   "freshness": {
     "age_minutes": 1.4,
     "basis": "source_db_mtime",
     "status": "green"
   },
-  "last_export": "2026-09-14T01:44:37Z",
+  "last_export": "2026-09-14T01:44:42Z",
   "last_failure": null,
-  "last_push": "",
-  "last_push_commit": "5a94649e50aedae804a1b2d8cbeb8b341756bb37",
+  "last_push": "2026-09-14T01:44:42Z",
+  "last_push_commit": "122c67d72bb6f2496a5b68025f52c565d55bce56",
   "orphan_actions": 0,
   "overall_status": "green",
   "publication": {
-    "immutable_commit": "",
-    "last_attempt": "2026-09-14T01:44:37Z",
-    "last_success": "",
-    "pointer_commit": "",
+    "immutable_commit": "122c67d72bb6f2496a5b68025f52c565d55bce56",
+    "last_attempt": "2026-09-14T01:44:42Z",
+    "last_success": "2026-09-14T01:44:42Z",
+    "pointer_commit": "122c67d72bb6f2496a5b68025f52c565d55bce56",
     "remote_branch": "origin/main",
-    "remote_head_sha": "",
-    "remote_verified_at": "",
-    "status": "pending"
+    "remote_head_sha": "122c67d72bb6f2496a5b68025f52c565d55bce56",
+    "remote_verified_at": "2026-09-14T01:44:42Z",
+    "status": "green"
   },
   "snapshot_age_minutes": 1.4,
   "source": {
@@ -46,8 +46,8 @@
   },
   "validation": {
     "errors": [],
-    "last_attempt": "2026-09-14T01:44:37Z",
-    "last_success": "2026-09-14T01:44:37Z",
+    "last_attempt": "2026-09-14T01:44:42Z",
+    "last_success": "2026-09-14T01:44:42Z",
     "status": "green"
   }
 }
