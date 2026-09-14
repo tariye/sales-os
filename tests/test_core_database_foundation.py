@@ -166,7 +166,7 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
         self.assertIn("core_actions", names)
         self.assertEqual(
             open_connection(db_path).execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0],
-            4,
+            5,
         )
 
     def test_existing_v03_database_can_receive_core_migration(self) -> None:
@@ -180,7 +180,7 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
         ]
         applied = initialize_core_migrations(db_path)
         after = read_counts(db_path, LEGACY_TABLES)
-        self.assertEqual(applied, [version for version in [1, 2, 3, 4] if version not in existing_versions])
+        self.assertEqual(applied, [version for version in [1, 2, 3, 4, 5] if version not in existing_versions])
         self.assertEqual(before, after)
         names = view_names(db_path)
         self.assertIn("core_record_links", table_names(db_path))
@@ -520,7 +520,7 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
             rows = conn.execute("SELECT version, name FROM schema_migrations ORDER BY version").fetchall()
         finally:
             conn.close()
-        self.assertEqual(first, [version for version in [1, 2, 3, 4] if version not in existing_versions])
+        self.assertEqual(first, [version for version in [1, 2, 3, 4, 5] if version not in existing_versions])
         self.assertEqual(second, [])
         self.assertEqual(
             [(row["version"], row["name"]) for row in rows],
@@ -529,6 +529,7 @@ class CoreDatabaseFoundationTests(unittest.TestCase):
                 (2, "innbank_allocation_and_routing"),
                 (3, "payday_intake_notification_reliability"),
                 (4, "capture_loop_foundation"),
+                (5, "chat_capture_classes"),
             ],
         )
 

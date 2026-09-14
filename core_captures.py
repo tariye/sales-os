@@ -13,7 +13,13 @@ from core_database import connect
 from core_operations import claim_operation, clean_text, complete_attempt, make_id, now_utc_iso, stable_json
 
 
-CAPTURE_TYPES = {"begin_day_checklist", "end_of_day_report", "voice_debrief"}
+CAPTURE_TYPES = {
+    "begin_day_checklist", "end_of_day_report", "voice_debrief",
+    "user_note", "user_report", "decision_note", "project_update",
+    "research_note", "assistant_report",
+}
+DAILY_CAPTURE_TYPES = {"begin_day_checklist", "end_of_day_report", "voice_debrief"}
+AUTHOR_ROLES = {"user", "assistant"}
 
 
 def content_hash(raw_text: str) -> str:
@@ -66,12 +72,35 @@ def row_to_day_case(row) -> dict[str, Any]:
     return data
 
 
+def infer_capture_request(raw_text: str, *, author_role: str = "user") -> dict[str, Any]:
+    """Return a conservative capture decision for a chat message."""
+    text = str(raw_text or "").strip()
+    lowered = text.lower()
+    if re.match(r"^(don't|do not)\s+save\s+this\s*:", lowered):
+        return {"capture": False, "reason": "explicit_opt_out"}
+    if lowered.startswith(("note:", "save this:")):
+        return {"capture": True, "capture_type": "assistant_report" if author_role == "assistant" else "user_note", "reason": "explicit_force_capture"}
+    if author_role == "assistant":
+        return {"capture": True, "capture_type": "assistant_report", "reason": "durable_report_requested"} if len(text) >= 80 else {"capture": False, "reason": "ordinary_assistant_answer"}
+    patterns = (
+        ("begin-day checklist", "begin_day_checklist"),
+        ("beginning of day", "begin_day_checklist"),
+        ("morning checklist", "begin_day_checklist"),
+        ("end of day report", "end_of_day_report"),
+        ("daily dump", "end_of_day_report"),
+        ("eod report", "end_of_day_report"),
+        ("voice debrief", "voice_debrief"),
+        ("post-event debrief", "voice_debrief"),
+    )
+    for marker, capture_type in patterns:
+        if marker in lowered:
+            return {"capture": True, "capture_type": capture_type, "reason": "recognized_daily_capture"}
+    return {"capture": len(text) >= 80, "capture_type": "user_report", "reason": "substantive_user_message" if len(text) >= 80 else "ordinary_conversation"}
+
+
 def validate_capture_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("capture payload must be a JSON object")
-    capture_type = clean_text(payload.get("capture_type"))
-    if capture_type not in CAPTURE_TYPES:
-        raise ValueError("capture_type must be begin_day_checklist, end_of_day_report, or voice_debrief")
     raw_text = str(payload.get("raw_text") or "")
     if not raw_text.strip():
         raise ValueError("raw_text is required")
@@ -93,6 +122,17 @@ def validate_capture_payload(payload: dict[str, Any]) -> dict[str, Any]:
     captured_at = normalize_timestamp(payload.get("captured_at"), "captured_at", required=True)
     occurred_at = normalize_timestamp(payload.get("occurred_at"), "occurred_at", required=False)
     metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    author_role = clean_text(metadata.get("author_role") or payload.get("author_role") or "user")
+    if author_role not in AUTHOR_ROLES:
+        raise ValueError("author_role must be user or assistant")
+    inferred = infer_capture_request(raw_text, author_role=author_role)
+    capture_type = clean_text(payload.get("capture_type") or inferred.get("capture_type") or "user_note")
+    if capture_type not in CAPTURE_TYPES:
+        raise ValueError("capture_type is required or must be a supported chat capture class")
+    metadata = {**metadata, "author_role": author_role}
+    if author_role == "assistant":
+        metadata.setdefault("generation_timestamp", captured_at)
+        metadata.setdefault("report_type", "durable_assistant_report")
     return {
         "capture_type": capture_type,
         "source": source,
@@ -108,6 +148,7 @@ def validate_capture_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "idempotency_key": idempotency_key,
         "payload_version": payload_version,
         "metadata": metadata,
+        "capture_decision": inferred,
     }
 
 
@@ -130,6 +171,17 @@ def _insert_link(conn, *, capture_id: str, day_case_id: str | None, namespace: s
             stable_json(metadata or {}),
         ),
     )
+
+
+def _derived_record_ids(conn, capture_id: str) -> dict[str, list[str]]:
+    rows = conn.execute(
+        "SELECT derived_record_type, derived_record_id FROM core_capture_derivations WHERE capture_id=? ORDER BY created_at, derivation_id",
+        (capture_id,),
+    ).fetchall()
+    result: dict[str, list[str]] = {}
+    for row in rows:
+        result.setdefault(row["derived_record_type"], []).append(row["derived_record_id"])
+    return result
 
 
 def _get_or_create_day_case(conn, capture: dict[str, Any], *, now: str) -> dict[str, Any]:
@@ -183,7 +235,11 @@ def _progress_for(day_case: dict[str, Any], capture: dict[str, Any], bullets: li
 
 def ingest_capture(database_path, payload: dict[str, Any], *, process: bool = True, worker_id: str = "capture-ingest") -> dict[str, Any]:
     normalized = validate_capture_payload(payload)
-    operation_payload = {k: normalized[k] for k in sorted(normalized) if k != "metadata"}
+    if not normalized["capture_decision"].get("capture", True) and (
+        not payload.get("capture_type") or normalized["capture_decision"].get("reason") == "explicit_opt_out"
+    ):
+        return {"ok": True, "captured": False, "duplicate": False, "status": "not_captured", "reason": normalized["capture_decision"]["reason"]}
+    operation_payload = {k: normalized[k] for k in sorted(normalized) if k not in {"metadata", "capture_decision"}}
     operation_payload["metadata"] = normalized["metadata"]
     now = now_utc_iso()
     with connect(database_path) as conn:
@@ -204,6 +260,7 @@ def ingest_capture(database_path, payload: dict[str, Any], *, process: bool = Tr
             result = claimed["operation"].get("result") or {}
             row = conn.execute("SELECT * FROM core_captures WHERE capture_id=?", (result.get("capture_id"),)).fetchone()
             capture = row_to_capture(row) if row else None
+            derived = _derived_record_ids(conn, result.get("capture_id")) if result.get("capture_id") else {}
             return {
                 "ok": True,
                 "duplicate": True,
@@ -214,6 +271,7 @@ def ingest_capture(database_path, payload: dict[str, Any], *, process: bool = Tr
                 "status": claimed["operation"]["status"],
                 "content_hash": result.get("content_hash"),
                 "processing_job_id": result.get("processing_job_id"),
+                "derived_record_ids": derived,
             }
         capture_id = make_id("CAP")
         try:
@@ -270,6 +328,7 @@ def ingest_capture(database_path, payload: dict[str, Any], *, process: bool = Tr
     with connect(database_path) as conn:
         row = conn.execute("SELECT * FROM core_captures WHERE capture_id=?", (capture_id,)).fetchone()
         capture = row_to_capture(row)
+        derived = _derived_record_ids(conn, capture_id)
     return {
         "ok": True,
         "duplicate": False,
@@ -280,7 +339,10 @@ def ingest_capture(database_path, payload: dict[str, Any], *, process: bool = Tr
         "status": completed["status"],
         "content_hash": normalized["content_hash"],
         "processing_job_id": (processing_result or {}).get("operation_id"),
+        "day_case_id": (processing_result or {}).get("day_case_id"),
+        "signal_id": (processing_result or {}).get("signal_id"),
         "processing": processing_result,
+        "derived_record_ids": derived,
     }
 
 
@@ -308,7 +370,13 @@ def process_capture(database_path, capture_id: str, *, worker_id: str = "capture
             return {"ok": True, "idempotent": True, "operation_id": claimed["operation"]["operation_id"], **(claimed["operation"].get("result") or {})}
         try:
             conn.execute("UPDATE core_captures SET processing_state='processing', updated_at=? WHERE capture_id=?", (now, capture["capture_id"]))
-            day_case = _get_or_create_day_case(conn, capture, now=now)
+            day_case = None
+            if capture["capture_type"] in DAILY_CAPTURE_TYPES:
+                day_case = _get_or_create_day_case(conn, capture, now=now)
+            elif capture.get("metadata", {}).get("day_case_id"):
+                day_case_row = conn.execute("SELECT * FROM core_day_cases WHERE day_case_id=?", (capture["metadata"]["day_case_id"],)).fetchone()
+                if day_case_row:
+                    day_case = row_to_day_case(day_case_row)
             bullets = _extract_bullets(capture["raw_text"])
             signal_id = make_id("SIG")
             signal_type = f"capture_{capture['capture_type']}"
@@ -316,6 +384,12 @@ def process_capture(database_path, capture_id: str, *, worker_id: str = "capture
                 "begin_day_checklist": "Begin-day checklist captured",
                 "end_of_day_report": "End-of-day report captured",
                 "voice_debrief": "Voice debrief captured",
+                "user_note": "User note captured",
+                "user_report": "User report captured",
+                "decision_note": "Decision note captured",
+                "project_update": "Project update captured",
+                "research_note": "Research note captured",
+                "assistant_report": "Assistant report captured",
             }[capture["capture_type"]]
             summary = bullets[0] if bullets else f"{capture['capture_type']} received from {capture['source']}."
             metadata = {
@@ -344,19 +418,24 @@ def process_capture(database_path, capture_id: str, *, worker_id: str = "capture
                     stable_json(metadata),
                 ),
             )
-            _insert_link(conn, capture_id=capture["capture_id"], day_case_id=day_case["day_case_id"], namespace="core", record_type="signal", record_id=signal_id, relationship="interpreted_as", metadata={"content_hash": capture["content_hash"]})
-            progress = _progress_for(day_case, capture, bullets)
-            updates = ["progress_json=?", "updated_at=?"]
-            args: list[Any] = [stable_json(progress), now]
-            if capture["capture_type"] == "begin_day_checklist":
-                updates.append("plan_capture_id=COALESCE(plan_capture_id, ?)")
-                args.append(capture["capture_id"])
-            if capture["capture_type"] == "end_of_day_report":
-                updates.append("report_capture_id=COALESCE(report_capture_id, ?)")
-                args.append(capture["capture_id"])
-            args.append(day_case["day_case_id"])
-            conn.execute(f"UPDATE core_day_cases SET {', '.join(updates)} WHERE day_case_id=?", tuple(args))
-            _insert_link(conn, capture_id=capture["capture_id"], day_case_id=day_case["day_case_id"], namespace="core", record_type="day_case", record_id=day_case["day_case_id"], relationship="updates_day_case")
+            _insert_link(conn, capture_id=capture["capture_id"], day_case_id=day_case["day_case_id"] if day_case else None, namespace="core", record_type="signal", record_id=signal_id, relationship="interpreted_as", metadata={"content_hash": capture["content_hash"]})
+            if day_case:
+                progress = _progress_for(day_case, capture, bullets)
+                updates = ["progress_json=?", "updated_at=?"]
+                args: list[Any] = [stable_json(progress), now]
+                if capture["capture_type"] == "begin_day_checklist":
+                    updates.append("plan_capture_id=COALESCE(plan_capture_id, ?)")
+                    args.append(capture["capture_id"])
+                if capture["capture_type"] == "end_of_day_report":
+                    updates.append("report_capture_id=COALESCE(report_capture_id, ?)")
+                    args.append(capture["capture_id"])
+                args.append(day_case["day_case_id"])
+                conn.execute(f"UPDATE core_day_cases SET {', '.join(updates)} WHERE day_case_id=?", tuple(args))
+                _insert_link(conn, capture_id=capture["capture_id"], day_case_id=day_case["day_case_id"], namespace="core", record_type="day_case", record_id=day_case["day_case_id"], relationship="updates_day_case")
+            for source_capture_id in capture.get("metadata", {}).get("source_capture_ids", []) or []:
+                source_row = conn.execute("SELECT capture_id FROM core_captures WHERE capture_id=?", (clean_text(source_capture_id),)).fetchone()
+                if source_row:
+                    _insert_link(conn, capture_id=source_row["capture_id"], day_case_id=day_case["day_case_id"] if day_case else None, namespace="core", record_type="capture", record_id=capture["capture_id"], relationship="assistant_report", metadata={"source_capture_id": source_row["capture_id"]})
             if bullets:
                 action_id = make_id("ACT")
                 conn.execute(
@@ -373,12 +452,12 @@ def process_capture(database_path, capture_id: str, *, worker_id: str = "capture
                         stable_json({"capture_id": capture["capture_id"], "source": "capture_interpretation"}),
                     ),
                 )
-                _insert_link(conn, capture_id=capture["capture_id"], day_case_id=day_case["day_case_id"], namespace="core", record_type="action", record_id=action_id, relationship="proposes_action")
+                _insert_link(conn, capture_id=capture["capture_id"], day_case_id=day_case["day_case_id"] if day_case else None, namespace="core", record_type="action", record_id=action_id, relationship="proposes_action")
             conn.execute(
                 "UPDATE core_captures SET processing_state='processed', processed_at=?, process_operation_id=?, updated_at=? WHERE capture_id=?",
                 (now, claimed["operation"]["operation_id"], now, capture["capture_id"]),
             )
-            result = {"capture_id": capture["capture_id"], "day_case_id": day_case["day_case_id"], "signal_id": signal_id}
+            result = {"capture_id": capture["capture_id"], "day_case_id": day_case["day_case_id"] if day_case else None, "signal_id": signal_id}
             completed = complete_attempt(
                 conn,
                 operation_id=claimed["operation"]["operation_id"],
@@ -392,7 +471,7 @@ def process_capture(database_path, capture_id: str, *, worker_id: str = "capture
                 now=now,
             )
             conn.commit()
-            return {"ok": True, "idempotent": False, "operation_id": completed["operation_id"], **result}
+            return {"ok": True, "idempotent": False, "operation_id": completed["operation_id"], "derived_record_ids": _derived_record_ids(conn, capture["capture_id"]), **result}
         except Exception as exc:
             conn.execute("UPDATE core_captures SET processing_state='failed', updated_at=? WHERE capture_id=?", (now, capture["capture_id"]))
             complete_attempt(
@@ -419,3 +498,49 @@ def get_day_progress(database_path, *, local_date: str | None = None) -> dict[st
         day = row_to_day_case(row)
         links = [dict(r) for r in conn.execute("SELECT * FROM core_capture_derivations WHERE day_case_id=? ORDER BY created_at", (day["day_case_id"],)).fetchall()]
         return {"status": "ok", "day_case": day, "links": links}
+
+
+def list_captures(database_path, *, conversation_id: str | None = None, local_date: str | None = None, capture_type: str | None = None, project: str | None = None, domain: str | None = None, author_role: str | None = None, include_raw_text: bool = True, limit: int = 20, offset: int = 0) -> dict[str, Any]:
+    """Read bounded capture receipts and lineage without exposing arbitrary SQL."""
+    limit = max(1, min(int(limit or 20), 100))
+    offset = max(0, int(offset or 0))
+    where = ["1=1"]
+    args: list[Any] = []
+    if conversation_id:
+        where.append("conversation_id=?")
+        args.append(clean_text(conversation_id))
+    if local_date:
+        where.append("substr(COALESCE(occurred_at, captured_at), 1, 10)=?")
+        args.append(clean_text(local_date))
+    if capture_type:
+        where.append("capture_type=?")
+        args.append(clean_text(capture_type))
+    if author_role:
+        where.append("json_extract(metadata_json, '$.author_role')=?")
+        args.append(clean_text(author_role))
+    for key, value in (("project", project), ("domain", domain)):
+        if value:
+            where.append("json_extract(metadata_json, '$.' || ?) = ?")
+            args.extend([key, clean_text(value)])
+    with connect(database_path) as conn:
+        rows = conn.execute(
+            f"SELECT * FROM core_captures WHERE {' AND '.join(where)} ORDER BY captured_at DESC, created_at DESC, capture_id DESC LIMIT ? OFFSET ?",
+            (*args, limit, offset),
+        ).fetchall()
+        results = []
+        for row in rows:
+            capture = row_to_capture(row)
+            links = [dict(link) for link in conn.execute(
+                "SELECT * FROM core_capture_derivations WHERE capture_id=? ORDER BY created_at, derivation_id",
+                (capture["capture_id"],),
+            ).fetchall()]
+            reverse_links = [dict(link) for link in conn.execute(
+                "SELECT * FROM core_capture_derivations WHERE derived_record_id=? AND derived_record_type='capture' ORDER BY created_at, derivation_id",
+                (capture["capture_id"],),
+            ).fetchall()]
+            capture["derivations"] = links + reverse_links
+            if not include_raw_text:
+                capture.pop("raw_text", None)
+            results.append(capture)
+        total = conn.execute(f"SELECT COUNT(*) FROM core_captures WHERE {' AND '.join(where)}", tuple(args)).fetchone()[0]
+    return {"status": "ok" if results else "empty", "captures": results, "count": len(results), "total": total, "limit": limit, "offset": offset, "coverage": ["core_captures", "core_capture_derivations"]}

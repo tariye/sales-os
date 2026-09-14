@@ -1039,30 +1039,38 @@ def fetch_projects(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 def fetch_daily_progress(conn: sqlite3.Connection, limit: int = 5) -> dict[str, Any]:
     if not table_exists(conn, "core_captures") or not table_exists(conn, "core_day_cases"):
-        return {"status": "not_implemented", "recent_captures": [], "day_cases": []}
-    captures = [
-        {
-            "capture_id": row["capture_id"],
-            "capture_type": row["capture_type"],
-            "source": row["source"],
-            "content_hash": row["content_hash"],
-            "occurred_at": row["occurred_at"],
-            "captured_at": row["captured_at"],
-            "ingested_at": row["ingested_at"],
-            "processing_state": row["processing_state"],
-            "summary": summarize_for_bundle(row["raw_text"], 180),
-        }
-        for row in conn.execute(
+        return {"status": "not_implemented", "recent_captures": [], "assistant_reports": [], "day_cases": []}
+    captures = []
+    for row in conn.execute(
             """
             SELECT capture_id, capture_type, source, content_hash, occurred_at,
-                   captured_at, ingested_at, processing_state, raw_text
+                   captured_at, ingested_at, processing_state, raw_text, metadata_json
             FROM core_captures
             ORDER BY captured_at DESC, created_at DESC
             LIMIT ?
             """,
             (limit,),
-        ).fetchall()
-    ]
+        ).fetchall():
+        metadata = load_json(row["metadata_json"], {})
+        captures.append(
+            {
+                "capture_id": row["capture_id"],
+                "capture_type": row["capture_type"],
+                "source": row["source"],
+                "author_role": metadata.get("author_role") or "unknown",
+                "content_hash": row["content_hash"],
+                "occurred_at": row["occurred_at"],
+                "captured_at": row["captured_at"],
+                "ingested_at": row["ingested_at"],
+                "processing_state": row["processing_state"],
+                "summary": summarize_for_bundle(row["raw_text"], 180),
+                "report_type": metadata.get("report_type") or "",
+                "source_capture_ids": metadata.get("source_capture_ids") or [],
+                "project": metadata.get("project") or "",
+                "domain": metadata.get("domain") or "",
+                "verified_memory_content_commit": metadata.get("verified_memory_content_commit") or "",
+            }
+        )
     day_cases = []
     for row in conn.execute(
         """
@@ -1105,6 +1113,7 @@ def fetch_daily_progress(conn: sqlite3.Connection, limit: int = 5) -> dict[str, 
         "status": "ok",
         "recent_captures": captures,
         "day_cases": day_cases,
+        "assistant_reports": [capture for capture in captures if capture.get("capture_type") == "assistant_report"],
     }
 
 

@@ -40,6 +40,7 @@ MCP_TOOL_NAMES = {
     "list_cases",
     "get_case",
     "get_event_trace",
+    "list_captures",
 }
 
 
@@ -92,7 +93,7 @@ class PaydayBridgeTests(unittest.TestCase):
             self.assertTrue(bool(getattr(annotations["get_payday_case"], "read_only_hint", False)))
             self.assertFalse(bool(getattr(annotations["get_payday_case"], "destructive_hint", True)))
             self.assertFalse(bool(getattr(annotations["get_payday_case"], "open_world_hint", True)))
-            for read_tool in ("get_system_status", "list_cases", "get_case", "get_event_trace", "get_source_observation_status", "get_day_progress"):
+            for read_tool in ("get_system_status", "list_cases", "get_case", "get_event_trace", "get_source_observation_status", "get_day_progress", "list_captures"):
                 self.assertTrue(bool(getattr(annotations[read_tool], "read_only_hint", False)), read_tool)
                 self.assertFalse(bool(getattr(annotations[read_tool], "destructive_hint", True)), read_tool)
                 self.assertFalse(bool(getattr(annotations[read_tool], "open_world_hint", True)), read_tool)

@@ -30,6 +30,7 @@ from typing import Any
 from core_database import connect, resolve_database_path
 from core_captures import get_day_progress as shared_get_day_progress
 from core_captures import ingest_capture as core_ingest_capture
+from core_captures import list_captures as shared_list_captures
 from core_events import create_event as core_create_event
 from core_events import normalize_timestamp
 from core_innbank_routing import (
@@ -1492,18 +1493,19 @@ def build_server(database_path: str | Path | None = None) -> Any:
         structured_output=True,
     )
     def ingest_capture(
-        capture_type: str,
         source: str,
         raw_text: str,
         captured_at: str,
         request_id: str,
         idempotency_key: str,
+        capture_type: str | None = None,
         payload_version: int | None = 1,
         occurred_at: str | None = None,
         conversation_id: str | None = None,
         message_id: str | None = None,
         correlation_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        author_role: str | None = None,
         confirmed: bool | None = None,
     ) -> dict[str, Any]:
         if not configured_api_key():
@@ -1526,6 +1528,7 @@ def build_server(database_path: str | Path | None = None) -> Any:
                     "message_id": message_id,
                     "correlation_id": correlation_id,
                     "metadata": metadata or {},
+                    "author_role": author_role,
                 },
             )
         except (KeyError, ValueError, RuntimeError) as exc:
@@ -1539,6 +1542,38 @@ def build_server(database_path: str | Path | None = None) -> Any:
     def get_day_progress(local_date: str | None = None) -> dict[str, Any]:
         try:
             return shared_get_day_progress(db_path, local_date=local_date)
+        except Exception as exc:
+            return _fail(str(exc))
+
+    @server.tool(
+        name="list_captures",
+        annotations=_tool_annotations(read_only=True),
+        structured_output=True,
+    )
+    def list_captures(
+        conversation_id: str | None = None,
+        local_date: str | None = None,
+        capture_type: str | None = None,
+        project: str | None = None,
+        domain: str | None = None,
+        author_role: str | None = None,
+        include_raw_text: bool | None = True,
+        limit: int | None = 20,
+        offset: int | None = 0,
+    ) -> dict[str, Any]:
+        try:
+            return shared_list_captures(
+                db_path,
+                conversation_id=conversation_id,
+                local_date=local_date,
+                capture_type=capture_type,
+                project=project,
+                domain=domain,
+                author_role=author_role,
+                include_raw_text=bool(include_raw_text),
+                limit=limit or 20,
+                offset=offset or 0,
+            )
         except Exception as exc:
             return _fail(str(exc))
 
